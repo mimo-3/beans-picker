@@ -16,7 +16,7 @@ The server itself never calls a generative model (no `claude -p`, no LLM API).
 |---|---|---|
 | `observe` | `app` \| `pid`, `windowId?`, `instruction?`, `limit?` | Lists the window's candidate actions (`id`, `kind`, what it does). With `instruction`, Jev ranks them and each comes with its probability `p`. |
 | `act` | `app` \| `pid`, `windowId?`, `instruction`, `text?`, `candidateId?`, `allowDestructive?`, `modifiers?`, `then?` | Performs one action and checks its effect, then each step in `then` (same fields, up to 12) the same way, stopping at the first that is not `done` or `unverified`; each step's result is in `steps`. Jev picks the action for `instruction`, unless `candidateId` is given. `text` is entered exactly as given. `modifiers` (`shift`, `cmd`, `option`, `ctrl`) are held during a click or toggle, as a pixel click on a control visible on the window. |
-| `extract` | `app` \| `pid`, `windowId?`, `instruction` | Returns the text or value of the element Jev picks, exactly as read. A table or list with no value of its own comes back as `rows` (each row's texts), any other container as `text`. |
+| `extract` | `app` \| `pid`, `windowId?`, `instruction` | Returns the text or value of the element Jev picks, exactly as read. A table or list with no value of its own comes back as `rows` (each row's texts), any other container as `text`. Its `status` is `done`, `ambiguous` (the shortlist comes back with each element's value) or `not_found`. |
 
 `act` returns a `status`:
 
@@ -30,6 +30,8 @@ The server itself never calls a generative model (no `claude -p`, no LLM API).
 | `needs_confirmation` | The action may not be undoable (delete, close, send, quit …). Call again with `candidateId` and `allowDestructive: true`. |
 | `not_found` | No candidate fits, or the `candidateId` is not on the window any more. |
 | `failed` | cua-driver refused, the command needs the foreground, or the app came to the front (`foreground_violation`). |
+
+A call that cannot run at all returns `isError` with `{"status": "failed", "code", "message"}`. Codes include `bad_target`, `window_not_found`, `screen_locked`, `jev_unavailable` (no key, Jev unreachable or too slow), `jev_bad_response`, `driver_unavailable` (cua-driver could not be started), `driver_timeout`, `driver_error` (cua-driver refused a call the tool needed) and `internal`. Anything but a tool's own refusal is also logged with its traceback at `WARNING`.
 
 Each result also carries the action that ran (`action`, with the cua-driver route) and a summary of what changed on the window (`change`).
 
@@ -64,7 +66,7 @@ claude mcp add cua-jev -- "$(command -v uv)" run --directory "$PWD" cua-jev
 uv run cua-jev grant-ax
 ```
 
-`cua-jev grant-ax` builds the read-only helper and asks macOS to list it; then turn on **cua-jev axtext** under System Settings > Privacy & Security > Accessibility. `cua-jev --version` prints the version and `cua-jev --help` the usage.
+`cua-jev grant-ax` builds the read-only helper and asks macOS to list it; then turn on **cua-jev axtext** under System Settings > Privacy & Security > Accessibility. The helper is built from its source, so an upgrade that changes that source builds a new helper that macOS has not been told about: run `cua-jev grant-ax` again after upgrading if text results turn `unverified`. `cua-jev --version` prints the version and `cua-jev --help` the usage.
 
 The agent skill in `skills/cua-jev` tells a model how to use these tools well: when cua-driver fits better, what to do with each `act` status, and recipes for combo boxes, number fields, long tables and checking the result. Link it where your agent looks for skills, e.g. `ln -s "$PWD/skills/cua-jev" ~/.claude/skills/cua-jev` (Codex: `~/.codex/skills`). Leave it out when benchmarking the bare tools.
 
@@ -72,9 +74,12 @@ The agent skill in `skills/cua-jev` tells a model how to use these tools well: w
 
 | variable | meaning |
 |---|---|
-| `JEV_API_KEY` | Required for `observe` with an instruction, `act` without `candidateId`, and `extract`. `TYPESAFE_API_KEY` is used when it is not set. |
+| `JEV_API_KEY` | Required for `observe` with an instruction, `act` without `candidateId`, and `extract`. `TYPESAFE_API_KEY` is used when it is not set or empty. |
 | `CUA_JEV_MODEL` | The Jev model (default `jev-latest`). |
-| `CUA_DRIVER_BIN` | Path to cua-driver (default `~/.local/bin/cua-driver`). |
+| `CUA_DRIVER_BIN` | Path to cua-driver (default `~/.local/bin/cua-driver`; a leading `~` is expanded). |
+| `CUA_DRIVER_TIMEOUT` | Seconds to wait for cua-driver to start, and for its answer to each call (default 120). |
+| `JEV_CONNECT_TIMEOUT` | Seconds to wait for a connection to Jev (default 10). |
+| `JEV_READ_TIMEOUT` | Seconds to wait for Jev's answer to one request (default 120). |
 | `CUA_JEV_EFFECT_RETAKES` | Fresh snapshots taken to see an effect (default 5). |
 | `CUA_JEV_LOG_LEVEL` | Level of the server's log on stderr (default `WARNING`). |
 | `TYPESAFE_BASE_URL` | The Jev endpoint (default `https://api.typesafe.ai`). |
@@ -84,7 +89,7 @@ Variables are read from the environment first, then from `.env.local` and `.env`
 ## Rules the server keeps
 
 - **Background only.** `bring_to_front`, `invoke_menu`, `move_cursor` and `delivery_mode: "foreground"` are refused before they reach cua-driver. Menu commands run as their keyboard shortcut sent to the app's pid; a command without a known shortcut returns `failed` / `foreground_required`. During `act`, the frontmost app is sampled continuously; if the target app comes to the front, the call stops with `foreground_violation`.
-- **No time limits.** Requests to cua-driver and to Jev wait without a time limit. The one exception is shutdown: the final `end_session` gets 5 seconds, so a cua-driver that stopped answering cannot keep the server from exiting.
+- **Time limits.** Every request to cua-driver and to Jev has a generous limit (see Configuration), so one that stalls ends its call with `driver_timeout` or `jev_unavailable` instead of blocking the queue. An action whose answer timed out may still have happened: observe before repeating it. At shutdown, the final `end_session` gets 5 seconds.
 - **Screen lock.** While `CGSSessionScreenIsLocked` is set, every tool refuses with `screen_locked` and does nothing.
 - **One call at a time.** Tool calls are queued, so two actions never interleave on the desktop.
 - **Destructive actions** are marked, not hidden: `act` returns `needs_confirmation` unless `allowDestructive` is set, whoever picked the action. A checkbox is never destructive, since it can be switched back.
@@ -103,7 +108,7 @@ snapshot ─► candidates ─► Jev picks (or candidateId) ─► gate ─► 
 
 ## Exact checks
 
-The old agent's worst failure was a false success: text judged by `trim`, by "contains", a search field mistaken for the document, a trailing space silently lost. `act` therefore checks text by **exact equality, in the targeted field only**:
+A false success is the worst failure a desktop agent can have: text judged by `trim` or by "contains", a search field mistaken for the document, a trailing space silently lost. `act` therefore checks text by **exact equality, in the targeted field only**:
 
 - `set_value`: the field reads exactly `text`.
 - `append`: the field reads exactly its previous text followed by `text`.
@@ -113,7 +118,7 @@ cua-driver 0.8 does not give the exact text: it trims whitespace at both ends of
 
 ## Privacy
 
-Window text leaves the machine only when a step needs Jev. [SECURITY.md](SECURITY.md) lists exactly what is sent, what runs locally, and how to report a vulnerability.
+Window text leaves the machine only when a step needs Jev. [SECURITY.md](https://github.com/mimo-3/cua-jev/blob/main/SECURITY.md) lists exactly what is sent, what runs locally, and how to report a vulnerability.
 
 ## Development
 
@@ -125,20 +130,20 @@ uv run mypy
 uv run pytest
 ```
 
-The benchmark is in `bench/` (see below). `bench/fixture-app` is a small AppKit window used only by the benchmark; `sh bench/fixture-app/build.sh` builds it into `~/Library/Caches/cua-jev/fixture`. `python -m bench.run`, `python -m bench.judge` and `python -m bench.summarize` run from the repository root. See [CONTRIBUTING.md](CONTRIBUTING.md).
+The benchmark is in `bench/` (see below). `bench/fixture-app` is a small AppKit window used only by the benchmark; `sh bench/fixture-app/build.sh` builds it into `~/Library/Caches/cua-jev/fixture`. `python -m bench.run`, `python -m bench.judge` and `python -m bench.summarize` run from the repository root. See [CONTRIBUTING.md](https://github.com/mimo-3/cua-jev/blob/main/CONTRIBUTING.md).
 
 ## Benchmark
 
-Run on 2026-09-24 with cua-jev 0.2.0 and `--reps 3`: 8 tasks × 2 conditions × 3 repetitions = 48 runs, Claude Code headless (`claude -p`) with `--model sonnet`, one run at a time. Raw records: [`bench/results/runs.jsonl`](bench/results/runs.jsonl); the tables below are `python -m bench.summarize` of them.
+Run on 2026-09-24 with an unpublished pre-release of cua-jev (0.2.0) and `--reps 3`: 8 tasks × 2 conditions × 3 repetitions = 48 runs, Claude Code headless (`claude -p`) with `--model sonnet`, one run at a time. Raw records: [`bench/results/runs.jsonl`](https://github.com/mimo-3/cua-jev/blob/main/bench/results/runs.jsonl); the tables below are `python -m bench.summarize` of them.
 
 **Conditions.** Both get the same prompt (task, target pid and window id, "work in the background", and a final `RESULT: success|failure` line), no built-in tools (`--tools ""`) and only one MCP server:
 
 - **(a) cua-driver only**: `cua-driver mcp`, with `bring_to_front`, `move_cursor`, `kill_app`, `get_desktop_state` and a few other tools denied.
 - **(b) cua-jev**: this server only.
 
-**Tasks** ([`bench/tasks.json`](bench/tasks.json)) are new: none of them was in the legacy agent's benchmark. Five run on `bench/fixture-app`, a small AppKit window made for the bench (so no user document is touched): a Name with leading and trailing spaces, appending to a note body next to a search field, a pop-up and Save, clearing a search field next to a destructive "Delete note" button, and fixing an email plus a checkbox. Three run on Calculator: `(48 + 16) / 8`, 15% of 80, and `7 − 19` then change sign. TextEdit and Notes were not used.
+**Tasks** ([`bench/tasks.json`](https://github.com/mimo-3/cua-jev/blob/main/bench/tasks.json)). Five run on `bench/fixture-app`, a small AppKit window made for the bench (so no user document is touched): a Name with leading and trailing spaces, appending to a note body next to a search field, a pop-up and Save, clearing a search field next to a destructive "Delete note" button, and fixing an email plus a checkbox. Three run on Calculator: `(48 + 16) / 8`, 15% of 80, and `7 − 19` then change sign. TextEdit and Notes were not used.
 
-**Judging.** Success is decided only by [`bench/judge.py`](bench/judge.py), a separate script that compares the final state with the task's `expected` JSON by exact equality: every key of the fixture's state file (the controls' values, written by the app itself), or Calculator's display read over accessibility (bidi marks removed, nothing else). The agent's `RESULT:` line is used only to count false success claims. The front app was sampled every 200 ms during each run to count focus steals.
+**Judging.** Success is decided only by [`bench/judge.py`](https://github.com/mimo-3/cua-jev/blob/main/bench/judge.py), a separate script that compares the final state with the task's `expected` JSON by exact equality: every key of the fixture's state file (the controls' values, written by the app itself), or Calculator's display read over accessibility (bidi marks removed, nothing else). The agent's `RESULT:` line is used only to count false success claims. The front app was sampled every 200 ms during each run to count focus steals.
 
 #### Overall
 
@@ -184,11 +189,7 @@ Tokens are what Claude Code reported (input + output + cache reads + cache write
 - **Pop-ups.** `choose_option` failed in all three `fx-size-save` runs: cua-driver cannot `set_value` a closed `NSPopUpButton` ("has no AX children"). The caller recovered by clicking the pop-up and then the menu item, which is why that task took 6–7 calls in both conditions. Since then `choose_option` presses the pop-up open and then the item titled exactly `text`, in the background (checked on the fixture and on a `<select>` in Chrome).
 - **Exact text was not confirmed.** The benchmark ran without the Accessibility permission for the `cua-jev axtext` helper. Of the 242 `act` results in (b), 206 were `done`, 18 `unverified` (text entered; the judge later found it exactly right), 6 `failed` (the pop-up above), 6 `ambiguous`, 4 `not_found` and 2 `no_effect`.
 
-**Caveats.** 3 repetitions per task and one model (Sonnet 5) are a small sample, and one person's Mac. The tasks and the fixture app were written by the same author as cua-jev. An earlier attempt at this run was stopped after 3 runs because the fixture only recorded typed input, not values set over accessibility (so it failed a correct `set_value`). The fixture was fixed to write the controls' actual values, and the 48 runs above were all made after that. The comparison is against Claude Code with cua-driver, not against the legacy self-driving agent.
-
-## History
-
-The previous version was a self-driving agent that called Claude inside (planner, fallback, judge). Its benchmark showed that Jev helps against a no-Jev baseline; it never measured against an LLM-only agent. This version answers that question differently: the thinking moves to the caller, and the benchmark above compares Claude Code with and without cua-jev.
+**Caveats.** 3 repetitions per task and one model (Sonnet 5) are a small sample, and one person's Mac. The tasks and the fixture app were written by the same author as cua-jev. An earlier attempt at this run was stopped after 3 runs because the fixture only recorded typed input, not values set over accessibility (so it failed a correct `set_value`). The fixture was fixed to write the controls' actual values, and the 48 runs above were all made after that. The baseline is Claude Code with cua-driver only; no other agent was compared.
 
 ## License
 
