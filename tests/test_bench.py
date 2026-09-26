@@ -27,6 +27,7 @@ from bench.run import (
     claimed,
     claude_argv,
     condition_order,
+    main,
     mcp_servers,
     parse_args,
     progress_line,
@@ -713,3 +714,9 @@ async def test_reps_that_are_not_a_number_run_nothing(tmp_path: Path) -> None:
     assert bench.order == []
     assert not bench.out.exists()
     assert bench.out.parent.is_dir()
+
+
+@pytest.mark.parametrize("flag", ["-h", "--help"])
+def test_help_prints_usage_without_running(flag: str, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main([flag]) == 0
+    assert capsys.readouterr().out.startswith("usage: python -m bench.run")

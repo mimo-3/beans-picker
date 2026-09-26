@@ -567,8 +567,15 @@ def _int(v: JsonValue) -> int:
     raise RuntimeError(f"not an integer id: {dumps(v)}")
 
 
+USAGE = "usage: python -m bench.run [--reps N] [--model M] [--only id,...] [--conditions a,b]"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    options = parse_args(sys.argv[1:] if argv is None else argv)
+    args = sys.argv[1:] if argv is None else argv
+    if "-h" in args or "--help" in args:
+        print(USAGE)
+        return 0
+    options = parse_args(args)
     bench = Bench(options=options, tasks=selected(load_tasks(), options.only))
     return asyncio.run(bench.main())
 
