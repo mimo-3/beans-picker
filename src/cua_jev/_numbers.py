@@ -102,7 +102,7 @@ def parse_number(text: str) -> float:
 
 
 def scalar_text(v: object) -> str:
-    """A received value written as text, the way JavaScript's `String()` would."""
+    """A received value as text: `null`, `true`/`false`, a number in its shortest form, a list joined by commas."""
     if v is None:
         return "null"
     if isinstance(v, bool):
