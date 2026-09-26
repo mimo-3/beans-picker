@@ -59,12 +59,12 @@ def test_reads_calculators_current_value_not_the_expression_line_and_only_from_t
     [
         ({"a": 0}, {"a": False}, ["a: expected 0, got false"]),
         ({"a": True}, {"a": 1}, ["a: expected true, got 1"]),
-        ({"x": "a"}, {}, ['x: expected "a", got undefined']),
+        ({"x": "a"}, {}, ['x: expected "a", got nothing']),
         ({"a": "0"}, {"a": 0}, ['a: expected "0", got 0']),
         ({"a": 1}, {"a": 1.0}, []),
         ({"a": None}, {"a": None}, []),
         ({"a": 1}, {"a": 1, "extra": 2}, []),
-        ({"b": 1, "a": 2}, {}, ["b: expected 1, got undefined", "a: expected 2, got undefined"]),
+        ({"b": 1, "a": 2}, {}, ["b: expected 1, got nothing", "a: expected 2, got nothing"]),
         ({"s": "x\ny"}, {"s": 'q"'}, ['s: expected "x\\ny", got "q\\""']),
     ],
 )
@@ -156,10 +156,10 @@ async def test_judge_sends_null_for_a_pid_that_is_not_a_number() -> None:
     runner = fake_runner({_window_state_argv("null", "null"): Completed("{}", 0)})
     verdict = await judge(["calc-chain"], runner=runner)
     assert verdict["actual"] == {}
-    assert verdict["mismatches"] == ['display: expected "8", got undefined']
+    assert verdict["mismatches"] == ['display: expected "8", got nothing']
 
 
-@pytest.mark.parametrize(("argv", "message"), [(["nope"], "unknown task nope"), ([], "unknown task undefined")])
+@pytest.mark.parametrize(("argv", "message"), [(["nope"], "unknown task nope"), ([], "unknown task \\(none\\)")])
 async def test_judge_refuses_an_unknown_task(argv: list[str], message: str) -> None:
     with pytest.raises(ValueError, match=message):
         await judge(argv)

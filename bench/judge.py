@@ -61,7 +61,7 @@ def _same(want: JsonValue, got: JsonValue | _Missing) -> bool:
 
 
 def _shown(v: JsonValue | _Missing) -> str:
-    return "undefined" if isinstance(v, _Missing) else dumps(v)
+    return "nothing" if isinstance(v, _Missing) else dumps(v)
 
 
 def compare(expected: Mapping[str, JsonValue], actual: Mapping[str, JsonValue]) -> list[str]:
@@ -116,7 +116,7 @@ async def judge(argv: Sequence[str], *, runner: Runner = run, tasks: Sequence[Ta
     rest = argv[1:]
     task = next((t for t in tasks if t["id"] == task_id), None)
     if task is None:
-        raise ValueError(f"unknown task {'undefined' if task_id is None else task_id}")
+        raise ValueError(f"unknown task {'(none)' if task_id is None else task_id}")
     actual: JsonObject
     if task["app"] == "fixture":
         state = _arg(rest, "--state")
