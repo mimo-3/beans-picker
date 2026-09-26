@@ -1,5 +1,5 @@
 {
-  "note": "New tasks, none of them in the legacy agent's benchmark. `expected` is the exact final state: the fixture's state file (every key compared for exact equality), or Calculator's display text (bidi control marks removed, nothing else).",
+  "note": "`expected` is the exact final state: the fixture's state file (every key compared for exact equality), or Calculator's display text (bidi control marks removed, nothing else).",
   "tasks": [
     {
       "id": "fx-name-spaces",
