@@ -147,6 +147,7 @@ def _capture_driver(
     cursor: ToolResult | None = None,
     windows: ToolResult | None = None,
     write_to: Path | None = None,
+    content: bytes | None = None,
 ) -> FakeDriver:
     def on_call(tool: str, args: dict[str, object]) -> ToolResult:
         if tool == "get_cursor_position":
@@ -156,6 +157,8 @@ def _capture_driver(
         out = args["screenshot_out_file"]
         assert isinstance(out, str)
         _png_file(write_to or Path(out))
+        if content is not None:
+            (write_to or Path(out)).write_bytes(content)
         return state or ToolOk(data={"window_bounds": {"x": 5, "y": 6, "width": 10, "height": 5}}, text="", ms=1)
 
     return FakeDriver(on_call)
@@ -211,6 +214,26 @@ async def test_capture_window_removes_a_file_written_elsewhere(paths: Paths, tmp
     )
     shot = await capture_window(_capture_driver(state=state, write_to=elsewhere), 1, 2, paths=paths)
     assert shot is not None
+    assert not elsewhere.exists()
+    assert _leftovers(paths) == []
+
+
+@pytest.mark.parametrize(
+    ("cursor", "content"),
+    [(ToolOk(data={}, text="", ms=1), None), (None, b"not a png")],
+    ids=["no cursor", "unreadable"],
+)
+async def test_capture_window_removes_a_file_written_elsewhere_when_it_fails(
+    paths: Paths, tmp_path: Path, cursor: ToolResult | None, content: bytes | None
+) -> None:
+    elsewhere = tmp_path / "elsewhere.png"
+    state = ToolOk(
+        data={"screenshot_file_path": str(elsewhere), "window_bounds": {"x": 0, "y": 0, "width": 20, "height": 10}},
+        text="",
+        ms=1,
+    )
+    driver = _capture_driver(state=state, cursor=cursor, write_to=elsewhere, content=content)
+    assert await capture_window(driver, 1, 2, paths=paths) is None
     assert not elsewhere.exists()
     assert _leftovers(paths) == []
 

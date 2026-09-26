@@ -55,6 +55,7 @@ async def capture_window(driver: Driver, pid: int, window_id: int, *, paths: Pat
         out = _shot_file(paths, pid, window_id)
     except OSError:
         return None
+    written: Path | None = None
     try:
         p1 = await _pointer_box(driver)
         args: GetWindowStateArgs = {
@@ -64,6 +65,7 @@ async def capture_window(driver: Driver, pid: int, window_id: int, *, paths: Pat
             "screenshot_out_file": str(out),
         }
         r = await driver.call("get_window_state", args)
+        written = _screenshot_path(r.data.get("screenshot_file_path"), out)
         p2 = await _pointer_box(driver)
         if not r.ok:
             return None
@@ -72,7 +74,7 @@ async def capture_window(driver: Driver, pid: int, window_id: int, *, paths: Pat
         if bounds is None or not bounds.width or p1 is None or p2 is None:
             return None
         # Decoding a full window takes long enough to stall every other request, so it runs aside.
-        img = await asyncio.to_thread(_read_png, _screenshot_path(r.data.get("screenshot_file_path"), out), out)
+        img = await asyncio.to_thread(_read_png, written)
         if img is None:
             return None
         return Shot(img=img, bounds=bounds, scale=img.width / bounds.width, pointer=[p1, p2])
@@ -80,6 +82,8 @@ async def capture_window(driver: Driver, pid: int, window_id: int, *, paths: Pat
         return None
     finally:
         out.unlink(missing_ok=True)
+        if written is not None:
+            written.unlink(missing_ok=True)
 
 
 def _shot_file(paths: Paths, pid: int, window_id: int) -> Path:
@@ -95,11 +99,8 @@ def _screenshot_path(given: object, out: Path) -> Path:
     return Path(given)
 
 
-def _read_png(path: Path, out: Path) -> Rgba | None:
-    img = decode_png(path.read_bytes())
-    if path != out:
-        path.unlink(missing_ok=True)
-    return img
+def _read_png(path: Path) -> Rgba | None:
+    return decode_png(path.read_bytes())
 
 
 async def window_bounds(driver: Driver, pid: int, window_id: int) -> WindowBounds | None:
