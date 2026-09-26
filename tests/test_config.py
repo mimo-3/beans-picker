@@ -90,12 +90,12 @@ def test_effect_retakes(monkeypatch: pytest.MonkeyPatch, raw: str | None, want: 
     assert config.effect_retakes() == want
 
 
-def test_jev_api_key_empty_string_is_a_value(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_empty_jev_api_key_falls_back_to_the_typesafe_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert config.jev_api_key() is None
+    monkeypatch.setenv("JEV_API_KEY", "")
     assert config.jev_api_key() is None
     monkeypatch.setenv("TYPESAFE_API_KEY", "ts")
     assert config.jev_api_key() == "ts"
-    monkeypatch.setenv("JEV_API_KEY", "")
-    assert config.jev_api_key() == ""
     monkeypatch.setenv("JEV_API_KEY", "jev")
     assert config.jev_api_key() == "jev"
 
@@ -108,6 +108,24 @@ def test_model_and_driver_bin(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     monkeypatch.setenv("CUA_DRIVER_BIN", "/opt/cua-driver")
     assert config.model() == ""
     assert config.driver_bin() == "/opt/cua-driver"
+    monkeypatch.setenv("CUA_DRIVER_BIN", "~/.local/bin/cua-driver")
+    assert config.driver_bin() == str(tmp_path / ".local" / "bin" / "cua-driver")
+    monkeypatch.setenv("CUA_DRIVER_BIN", "")
+    assert config.driver_bin() == str(tmp_path / ".local" / "bin" / "cua-driver")
+
+
+@pytest.mark.parametrize(
+    ("raw", "want"), [(None, 120.0), ("", 120.0), ("0", 120.0), ("-5", 120.0), ("x", 120.0), ("2.5", 2.5)]
+)
+def test_timeouts(monkeypatch: pytest.MonkeyPatch, raw: str | None, want: float) -> None:
+    assert config.jev_connect_timeout() == 10.0
+    for name in ("JEV_READ_TIMEOUT", "CUA_DRIVER_TIMEOUT"):
+        if raw is not None:
+            monkeypatch.setenv(name, raw)
+    assert config.jev_read_timeout() == want
+    assert config.driver_timeout() == want
+    monkeypatch.setenv("JEV_CONNECT_TIMEOUT", "3")
+    assert config.jev_connect_timeout() == 3.0
 
 
 def test_values_loaded_later_apply(tmp_path: Path) -> None:

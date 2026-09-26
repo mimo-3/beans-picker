@@ -20,6 +20,9 @@ ENV_FILES: Final[tuple[str, ...]] = (".env.local", ".env")
 DEFAULT_MODEL: Final = "jev-latest"
 DEFAULT_EFFECT_RETAKES: Final = 5
 DEFAULT_LOG_LEVEL: Final = "WARNING"
+DEFAULT_JEV_CONNECT_TIMEOUT: Final = 10.0
+DEFAULT_JEV_READ_TIMEOUT: Final = 120.0
+DEFAULT_DRIVER_TIMEOUT: Final = 120.0
 
 JEV_RETRIES: Final = 3
 
@@ -82,9 +85,8 @@ def env_dirs(package_dir: Path = _PACKAGE_DIR) -> list[Path]:
 
 
 def jev_api_key() -> str | None:
-    """`JEV_API_KEY` if set (even empty), else `TYPESAFE_API_KEY` if set, else None."""
-    key = os.environ.get("JEV_API_KEY")
-    return key if key is not None else os.environ.get("TYPESAFE_API_KEY")
+    """`JEV_API_KEY` if set and not empty, else `TYPESAFE_API_KEY` if set, else None."""
+    return os.environ.get("JEV_API_KEY") or os.environ.get("TYPESAFE_API_KEY")
 
 
 def model() -> str:
@@ -94,9 +96,11 @@ def model() -> str:
 
 
 def driver_bin() -> str:
-    """The cua-driver binary: `CUA_DRIVER_BIN` if set, else `~/.local/bin/cua-driver`."""
+    """The cua-driver binary: `CUA_DRIVER_BIN` (with `~` expanded) if set and not empty, else
+    `~/.local/bin/cua-driver`."""
     value = os.environ.get("CUA_DRIVER_BIN")
-    return value if value is not None else str(Path.home() / ".local" / "bin" / "cua-driver")
+    # The binary is spawned without a shell, so nothing else would expand `~`.
+    return str(Path(value).expanduser()) if value else str(Path.home() / ".local" / "bin" / "cua-driver")
 
 
 def effect_retakes() -> int:
@@ -106,6 +110,27 @@ def effect_retakes() -> int:
     if math.isfinite(n) and n == math.floor(n) and n > 0:
         return int(n)
     return DEFAULT_EFFECT_RETAKES
+
+
+def _seconds(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    n = parse_number(raw) if raw is not None else math.nan
+    return n if math.isfinite(n) and n > 0 else default
+
+
+def jev_connect_timeout() -> float:
+    """Seconds to wait for a connection to Jev: `JEV_CONNECT_TIMEOUT`, default 10."""
+    return _seconds("JEV_CONNECT_TIMEOUT", DEFAULT_JEV_CONNECT_TIMEOUT)
+
+
+def jev_read_timeout() -> float:
+    """Seconds to wait for Jev's answer (and to send, and for a pooled connection): `JEV_READ_TIMEOUT`, default 120."""
+    return _seconds("JEV_READ_TIMEOUT", DEFAULT_JEV_READ_TIMEOUT)
+
+
+def driver_timeout() -> float:
+    """Seconds to wait for cua-driver to start or answer one call: `CUA_DRIVER_TIMEOUT`, default 120."""
+    return _seconds("CUA_DRIVER_TIMEOUT", DEFAULT_DRIVER_TIMEOUT)
 
 
 def log_level() -> str:
