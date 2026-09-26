@@ -14,13 +14,13 @@
           "pid": {
             "description": "Process id, instead of app.",
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 1,
             "maximum": 9007199254740991
           },
           "windowId": {
             "description": "Window id. Default: the app's front-most titled window.",
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 1,
             "maximum": 9007199254740991
           },
           "instruction": {
@@ -52,13 +52,13 @@
           "pid": {
             "description": "Process id, instead of app.",
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 1,
             "maximum": 9007199254740991
           },
           "windowId": {
             "description": "Window id. Default: the app's front-most titled window.",
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 1,
             "maximum": 9007199254740991
           },
           "instruction": {
@@ -155,13 +155,13 @@
           "pid": {
             "description": "Process id, instead of app.",
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 1,
             "maximum": 9007199254740991
           },
           "windowId": {
             "description": "Window id. Default: the app's front-most titled window.",
             "type": "integer",
-            "minimum": -9007199254740991,
+            "minimum": 1,
             "maximum": 9007199254740991
           },
           "instruction": {
