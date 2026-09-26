@@ -4,9 +4,9 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [0.3.0] - Unreleased
+## [Unreleased]
 
-First release on PyPI.
+To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were never published.
 
 ### Added
 
@@ -17,13 +17,35 @@ First release on PyPI.
 - The Jev key and other settings are read from the environment, then from `.env.local` / `.env`
   in the checkout when the package runs from a cua-jev checkout, then from `~/.config/cua-jev/`
   (`$XDG_CONFIG_HOME/cua-jev`), so an installed server finds its key without a checkout.
-- Requests to cua-driver and to Jev have no time limit. At shutdown, the final `end_session` to
-  cua-driver waits at most 5 seconds.
+- Time limits on every request: `CUA_DRIVER_TIMEOUT` (default 120 s) for cua-driver's startup and
+  each call, `JEV_CONNECT_TIMEOUT` (10 s) and `JEV_READ_TIMEOUT` (120 s) for Jev. A request that
+  runs out of time fails with `driver_timeout` or `jev_unavailable` instead of blocking later calls.
+  At shutdown, the final `end_session` to cua-driver waits at most 5 seconds.
+
+### Changed
+
+- Failures that are not a tool's own refusal have their own codes: `driver_unavailable`,
+  `driver_timeout`, `driver_error` and `jev_bad_response`, besides `internal`. They are logged with
+  their traceback at `WARNING`.
+- A call to an unknown tool is a JSON-RPC error (-32602), not a tool result.
+- `pid` and `windowId` must be at least 1.
+- Unknown command-line arguments print the usage and exit with status 2 instead of starting the
+  server.
+- An empty `JEV_API_KEY` no longer hides `TYPESAFE_API_KEY`.
+- The exact-text helper also reads switches (`AXSwitch`). Its source changed, so it is rebuilt:
+  run `cua-jev grant-ax` again after upgrading.
 
 ### Fixed
 
+- A call canceled by the client while it was still waiting for its turn no longer runs.
+- A step in `then` that raises no longer discards the steps before it: it is reported as a `failed`
+  step, with the completed steps and the `skipped` count.
+- A Jev answer with a probability or confidence outside [0, 1], or a ranking without
+  probabilities, is rejected as `jev_bad_response`.
+- `~` in `CUA_DRIVER_BIN` is expanded.
+- A screenshot that cua-driver saved to a path of its own is deleted on every failure path too.
+- A server made by `create_server()` without a session closes the session it made when it stops.
 - A text field named only by its placeholder keeps its candidate ids once it is typed in, so text
   entered into it is checked in that field instead of ending as `mismatch` ("the target field is gone").
 
-[0.3.0]: https://github.com/mimo-3/cua-jev/releases/tag/v0.3.0
-
+[Unreleased]: https://github.com/mimo-3/cua-jev/commits/main
