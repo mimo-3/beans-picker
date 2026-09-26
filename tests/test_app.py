@@ -267,7 +267,7 @@ async def test_a_launch_without_a_pid() -> None:
 
 async def test_a_launch_with_neither_bundle_nor_name() -> None:
     driver = FakeDriver(lambda tool, args: ok({}))
-    with pytest.raises(AppLaunchError, match=r"^could not launch undefined: no pid$"):
+    with pytest.raises(AppLaunchError, match=r"^could not launch \(unknown app\): no pid$"):
         await ensure_app(driver, AppTarget(), runner=fake_runner({}), sleep=RecordingSleep())
     assert driver.calls == [("launch_app", {})]
 

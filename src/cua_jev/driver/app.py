@@ -122,7 +122,7 @@ async def ensure_app(
 
 
 def _shown(value: str | None) -> str:
-    return "undefined" if value is None else value
+    return "(unknown app)" if value is None else value
 
 
 async def _list_windows(driver: Driver, pid: int) -> list[Window]:
