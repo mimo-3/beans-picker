@@ -21,7 +21,7 @@ _DRAFT_07: Final = "http://json-schema.org/draft-07/schema#"
 
 
 def _integer(description: str) -> JsonObject:
-    return {"description": description, "type": "integer", "minimum": -MAX_SAFE_INTEGER, "maximum": MAX_SAFE_INTEGER}
+    return {"description": description, "type": "integer", "minimum": 1, "maximum": MAX_SAFE_INTEGER}
 
 
 def _target() -> JsonObject:
@@ -163,7 +163,7 @@ def _at(path: str, key: str | int) -> str:
 
 def _invalid_type(schema: JsonObject, v: JsonValue | None, path: str, *, missing: bool = False) -> Issue:
     expected = _EXPECTED[str(schema["type"])]
-    return Issue(f"Invalid input: expected {expected}, received {'undefined' if missing else _received(v)}", path)
+    return Issue(f"Invalid input: expected {expected}, received {'nothing' if missing else _received(v)}", path)
 
 
 def _integer_value(schema: JsonObject, v: JsonValue, path: str, issues: list[Issue]) -> JsonValue:
@@ -180,8 +180,9 @@ def _integer_value(schema: JsonObject, v: JsonValue, path: str, issues: list[Iss
     n = int(v)
     if n > MAX_SAFE_INTEGER:
         issues.append(Issue(f"Too big: expected int to be <={MAX_SAFE_INTEGER}", path))
-    elif n < -MAX_SAFE_INTEGER:
-        issues.append(Issue(f"Too small: expected int to be >={-MAX_SAFE_INTEGER}", path))
+    minimum = schema.get("minimum", -MAX_SAFE_INTEGER)
+    if isinstance(minimum, int) and n < minimum:
+        issues.append(Issue(f"Too small: expected int to be >={minimum}", path))
     low = schema.get("exclusiveMinimum")
     if isinstance(low, int) and n <= low:
         issues.append(Issue(f"Too small: expected number to be >{low}", path))
@@ -260,7 +261,7 @@ def check_arguments(tool: str, arguments: Mapping[str, JsonValue] | None) -> tup
     schema = INPUT_SCHEMAS[tool]
     issues: list[Issue] = []
     if arguments is None:
-        return {}, [Issue("Invalid input: expected object, received undefined", "")]
+        return {}, [Issue("Invalid input: expected object, received nothing", "")]
     return _object_value(schema, dict(arguments), "", issues), issues
 
 
