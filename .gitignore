@@ -1,0 +1,28 @@
+# Environments and secrets
+.venv/
+.env*
+!.env.example
+
+# Build output
+dist/
+dist-from-sdist/
+build/
+*.egg-info/
+
+# Caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Bench scratch space and built fixture app
+bench/.work/
+bench/fixture-app/*.app
+
+# macOS
+.DS_Store

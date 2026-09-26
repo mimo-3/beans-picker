@@ -1,0 +1,115 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cua-jev"
+dynamic = ["version"]
+description = "An MCP server for macOS app control in the background: cua-driver observes and acts, TypeSafe Jev picks the element."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "mimo-3" }]
+requires-python = ">=3.12"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: MacOS X",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Desktop Environment",
+  "Typing :: Typed",
+]
+keywords = ["mcp", "macos", "accessibility", "automation", "agents"]
+# Floors are the lowest versions this package is tested with (CI also runs them). mcp is held to one
+# minor because the client relies on its validate_tool_result hook, which is internal to the SDK.
+dependencies = [
+  "mcp>=2.2,<2.3",
+  "typesafe-sdk>=0.7.1,<0.8",
+  "httpx2>=2.13,<3",
+  "anyio>=4.9,<5",
+  "pydantic>=2.13,<3",
+]
+
+[project.urls]
+Repository = "https://github.com/mimo-3/cua-jev"
+Issues = "https://github.com/mimo-3/cua-jev/issues"
+Changelog = "https://github.com/mimo-3/cua-jev/blob/main/CHANGELOG.md"
+
+[project.scripts]
+cua-jev = "cua_jev.cli:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
+]
+
+[tool.hatch.version]
+path = "src/cua_jev/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cua_jev"]
+artifacts = ["src/cua_jev/native/*.m"] # always shipped, whatever .gitignore says
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/cua_jev",
+  "tests",
+  "bench",
+  "skills",
+  "README.md",
+  "CHANGELOG.md",
+  "SECURITY.md",
+  "LICENSE",
+  ".env.example",
+]
+exclude = ["bench/.work", "bench/fixture-app/*.app"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+src = ["src", "tests", "bench"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "PT", "PTH", "S", "T20"]
+ignore = ["S603", "S607"] # subprocess with a fixed argv is the point of the driver layer
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+"bench/**" = ["T201"] # the bench scripts report on stdout; cli.py uses targeted noqa
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+files = ["src", "tests", "bench"]
+mypy_path = "src"
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "truthy-bool"]
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+pythonpath = ["."] # `bench` is importable from tests
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+# Warnings raised from our own code fail the run; upstream deprecations stay visible but do not.
+filterwarnings = ["default", "error:::cua_jev", "error:::bench", "error:::tests"]
+markers = ["macos: needs macOS (the server itself, clang, or a real session); skipped elsewhere"]
+
+[tool.coverage.run]
+source = ["cua_jev"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 90 # combined line + branch total; changing it is a reviewed change
+exclude_also = ["if TYPE_CHECKING:"]
