@@ -34,6 +34,9 @@ def main(argv: Sequence[str] | None = None, *, platform: str | None = None) -> i
     if args in (["--help"], ["-h"]):
         print(USAGE)  # noqa: T201 - this command's output
         return 0
+    if args and args != ["grant-ax"]:
+        print(USAGE, file=sys.stderr)  # noqa: T201 - reported before anything starts
+        return 2
     if (platform if platform is not None else sys.platform) != "darwin":
         print("cua-jev runs on macOS only", file=sys.stderr)  # noqa: T201 - reported before anything starts
         return 1
@@ -41,7 +44,7 @@ def main(argv: Sequence[str] | None = None, *, platform: str | None = None) -> i
     for directory in config.env_dirs():
         config.load_env(directory)
     log.configure()
-    if args[:1] == ["grant-ax"]:
+    if args == ["grant-ax"]:
         print(asyncio.run(_grant_ax()))  # noqa: T201 - the helper's answer is this command's output
         return 0
     asyncio.run(_serve())

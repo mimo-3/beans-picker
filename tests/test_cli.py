@@ -51,13 +51,24 @@ def test_refuses_to_serve_off_macos(capsys: pytest.CaptureFixture[str], no_side_
     assert no_side_effects == []
 
 
-def test_serves_and_ignores_unknown_arguments(
+@pytest.mark.parametrize("args", [["--verison"], ["serve"], ["grant-ax", "extra"]])
+def test_unknown_arguments_print_the_usage_and_fail(
+    args: list[str], capsys: pytest.CaptureFixture[str], no_side_effects: list[str]
+) -> None:
+    assert cli.main(args, platform="darwin") == 2
+    captured = capsys.readouterr()
+    assert captured.err == cli.USAGE + "\n"
+    assert captured.out == ""
+    assert no_side_effects == []
+
+
+def test_serves_without_arguments(
     capsys: pytest.CaptureFixture[str], no_side_effects: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("TYPESAFE_BASE_URL", "")
     monkeypatch.delenv("TYPESAFE_BASE_URL")
     (tmp_path / ".env.local").write_text("TYPESAFE_BASE_URL=http://localhost:1\n", encoding="utf-8")
-    assert cli.main(["--verbose", "extra"], platform="darwin") == 0
+    assert cli.main([], platform="darwin") == 0
     assert no_side_effects == ["log", "serve"]
     assert os.environ["TYPESAFE_BASE_URL"] == "http://localhost:1"
     assert capsys.readouterr().out == ""
