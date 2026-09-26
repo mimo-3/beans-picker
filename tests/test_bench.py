@@ -189,7 +189,7 @@ def test_take_counts_tool_uses_only() -> None:
     take(m, dumps(event))
     take(m, assistant("mcp__cua-jev__act", "mcp__cua-jev__act"))
     assert m.tool_calls == 3
-    assert m.tool_names == {"undefined": 1, "act": 2}
+    assert m.tool_names == {"(unnamed)": 1, "act": 2}
 
 
 @pytest.mark.parametrize(

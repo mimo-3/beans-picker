@@ -201,7 +201,7 @@ def take(m: Metrics, line: str) -> None:
             if b.get("type") != "tool_use":
                 continue
             m.tool_calls += 1
-            name = _TOOL_PREFIX.sub("", scalar_text(b["name"]) if "name" in b else "undefined", count=1)
+            name = _TOOL_PREFIX.sub("", scalar_text(b["name"]) if "name" in b else "(unnamed)", count=1)
             m.tool_names[name] = m.tool_names.get(name, 0) + 1
     elif kind == "user":
         for b in content:
