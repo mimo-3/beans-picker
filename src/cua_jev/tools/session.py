@@ -125,7 +125,13 @@ class Session:
         task = asyncio.ensure_future(body())
         self._bodies.add(task)
         task.add_done_callback(self._forget)
-        return await asyncio.shield(task)
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # A call still waiting for its turn is dropped; one already running finishes.
+            if self._running is not task:
+                task.cancel()
+            raise
 
     def _forget(self, task: asyncio.Task[object]) -> None:
         self._bodies.discard(task)

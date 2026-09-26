@@ -174,6 +174,36 @@ async def test_a_cancelled_callers_body_still_finishes_before_the_next_call(tmp_
     assert events == ["slow start", "slow end", "fast"]
 
 
+async def test_a_call_cancelled_while_queued_never_runs(tmp_path: Path) -> None:
+    s = session_with(FakeDriver(), tmp_path)
+    release = asyncio.Event()
+    events: list[str] = []
+
+    async def slow() -> None:
+        events.append("slow start")
+        await release.wait()
+        events.append("slow end")
+
+    async def queued() -> None:
+        events.append("queued")
+
+    async def last() -> None:
+        events.append("last")
+
+    first = asyncio.ensure_future(s.exclusive(slow))
+    await asyncio.sleep(0)
+    second = asyncio.ensure_future(s.exclusive(queued))
+    await asyncio.sleep(0)
+    second.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await second
+    third = asyncio.ensure_future(s.exclusive(last))
+    release.set()
+    await first
+    await third
+    assert events == ["slow start", "slow end", "last"]
+
+
 async def test_the_driver_is_opened_once_and_retried_after_a_failure(tmp_path: Path) -> None:
     attempts = 0
     driver = FakeDriver()
