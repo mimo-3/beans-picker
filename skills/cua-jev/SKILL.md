@@ -19,15 +19,14 @@ Three ways to take a step, from fastest to most help:
 | `act` or `observe` with an `instruction` | yes | Picking one control among look-alikes by what surrounds it: "Restore in the row deleted 2026-09-24", "the second Jordan Lee (Security)". A long page where the plain candidate list would be huge. |
 | `extract` | yes | Reading one value or one table exactly, on a crowded page. |
 
-Jev costs about a second and $0.042 per million input tokens; a plain `observe` and a
-`candidateId` step cost neither. So ask Jev when the choice is the hard part, and skip it when the
-choice is already made. On 15 hard web tasks × 4 models (cua-jev 0.2.0), this way of working
-passed 56/60 against cua-driver's 54/60, cost 0.31× as much per run with Jev included, took 0.75×
-the median time, made no false success claims (cua-driver: 3), and never took the foreground.
+Each Jev call takes about a second and is billed by input tokens; a plain `observe` and a
+`candidateId` step make no Jev call. So ask Jev when the choice is the hard part, and skip it when
+the choice is already made.
 
 **Tasks that do not need Jev at all**: a form with labelled fields, a wizard of Next buttons, a
 settings page, a keyboard drag (focus the handle, Space, arrows, Space). One plain observe gives
-every id; one or two `act` calls with `then` do the rest.
+the ids (the first 80 by default: when `total` is larger than the list you got, pass a larger
+`limit`); one or two `act` calls with `then` do the rest.
 
 **Tasks where Jev earns its time**: many similar rows (files, payments, tickets) where the right one
 is known only by its content; decoys (two people with one name, a stale duplicate); reading a
@@ -54,7 +53,7 @@ as `failed` with `foreground_required`).
 | status | what to do |
 |---|---|
 | `done` | The effect is seen. Go on. |
-| `unverified` | The field changed but its exact text could not be read. `extract` it before relying on it. |
+| `unverified` | The field changed but its exact text could not be read. `extract` proves the exact text only when the element it returns has `exact: true`; otherwise it may be trimmed, so treat the text as unconfirmed (running `cua-jev grant-ax` lets it be read). |
 | `no_effect` | Nothing changed. Do not repeat the same call blindly. Observe again: the control may be disabled, hidden or off-screen. Focusing a drag handle also reads as `no_effect`; the next key press still goes to it. |
 | `mismatch` | Something changed, but not what was asked. Read `change` and fix it before going on. |
 | `ambiguous` | Pick the right `candidateId` from the list returned and call again. Do not guess by rewording. |
@@ -99,7 +98,8 @@ grids). Narrow the list first: use the search field, a filter, or a sort header 
 find the largest). Then read it with `extract` on the table, which returns `rows`. If the row you
 need is still not there, act on a `scroll … down one page` candidate and read again.
 
-**Reading values.** `extract` returns exact text. For a whole table or list, name the table
+**Reading values.** `extract` returns the text as read. A field's value is exact to the character
+only when the element has `exact: true`; without it, whitespace at the ends may be missing. For a whole table or list, name the table
 ("the Transactions table", or "the table of rooms" when it has no name). In `screenText` a table
 row is one line, its cells joined by ` | `. When the result is `ambiguous`, the shortlist already carries each
 element's value or rows, so read them from there.
