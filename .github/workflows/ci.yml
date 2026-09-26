@@ -67,7 +67,7 @@ jobs:
       - run: uv build
       - name: Rebuild the wheel from the sdist
         run: uv build --wheel --out-dir dist-from-sdist dist/*.tar.gz
-      - run: uvx twine check --strict dist/*
+      - run: uvx twine@7.0.0 check --strict dist/*
       - name: Both wheels ship the native sources and py.typed
         run: uv run --no-project python scripts/check_wheel.py dist/*.whl dist-from-sdist/*.whl
       - name: Installed-package smoke test (sdist-derived wheel, outside the checkout)

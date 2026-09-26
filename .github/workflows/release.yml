@@ -43,7 +43,7 @@ jobs:
         with:
           name: dist
           path: dist/
-      - run: uv publish --trusted-publishing always --publish-url https://test.pypi.org/legacy/ dist/*
+      - run: uv publish --trusted-publishing always --publish-url https://test.pypi.org/legacy/ --check-url https://test.pypi.org/simple/ dist/*
       - name: Install the published wheel in a fresh environment
         env:
           TAG: ${{ github.ref_name }}
