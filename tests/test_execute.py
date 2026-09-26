@@ -550,7 +550,7 @@ async def test_append_to_a_field_that_is_gone() -> None:
     r = await ex.execute(cand("append", AREA, text="x"), snap([AREA]))
     assert outcome(r) == (False, "target_gone", None, "could not rebind area")
     r = await ex.execute(cand("append", text="x"), snap([AREA]))
-    assert outcome(r) == (False, "target_gone", None, "could not rebind undefined")
+    assert outcome(r) == (False, "target_gone", None, "could not rebind (no key)")
     assert driver.calls == []
 
 

@@ -372,7 +372,7 @@ class Executor:
         node = next((n for n in fresh.nodes if n.key == key), None)
         if node is None:
             return _Outcome(
-                ok=False, code="target_gone", detail=f"could not rebind {key if key is not None else 'undefined'}"
+                ok=False, code="target_gone", detail=f"could not rebind {key if key is not None else '(no key)'}"
             )
         current = node.raw_value if node.raw_value is not None else node.value if node.value is not None else ""
         text = c.text if c.text is not None else ""
