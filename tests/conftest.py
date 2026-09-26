@@ -8,8 +8,8 @@ import pytest
 
 from cua_jev.paths import Paths
 
-_ISOLATED_PREFIXES = ("TYPESAFE_", "CUA_")
-_ISOLATED_NAMES = ("JEV_API_KEY", "XDG_CONFIG_HOME")
+_ISOLATED_PREFIXES = ("TYPESAFE_", "CUA_", "JEV_")
+_ISOLATED_NAMES = ("XDG_CONFIG_HOME",)
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
