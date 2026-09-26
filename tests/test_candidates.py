@@ -41,9 +41,6 @@ def summaries(cands: list[ActionCandidate]) -> list[str]:
     return [c.summary for c in cands]
 
 
-# --- mirrored cases ---------------------------------------------------------------------------
-
-
 class TestBuildCandidates:
     def test_gives_a_control_the_same_id_in_every_snapshot_whatever_its_element_index(self) -> None:
         a = snap_fixture("calculator")
@@ -61,7 +58,6 @@ class TestBuildCandidates:
         assert all(c.text is None for c in listed)
         with_text = [c for c in build_candidates(te, BuildOptions(text="  trailing  ")) if c.kind in TEXT_KINDS]
         assert all(c.text == "  trailing  " for c in with_text)
-        # The id does not depend on the text, so an id from observe works with any text.
         assert [c.id for c in with_text] == [c.id for c in listed]
 
     def test_compiles_a_keypad_sequence_from_the_callers_text(self) -> None:
@@ -384,9 +380,6 @@ class TestContextMenus:
         assert shift_f10.keys == ["shift", "f10"]
 
 
-# --- builders for the tests below ---------------------------------------------------------------
-
-
 def node(
     index: int,
     role: str,
@@ -428,7 +421,6 @@ def node(
 
 
 def item(*path: str, enabled: bool = True, pressable: bool = True, identifier: str | None = None) -> MenuItem:
-    """A menu item; `pressable` gives it an element token."""
     return MenuItem(
         path=list(path),
         enabled=enabled,
@@ -461,9 +453,6 @@ WINDOW = node(0, "AXWindow", "Window", depth=0)
 def keypad_nodes(parent: int = 1) -> list[UINode]:
     names = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"]
     return [node(10 + d, "AXButton", str(d), identifier=names[d], parent=parent, actions=["press"]) for d in range(10)]
-
-
-# --- safety -------------------------------------------------------------------------------------
 
 
 class TestDestructiveLabels:
@@ -606,9 +595,6 @@ class TestGoals:
         assert clipboard_withheld(["編集", "切り取り"], "save") is False
 
 
-# --- menu ---------------------------------------------------------------------------------------
-
-
 class TestOfferableMenuItems:
     def test_skips_system_menus_submenu_openers_and_placeholders(self) -> None:
         menu = [
@@ -655,9 +641,6 @@ class TestOfferableMenuItems:
         assert [m.path for m in offerable_menu_items([item("App", "Settings")])] == [["App", "Settings"]]
 
 
-# --- keypad -------------------------------------------------------------------------------------
-
-
 class TestKeypad:
     def test_keypad_keys(self) -> None:
         assert keypad_keys("3x4") == ["3", "*", "4"]
@@ -688,13 +671,9 @@ class TestKeypad:
         assert keypad_parents(snap_of(keypad_nodes()[:7])) == set()
         by_label = [node(30 + d, "AXButton", str(d), parent=2) for d in range(8)]
         assert keypad_parents(snap_of(by_label)) == {2}
-        # An empty raw label does not fall back to the label.
         blank = [node(30 + d, "AXButton", str(d), raw_label="", parent=2) for d in range(8)]
         assert keypad_parents(snap_of(blank)) == set()
         assert keypad_parents(snap_of([replace(n, parent=None) for n in keypad_nodes()])) == set()
-
-
-# --- prune --------------------------------------------------------------------------------------
 
 
 def cand(
@@ -775,9 +754,6 @@ class TestPrune:
         assert [[c.key for c in s] for s in out] == [["2", "5", "1"], ["4", "0", "3"], ["6"]]
         assert shards([]) == []
         assert len(shards([cand(key=str(i)) for i in range(125)])) == 3
-
-
-# --- describe -----------------------------------------------------------------------------------
 
 
 class TestDescribe:
@@ -885,9 +861,6 @@ class TestDescribe:
         )
 
 
-# --- build --------------------------------------------------------------------------------------
-
-
 class TestBuild:
     def test_describe_short(self) -> None:
         assert describe_short(node(1, "AXButton", "Save", identifier="saveBtn")) == 'Button "Save" (saveBtn)'
@@ -899,7 +872,6 @@ class TestBuild:
         assert candidate_id("click|x") == candidate_id("click|x")
         assert candidate_id("click|x") != candidate_id("click|x#2")
         assert candidate_id("k") == "c13fbd79c"
-        # A lone surrogate hashes as U+FFFD.
         assert candidate_id("\ud800") == candidate_id("\N{REPLACEMENT CHARACTER}")
 
     def test_controls_in_a_fixed_order_with_safe_keys_last(self) -> None:

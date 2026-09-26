@@ -1,5 +1,4 @@
-"""One MCP server process = one Session: a cua-driver connection and a Jev client, both opened on
-first use, and a queue so that tool calls never interleave on the desktop."""
+"""One Session per server process: a cua-driver connection, a Jev client, and a queue that serializes tool calls."""
 
 from __future__ import annotations
 
@@ -110,12 +109,7 @@ class Session:
         return self._menu_keys
 
     async def exclusive[R](self, fn: Callable[[], Awaitable[R]]) -> R:
-        """Runs `fn` after every earlier call has finished (first come, first served).
-
-        The body runs in its own task: a caller that is cancelled stops waiting, but the body still
-        runs to completion, so the next call never starts while cua-driver is carrying out an action.
-        Errors reach only this caller.
-        """
+        """Runs `fn` after every earlier call has finished (first come, first served)."""
         if self._closing:
             raise CuaJevError("server is shutting down")
 
@@ -192,9 +186,7 @@ class Session:
         )
 
     async def close(self) -> None:
-        """Ends the session: queued calls never start, the running one is cancelled, menu learning
-        and helper builds still running are cancelled, then the sentinel, the cua-driver connection
-        and the Jev client are closed. Idempotent."""
+        """Ends the session: cancels queued and running work, then closes the sentinel, driver and Jev client."""
         if self._closing:
             return
         self._closing = True

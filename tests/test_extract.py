@@ -12,7 +12,6 @@ from tests.tool_fakes import FakeSession, jev_picking
 
 
 def page() -> Snapshot:
-    """A web table (two rows) and a list whose options are text directly under it, one with a bold run inside."""
     elements: list[JsonValue] = [
         el(0, "AXWindow", title="Ledger"),
         el(1, "AXTable", 0, 1, label="Transactions"),
@@ -87,7 +86,6 @@ def test_elements_are_nodes_with_text_then_the_unindexed_texts() -> None:
         "within": ["AXWindow: Ledger"],
         "first_rows": ["TX-1 | $1,410.00", "TX-2"],
     }
-    # Indexed static texts are elements twice over: as nodes, and as texts placed in their parents.
     assert shown[2] == {
         "role": "AXStaticText",
         "value": "Jordan Lee \u00b7 Mobile",
@@ -185,5 +183,4 @@ def test_a_node_is_described_by_name_identifier_value_and_help() -> None:
         "value": " 12 ",
         "exact": True,
     }
-    # Identifiers starting with "_" are not shown to Jev, but are returned.
     assert extracted(s, elements[1], 0.5, 300) == {"role": "AXButton", "p": 0.5, "label": "Go", "identifier": "_NS:12"}

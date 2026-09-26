@@ -1,9 +1,4 @@
-"""Smoke test of an installed cua-jev, run from outside the checkout so only the installed
-package is importable: the server lists its three tools in memory, both native sources are
-readable as package data, and on macOS both helpers build into a temporary cache.
-
-    python scripts/smoke_installed.py
-"""
+"""Smoke test of an installed cua-jev, run from outside the checkout."""
 
 from __future__ import annotations
 

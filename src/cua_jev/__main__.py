@@ -1,5 +1,3 @@
-"""`python -m cua_jev`: the same as the `cua-jev` command."""
-
 import sys
 
 from cua_jev.cli import main

@@ -1,5 +1,4 @@
-"""The one place subprocesses are started. Code that shells out takes a `runner: Runner = run`
-keyword, so tests pass a fake instead of starting processes."""
+"""The one place subprocesses are started."""
 
 from __future__ import annotations
 
@@ -42,13 +41,7 @@ async def run(
     check: bool = True,
     cwd: Path | None = None,
 ) -> Completed:
-    """Run `argv` with stdin and stderr on the null device and return its stdout (UTF-8, invalid
-    bytes replaced) and exit code.
-
-    Raises ProcessError when the program cannot be started, when stdout exceeds `max_bytes`, or,
-    with `check`, when it exits non-zero. On overflow or cancellation the child is killed and
-    reaped before this returns.
-    """
+    """Run `argv` with stdin and stderr on the null device; return stdout and the exit code."""
     if not argv:
         raise ProcessError("empty command")
     try:
@@ -78,7 +71,6 @@ async def run(
 
 
 async def _read_limited(proc: asyncio.subprocess.Process, max_bytes: int) -> bytes | None:
-    """All of stdout, or None once it grows past `max_bytes`."""
     stream = proc.stdout
     if stream is None:  # pragma: no cover - stdout is always a pipe here
         return b""

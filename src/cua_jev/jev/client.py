@@ -1,5 +1,4 @@
-"""JevClient: the TypeSafe SDK's `system_one` with a pinned model, answer validation and usage
-accounting. No time limit and no hedging: a slow answer is waited for."""
+"""JevClient: the TypeSafe SDK's `system_one` with a pinned model, answer validation and usage accounting."""
 
 from __future__ import annotations
 
@@ -73,8 +72,6 @@ class AskResult:
 
 
 class _Reply(BaseModel):
-    """The reply body, read leniently so that `validate` decides what a bad answer is."""
-
     model_config = ConfigDict(extra="ignore")
 
     answers: dict[str, JsonValue] = {}
@@ -82,8 +79,6 @@ class _Reply(BaseModel):
 
 
 class _Box:
-    """Holds the request id of the last response seen within one `ask`."""
-
     __slots__ = ("value",)
 
     def __init__(self) -> None:
@@ -94,8 +89,6 @@ _REQUEST_ID: ContextVar[_Box | None] = ContextVar("cua_jev_request_id", default=
 
 
 class _RequestIdTransport(httpx2.AsyncBaseTransport):
-    """Passes requests through and records each response's request id for the `ask` that sent it."""
-
     def __init__(self, inner: httpx2.AsyncBaseTransport) -> None:
         self._inner = inner
 
@@ -111,7 +104,7 @@ class _RequestIdTransport(httpx2.AsyncBaseTransport):
 
 
 class JevClient:
-    """One Jev connection per process. Raises JevUnavailable at construction when no key is set."""
+    """One Jev connection per process."""
 
     def __init__(
         self,

@@ -1,15 +1,4 @@
-"""Exact state of editable fields and toggles, read by the native axtext helper.
-
-cua-driver trims whitespace at both ends of a value, reports an empty field's placeholder as its
-value and leaves out a checkbox's state. The read-only helper copies AXValue as it is (nothing is
-messaged, activated or raised; secure fields are skipped).
-
-The helper needs the Accessibility permission. It is tried as a plain child process first (that
-works when the host running this server has the permission), then as a background-only app of its
-own, launched with `open -g`, which macOS lists under Privacy & Security > Accessibility by its own
-name once `cua-jev grant-ax` has asked for it. Without either, values stay as cua-driver gives them
-and no node is marked `exact`.
-"""
+"""Exact state of editable fields and toggles, read by the native axtext helper."""
 
 from __future__ import annotations
 
@@ -35,7 +24,6 @@ from cua_jev.paths import Paths
 EDITABLE_ROLES: Final = frozenset({"AXTextField", "AXTextArea", "AXSearchField", "AXComboBox", "AXIncrementor"})
 TOGGLE_ROLES: Final = frozenset({"AXCheckBox", "AXRadioButton", "AXSwitch"})
 
-# After a round in which neither way of running the helper worked, it is not tried again for this long.
 _RETRY_AFTER_S: Final = 30.0
 _DIRECT_MAX_BYTES: Final = 32 * 1024 * 1024
 
@@ -49,10 +37,7 @@ class _Mode:
 
 
 class ExactText:
-    """Runs the helper for one session, remembering which way of running it worked last.
-
-    A way that failed is probed again at most every 30 seconds.
-    """
+    """Runs the helper for one session, remembering which way of running it worked last."""
 
     def __init__(
         self, helpers: AxtextBuild, paths: Paths, *, runner: Runner = run, clock: Clock = time.monotonic
@@ -64,8 +49,7 @@ class ExactText:
         self._mode: _Mode | None = None
 
     async def read_fields(self, pid: int) -> list[object] | None:
-        """The helper's `fields` list for the app (entries unchecked), or `None` when it cannot
-        be read. An empty list is a successful read."""
+        """The helper's `fields` list for the app (entries unchecked), or `None` when it cannot be read."""
         app = await self._helpers.axtext_app()
         if app is None:
             return None
@@ -101,7 +85,6 @@ def _read_text(path: Path) -> str | None:
 
 
 def _parse(text: str | None) -> list[object] | None:
-    """The `fields` list of the helper's JSON output; `None` when there is none (or it is not a list)."""
     if text is None:
         return None
     try:
@@ -125,8 +108,6 @@ async def prompt_for_access(helpers: AxtextBuild, *, runner: Runner = run) -> st
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _Field:
-    """One element's exact state, in tree order."""
-
     window: object
     role: object
     title: object
@@ -134,14 +115,12 @@ class _Field:
     document: object
 
     def text(self) -> str:
-        """The field's text; the helper always writes it as a string."""
         if not isinstance(self.value, str):
             raise TypeError("an exact field has no text value")
         return self.value
 
 
 def _field(entry: object) -> _Field:
-    """Reads one helper entry. A missing key reads as absent; `null` is not an entry."""
     if entry is None:
         raise TypeError("an exact field is null")
     d = entry if isinstance(entry, dict) else {}
@@ -155,14 +134,7 @@ def _field(entry: object) -> _Field:
 
 
 def apply_exact_text(nodes: Sequence[UINode], fields: Sequence[object], window_title: str) -> None:
-    """Gives editable nodes and toggles their exact state (in place).
-
-    The helper lists elements in tree order, as cua-driver does, so they are paired by position
-    when both list the same number and every pair agrees (the same text trimmed, or an empty field
-    that cua-driver shows with its placeholder). Otherwise a node takes the one field whose trimmed
-    text is its value, when there is exactly one. Only fields of the window titled `window_title`
-    are used, unless none is.
-    """
+    """Gives editable nodes and toggles their exact state (in place)."""
     entries = [_field(f) for f in fields]
     in_window = [f for f in entries if isinstance(f.window, str) and f.window == window_title]
     pool = in_window or entries
@@ -202,8 +174,7 @@ def _pair_text(nodes: list[UINode], pool: list[_Field]) -> None:
 
 def _set_exact(n: UINode, f: _Field) -> None:
     raw = f.value if isinstance(f.value, str) or f.value is None else scalar_text(f.value)
-    # An empty field shows its placeholder in cua-driver's reading; when the field has no title of
-    # its own, that text is no name (it goes away as soon as the field is typed in).
+    # An untitled empty field's placeholder is not its name.
     if raw == "" and n.value and isinstance(f.title, str) and normalize_text(f.title) != n.value:
         n.placeholder = n.value
     n.raw_value = raw
@@ -218,8 +189,6 @@ def _role_in(f: _Field, roles: frozenset[str]) -> bool:
 
 
 def _family(role: object) -> object:
-    """A text area pairs only with a text area and a number field with a number field; the
-    single-line roles (field, search field, combo box) pair with each other."""
     return role if role in ("AXTextArea", "AXIncrementor") else "line"
 
 
@@ -232,8 +201,6 @@ def _normalized(v: object) -> str:
 
 
 def _truthy(v: object) -> bool:
-    """Truth as a JSON value has it: `null`, `false`, `0`, NaN and `""` are false; lists and
-    objects (even empty) are true."""
     if v is None or v is False:
         return False
     if isinstance(v, int | float):

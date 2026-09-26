@@ -28,8 +28,6 @@ OK: dict[str, JsonValue] = {
 
 
 class Recorder:
-    """A MockTransport handler answering with one status and body, recording each request."""
-
     def __init__(self, status: int, body: object, headers: dict[str, str] | None = None) -> None:
         self.status = status
         self.body = body
@@ -81,7 +79,7 @@ async def test_reports_api_errors_as_jev_unavailable() -> None:
     with pytest.raises(JevUnavailable) as err:
         await client(rec).ask({"instruction": "x"}, QUESTIONS)
     assert str(err.value) == 'Jev API 401: {"detail":"unauthorized"}'
-    assert len(rec.requests) == 1  # 401 is not retried
+    assert len(rec.requests) == 1
 
 
 def test_refuses_to_start_without_a_key() -> None:

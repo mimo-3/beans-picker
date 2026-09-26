@@ -1,13 +1,4 @@
-"""Parser for cua-driver's `tree_markdown`.
-
-It carries fields the structured `elements[]` lacks: `id=` (AXIdentifier), `help=`, and unindexed
-rows (StaticText values, disabled menu items). Rows look like::
-
-    - [13] AXButton (1) [id=One actions=[press]]
-    - [0] AXWindow "Calculator" [id=main actions=[raise]]
-    - [1] AXTextArea = "alpha" [id=First Text View actions=[showmenu]]
-    - AXStaticText = "84"
-"""
+"""Parser for cua-driver's `tree_markdown`."""
 
 from __future__ import annotations
 
@@ -19,7 +10,6 @@ from cua_jev._text import DIGIT, NOT_LINE_END, WORD, WS, lstrip_ws, trim
 
 # `(?s:.)` is any character, line breaks included: the rest of a row may span continuation lines.
 _ROW: Final = re.compile(f"({WS}*)- (?:\\[({DIGIT}+)\\] )?(AX{WORD}+)((?s:.)*)\\Z")
-# A double-quoted string with backslash escapes; an escaped character is never a line terminator.
 _QUOTED: Final = f'"((?:[^"\\\\]|\\\\{NOT_LINE_END})*)"'
 _TITLE: Final = re.compile(f"{_QUOTED}{WS}*")
 _LABEL: Final = re.compile(f"\\(([^)]*)\\){WS}*")
@@ -31,13 +21,6 @@ _ESCAPED_QUOTE_OR_BACKSLASH: Final = re.compile(r'\\(["\\])')
 
 @dataclass(slots=True, kw_only=True)
 class MdNode:
-    """One row of the tree.
-
-    `depth` is half the row's indentation (fractional for odd widths). `parent_index` is the index
-    of the nearest indexed ancestor; `parent_line` is the line of the immediate parent row, indexed
-    or not. `line` is the row's 0-based line in the source.
-    """
-
     depth: float
     role: str
     line: int
@@ -92,12 +75,7 @@ def parse_tree_markdown(md: str) -> list[MdNode]:
 
 
 def _rows(md: str) -> list[_Row]:
-    """Rows joined with the lines that continue them.
-
-    A quoted value or help text with a line break in it runs onto the next lines, and so can an
-    attribute list (a custom action name may contain line breaks): those lines belong to the row,
-    or its help would be lost and its label judged alone.
-    """
+    """Rows joined with their continuation lines (values and action names may contain line breaks)."""
     out: list[_Row] = []
     for line, text in enumerate(md.split("\n")):
         if _ROW.match(text):
@@ -108,8 +86,6 @@ def _rows(md: str) -> list[_Row]:
 
 
 def _parse_rest(rest: str, node: MdNode) -> None:
-    """Read title, label, value (in that order), then `id=` and `help=` from the attribute list
-    when it follows them directly."""
     s = trim(rest)
     if m := _TITLE.match(s):
         node.title = unescape(m.group(1))
@@ -128,9 +104,5 @@ def _parse_rest(rest: str, node: MdNode) -> None:
 
 
 def unescape(s: str) -> str:
-    """Undo the quoting: `\\"` and `\\\\` lose their backslash, then `\\n` becomes a line break.
-
-    The two steps run one after the other, so an escaped backslash followed by `n` also ends up
-    as a line break.
-    """
+    """Undo the quoting: `\"` and `\\` lose their backslash, then `\n` becomes a line break."""
     return _ESCAPED_QUOTE_OR_BACKSLASH.sub(r"\1", s).replace("\\n", "\n")

@@ -1,8 +1,4 @@
-"""Observing a window: cua-driver's element list joined with its markdown rendering.
-
-The markdown carries what the element list lacks: identifiers (`id=`), help texts and unindexed
-rows (static text, disabled menu items).
-"""
+"""Observing a window: cua-driver's element list joined with its markdown rendering."""
 
 from __future__ import annotations
 
@@ -48,9 +44,7 @@ _CONTAINER_ROLES: Final = frozenset(
 )  # fmt: skip
 # The driver's own overlay (agent cursor) sits above everything and is never "the front app".
 _OVERLAY_APP: Final = re.compile("cua driver", re.IGNORECASE | re.ASCII)
-# Digits split by directional marks are separate runs (Calculator shows a pending "2^10" as "2",
-# marks, then a superscript "10"): keep them apart instead of reading "210".
-# The marks are U+200B..U+200F and U+2066..U+2069.
+# Directional marks split digit runs: a pending "2^10" must not read as "210".
 _DIGIT_RUN_BREAK: Final = re.compile(f"({DIGIT})[\u200b-\u200f\u2066-\u2069]+(?={DIGIT})")
 _UNTITLED_WINDOW: Final = "(untitled window)"
 _OPEN_MENU: Final = "open menu"
@@ -64,8 +58,7 @@ async def observe(
     front_pid: FrontSampler = front_pid,
     read_exact: ReadExact,
 ) -> Snapshot:
-    """A snapshot of the window, with desktop facts (front window, the app's other windows) and
-    the exact text of fields and toggles when the native reader can supply it."""
+    """A snapshot of the window, with desktop facts and exact field text when the native reader has it."""
     t0 = time.perf_counter()
     state_args: GetWindowStateArgs = {
         "pid": pid,
@@ -94,11 +87,9 @@ async def observe(
             snap.app_name = normalize_text(own.app_name if own is not None else None)
         if not snap.window_title:
             snap.window_title = normalize_text(own.title if own is not None else None)
-        # A window on top of the z-order does not make its app active (a background launch orders
-        # the window front without activating it), and menus follow the active app.
+        # A background launch orders a window front without activating its app, and menus follow the active app.
         if front is not None and front != pid:
             snap.frontmost = False
-    # Fields' exact text and toggles' state, which cua-driver trims or leaves out.
     if any(n.role in EDITABLE_ROLES or n.role in TOGGLE_ROLES for n in snap.nodes):
         try:
             fields = await read_exact(pid)
@@ -124,9 +115,7 @@ class DesktopFacts:
 
 
 def desktop_facts(windows: Sequence[Window], pid: int, window_id: int) -> DesktopFacts:
-    """From the window list (on-screen, normal layer, front first by z-index): whether the window is
-    the frontmost ordinary window, and the app's other visible windows (panels such as Fonts open as
-    separate windows)."""
+    """Whether the window is the frontmost ordinary one, and the app's other visible windows."""
     ordinary = sorted(
         (
             w
@@ -147,10 +136,7 @@ def desktop_facts(windows: Sequence[Window], pid: int, window_id: int) -> Deskto
 
 
 def build_snapshot(raw: Mapping[str, object], pid: int, window_id: int) -> Snapshot:
-    """Joins a `get_window_state` result's elements with its markdown rendering.
-
-    Pure except for `taken_at`. `frontmost` and `app_windows` are left unknown.
-    """
+    """Joins a `get_window_state` result's elements with its markdown rendering."""
     state = window_state_of(raw)
     every = state.elements if state.elements is not None else []
     copies = _repeated_windows(every) | _column_copies(every)
@@ -191,14 +177,12 @@ def build_snapshot(raw: Mapping[str, object], pid: int, window_id: int) -> Snaps
 
 
 def _owner(n: MdNode) -> int:
-    """The element a markdown row belongs to: its own index, else its nearest indexed ancestor's."""
     if n.index is not None:
         return n.index
     return n.parent_index if n.parent_index is not None else -1
 
 
 def _element_chain(e: Element, by_index: Mapping[int, Element]) -> Iterator[Element]:
-    """`e` and its ancestors among `by_index`."""
     cur: Element | None = e
     while cur is not None:
         yield cur
@@ -213,9 +197,7 @@ def _node_chain(start: UINode | None, by_index: Mapping[int, UINode]) -> Iterato
 
 
 def _repeated_windows(elements: Sequence[Element]) -> set[int]:
-    """Elements of a window the tree lists a second time. cua-driver can render the target window,
-    then the menu bar, then the same window again (same title and frame); every control would
-    otherwise appear twice, under two different ids."""
+    """cua-driver can render the target window a second time after the menu bar."""
     seen: set[tuple[str, Frame | None]] = set()
     roots: set[int] = set()
     for e in elements:
@@ -230,9 +212,7 @@ def _repeated_windows(elements: Sequence[Element]) -> set[int]:
 
 
 def _column_copies(elements: Sequence[Element]) -> set[int]:
-    """A table's columns: they hold the very cells its rows hold (web tables list every cell under
-    its row and again under its column), so each control would appear twice. Only the rows are
-    kept."""
+    """Web tables list every cell under both its row and its column; only rows are kept."""
     tables_with_rows = {e.parent_index for e in elements if e.role == "AXRow" and e.parent_index is not None}
     roots = {
         e.element_index
@@ -243,7 +223,6 @@ def _column_copies(elements: Sequence[Element]) -> set[int]:
 
 
 def _subtrees(elements: Sequence[Element], roots: set[int]) -> set[int]:
-    """The roots and everything under them."""
     if not roots:
         return set()
     by_index = {e.element_index: e for e in elements}
@@ -251,25 +230,16 @@ def _subtrees(elements: Sequence[Element], roots: set[int]) -> set[int]:
 
 
 def assign_keys(nodes: Sequence[UINode]) -> None:
-    """Gives every node its stable key (in place).
-
-    Run again once fields have their exact text: cua-driver shows an empty field's placeholder as
-    its value, which would make its label look like content until the field is typed in.
-    """
+    """Gives every node its stable key (in place)."""
     for n in nodes:
-        # An unlabeled field is named after its content for display, but its identity must not change
-        # when its content does: typing into it would otherwise make it a "new" control. (Some apps
-        # report a text view's content as its label too, and a pop-up its chosen title.) A placeholder
-        # that cua-driver gives as the label of an empty field is replaced by the content once the
-        # field is typed in, so it is no name either.
+        # An unlabeled field's identity must not follow its content, or typing would make it a new control.
         named = (
             not (n.role in EDITABLE_ROLES or n.role == "AXPopUpButton")
             or n.value is None
             or (n.label != truncate(n.value, 40) and n.raw_label != n.value and n.raw_label != n.placeholder)
         )
         n.key = key_of(n.role, n.identifier, n.label if named else "", n.within)
-    # Controls that share a key (unlabeled fields side by side, a row of identical buttons) are told
-    # apart by their order in the tree, so one never stands in for another.
+    # Controls sharing a key are told apart by tree order.
     seen: dict[str, int] = {}
     for n in nodes:
         k = seen.get(n.key, 0)
@@ -325,18 +295,15 @@ def _to_node(e: Element, m: MdNode | None, in_menu: bool) -> UINode:
 
 
 def _depth(d: float) -> float:
-    """A tree depth; whole depths are kept as `int` (the markdown gives half levels for odd indents)."""
     return int(d) if float(d).is_integer() else d
 
 
 def _first(*values: str | None) -> str | None:
-    """The first value that is not `None` (an empty string counts)."""
     return next((v for v in values if v is not None), None)
 
 
 def _name_rows_by_first_text(base: Sequence[UINode], md: Sequence[MdNode], by_index: Mapping[int, UINode]) -> None:
-    """A table row with no name of its own is named after the first text in it (its first cell, as
-    a person reads it: "INV-1043"), so the controls inside it can say which row they are on."""
+    """Unnamed table rows take their first cell's text, so their controls can say which row they are on."""
     unnamed = {n.index for n in base if n.role == "AXRow" and not n.label}
     if not unnamed:
         return
@@ -353,7 +320,6 @@ def _name_rows_by_first_text(base: Sequence[UINode], md: Sequence[MdNode], by_in
 
 
 def _ancestors_of(n: UINode, by_index: Mapping[int, UINode]) -> list[str]:
-    """The nearest named container ancestors, innermost first, at most three."""
     out: list[str] = []
     parent = by_index.get(n.parent if n.parent is not None else -1)
     for p in _node_chain(parent, by_index):
@@ -365,7 +331,6 @@ def _ancestors_of(n: UINode, by_index: Mapping[int, UINode]) -> list[str]:
 
 
 def _collect_texts(md: Sequence[MdNode]) -> list[TextNode]:
-    """Static text rows, indexed or not (web pages index theirs); empty ones are left out."""
     out: list[TextNode] = []
     for n in md:
         if n.role != "AXStaticText":
@@ -379,8 +344,6 @@ def _collect_texts(md: Sequence[MdNode]) -> list[TextNode]:
 
 
 def _collect_menu(md: Sequence[MdNode], by_index: Mapping[int, UINode]) -> list[MenuItem]:
-    """Menu-bar rows as path-addressed items. Unindexed menu rows are disabled items; items of an
-    open context menu (not under a menu bar) are left out."""
     by_line = {n.line: n for n in md}
     out: list[MenuItem] = []
     for n in md:
@@ -409,8 +372,6 @@ def _collect_menu(md: Sequence[MdNode], by_index: Mapping[int, UINode]) -> list[
 
 
 def _find_modal(nodes: Sequence[UINode], md: Sequence[MdNode]) -> Modal | None:
-    """A sheet, dialog or popover; else an open context or pop-up menu (an AXMenu outside the menu
-    bar with items)."""
     m = next((n for n in nodes if n.role in _MODAL_ROLES), None)
     if m is not None:
         return Modal(role=m.role, label=m.label, index=m.index)

@@ -1,12 +1,7 @@
-// Prints the key equivalents of an app's main menu as JSON, read from the app bundle's main nib.
-//
-//   menukeys <App.app path> [--nib <name>] [-AppleLanguages '(en)']
-//
-// The nib is instantiated inside this throwaway process only. The target app is never messaged,
-// activated or read through Accessibility, so this needs no permission and cannot steal focus.
-// Titles come out localized the way AppKit localizes them for the current user's languages.
-// Bindings and outlets in the nib point at the app's own classes, which do not exist here, so
-// bindings are skipped and unknown keys are answered with harmless stand-ins.
+// Prints the key equivalents of an app's main menu as JSON, read from its main nib.
+// Usage: menukeys <App.app path> [--nib <name>] [-AppleLanguages '(en)']
+// The nib is instantiated in this process only, so the target app is never messaged or activated.
+// Its bindings point at the app's own classes, which are missing here, so they are stubbed out.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 
@@ -37,8 +32,7 @@ static NSArray<NSString *> *modNames(NSEventModifierFlags m) {
   return out;
 }
 
-// `top` is the index of the top-level menu the item sits in (0 = the application menu, whose
-// title at run time is the app's name rather than the nib's placeholder).
+// `top` 0 is the application menu, whose run-time title is the app's name, not the nib's.
 static void walk(NSMenu *menu, NSArray<NSString *> *prefix, NSInteger top, NSMutableArray *out) {
   NSInteger i = 0;
   for (NSMenuItem *item in menu.itemArray) {

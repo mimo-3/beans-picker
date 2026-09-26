@@ -113,5 +113,4 @@ def test_hash_bytes_replaces_lone_surrogates() -> None:
     assert hash_bytes("\ud800") == "\ufffd".encode()
     assert hashlib.sha1(hash_bytes("\ud800")).hexdigest().startswith("9bdb7727")  # noqa: S324
     assert hash_bytes(f"a{GRIN}") == f"a{GRIN}".encode()
-    # A pair held as two code points hashes as its character.
     assert hash_bytes("\ud83d\ude00") == GRIN.encode()

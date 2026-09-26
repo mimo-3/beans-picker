@@ -1,5 +1,4 @@
-"""Maps a chosen candidate onto cua-driver tools, in the background only: nothing is activated,
-raised or made key, and menu commands go to the app as pid-targeted keyboard shortcuts."""
+"""Maps a chosen candidate onto cua-driver tools without ever activating or raising the app."""
 
 from __future__ import annotations
 
@@ -35,12 +34,7 @@ class MenuKeyLearner(Protocol):
 
 @dataclass(slots=True, kw_only=True)
 class ActResult:
-    """What carrying out one candidate did.
-
-    `code` is ours or forwarded from cua-driver unchanged. `effect` is cua-driver's own report
-    ("confirmed", "unverifiable", "failed", ...) or our "unverifiable"; it is never enough on its
-    own to say the action worked.
-    """
+    """What carrying out one candidate did."""
 
     ok: bool
     route: list[str]
@@ -56,9 +50,6 @@ class _Outcome:
     code: str | None = None
     effect: str | None = None
     detail: str | None = None
-
-
-# cua-driver payloads, one shape per tool (and per form of `click` / `press_key`).
 
 
 class _ElementArgs(TypedDict):
@@ -123,11 +114,7 @@ _KEYPAD_REBINDS: Final = 2
 
 
 class Executor:
-    """Carries out candidates on one window through cua-driver.
-
-    `reobserve` takes a fresh snapshot of the same window; it rebinds stale element tokens and
-    re-reads menu and pop-up state.
-    """
+    """Carries out candidates on one window through cua-driver."""
 
     def __init__(
         self,
@@ -144,8 +131,7 @@ class Executor:
         self._pixels = PixelMapper(driver)
 
     async def execute(self, c: ActionCandidate, snap: Snapshot, modifiers: Sequence[str] = ()) -> ActResult:
-        """Carries out `c` on the window `snap` shows. `modifiers` are held during a click or toggle
-        (shift-click, cmd-click)."""
+        """Carries out `c` on the window `snap` shows."""
         t0 = self._clock()
         route: list[str] = []
         if modifiers:
@@ -155,8 +141,7 @@ class Executor:
         return self._result(out, route, t0)
 
     async def retype_field(self, c: ActionCandidate, snap: Snapshot) -> ActResult:
-        """Retypes a web page's text field as a person would, for when an AXValue write did not
-        reach the page."""
+        """Retypes a web page's text field as a person would, for when an AXValue write did not reach the page."""
         t0 = self._clock()
         route: list[str] = []
         out = await self._retype(c, snap, route)
@@ -177,8 +162,7 @@ class Executor:
             case "toggle":
                 return await self._press(_target(c), snap, route)
             case "context_menu":
-                # AXShowMenu: the page gets its contextmenu event as from a right-click, with the
-                # window left in the background.
+                # AXShowMenu delivers a contextmenu event without activating the window.
                 return await self._with_rebind(
                     _target(c),
                     route,
@@ -213,8 +197,7 @@ class Executor:
             case "menu":
                 return await self._menu(c, snap, route)
             case "scroll":
-                # A wheel event at the area, in the background: the only way to move a nested
-                # scroller on a web page.
+                # A background wheel event is the only way to move a nested scroller on a web page.
                 direction = c.direction if c.direction is not None else "down"
                 return await self._with_rebind(
                     _target(c),
@@ -251,8 +234,7 @@ class Executor:
 
     async def _press(self, node: UINode, snap: Snapshot, route: list[str]) -> _Outcome:
         r = await self._with_rebind(node, route, "click", lambda token: _ElementArgs(pid=snap.pid, element_token=token))
-        # Some controls (text fields, custom views) have no AXPress. A click at their centre still
-        # focuses or presses them, when that point is safely on our visible window.
+        # Controls without AXPress (text fields, custom views) still respond to a click at their centre.
         if not r.ok and _AX_FAILED.search(r.detail if r.detail is not None else ""):
             # AXPress can report failure after the app did act on it; a second press would repeat it.
             after = await self._reobserve()
@@ -270,8 +252,7 @@ class Executor:
     async def _modified_click(
         self, node: UINode, snap: Snapshot, modifiers: Sequence[str], route: list[str]
     ) -> _Outcome:
-        # AX actions carry no modifier keys, so a shift- or cmd-click is a pixel click at the
-        # control's centre, posted to the pid. It needs the control visible on our window.
+        # AX actions carry no modifiers, so a modified click is a pixel click posted to the pid.
         pt = await self._pixels.point(snap, node)
         if pt is None:
             return _Outcome(
@@ -285,8 +266,7 @@ class Executor:
         return to_act(await self._driver.call("click", args))
 
     async def _keypad(self, c: ActionCandidate, snap: Snapshot, route: list[str]) -> _Outcome:
-        # Every key is pressed from one snapshot, by pixel where the key is safely visible (an AX
-        # press costs about 2.5 s a key).
+        # Keys go by pixel where safely visible: an AX press costs about 2.5 s a key.
         presses = c.presses if c.presses is not None else []
         current = snap
         rebinds = 0
@@ -310,14 +290,12 @@ class Executor:
                 current = await self._reobserve()
                 rebinds += 1
                 route.append("rebind")
-                continue  # the same key again, with fresh tokens
+                continue
             i += 1
         return _Outcome(ok=True, effect="unverifiable")
 
     async def _choose(self, c: ActionCandidate, snap: Snapshot, route: list[str]) -> _Outcome:
-        # A closed pop-up button has no AX children, so its value cannot be set: it is pressed
-        # open, and the item of its own menu titled exactly `text` is pressed. A menu with no item
-        # of that title is closed with Escape, and its titles are reported.
+        # A closed pop-up button has no AX children: press it open, then press the item titled `text`.
         target = _target(c)
         opened = await self._press(target, snap, route)
         if not opened.ok:
@@ -346,11 +324,8 @@ class Executor:
         return _Outcome(ok=False, code="option_not_found", detail=f"the pop-up has no item {asked}; it lists {titles}")
 
     async def _press_item(self, item: UINode, snap: Snapshot, route: list[str]) -> _Outcome:
-        """Presses an item of an open pop-up's menu."""
         r = await self._with_rebind(item, route, "click", lambda token: _ElementArgs(pid=snap.pid, element_token=token))
-        # Some browsers take the choice from the page's own option but leave the native menu open
-        # over the page, where a later Return or click would choose again: it is closed with
-        # Escape, which keeps the choice.
+        # Some browsers leave the native menu open after the choice; Escape closes it and keeps the choice.
         if r.ok:
             after = await self._reobserve()
             if after.modal is not None and after.modal.role == "AXMenu":
@@ -361,10 +336,8 @@ class Executor:
         return r
 
     async def _menu(self, c: ActionCandidate, snap: Snapshot, route: list[str]) -> _Outcome:
-        # The menu bar belongs to the frontmost app and cua-driver refuses AX presses on it, so the
-        # command is sent as its keyboard shortcut to our pid. The app routes it only when it
-        # already has a key window for it (the item reads enabled); giving it one would take a
-        # click that can activate it.
+        # cua-driver refuses AX presses on the menu bar (it belongs to the frontmost app), so the
+        # command goes to our pid as its keyboard shortcut.
         m = c.menu
         if m is None:
             raise ValueError(f"menu candidate {c.id} has no menu item")
@@ -393,10 +366,7 @@ class Executor:
         return to_act(await self._driver.call("hotkey", _HotkeyArgs(pid=snap.pid, window_id=snap.window_id, keys=keys)))
 
     async def _append(self, c: ActionCandidate, route: list[str]) -> _Outcome:
-        # The caret goes to the end (cmd+down) and the text is inserted there, so the field keeps
-        # what cua-driver's value cannot show (it trims whitespace at both ends) and a rich-text
-        # document keeps its formatting. A field that does not take the key gets its whole exact
-        # value set instead, only while that value is known exactly.
+        # Insert at the end (cmd+down) so trimmed whitespace and rich-text formatting survive.
         fresh = await self._reobserve()
         key = c.target.key if c.target is not None else None
         node = next((n for n in fresh.nodes if n.key == key), None)
@@ -431,9 +401,7 @@ class Executor:
         )
 
     async def _retype(self, c: ActionCandidate, snap: Snapshot, route: list[str]) -> _Outcome:
-        # A web page's number field ignores an AXValue write (the page never hears of it), and so
-        # does a field whose page keeps its own copy of the value, so its text is replaced as a
-        # person would: caret to the end, select back to the start, type over the selection.
+        # Some web fields ignore an AXValue write, so the text is retyped as a person would.
         target = _target(c)
 
         async def key(k: str, modifiers: Sequence[str] = ()) -> _Outcome:
@@ -459,8 +427,6 @@ class Executor:
         )
 
     async def _with_rebind(self, node: UINode, route: list[str], tool: str, args: _ArgsFor) -> _Outcome:
-        """Runs an element-token call; on a stale token re-observes, rebinds by stable key and
-        retries once."""
         route.append(tool)
         r = await self._driver.call(tool, args(node.token))
         if is_stale(r):
@@ -474,9 +440,7 @@ class Executor:
 
 
 def is_stale(r: ToolResult) -> bool:
-    """A refusal naming a token from an older snapshot. Any get_window_state call (a screenshot
-    too) replaces cua-driver's element cache for the window, so this is expected, and fixed by
-    observing again."""
+    """A refusal naming a token from an older snapshot."""
     if r.ok:
         return False
     return r.code == "stale_element_token" or _STALE_MESSAGE.search(r.message) is not None
@@ -510,8 +474,7 @@ def path_state(snap: Snapshot, path: Sequence[str]) -> PathState:
 
 
 def to_act(r: ToolResult) -> _Outcome:
-    """A cua-driver result as an outcome: a refusal keeps its code and message; an answer is ok
-    unless cua-driver reports the effect `failed`."""
+    """A cua-driver result as an outcome; ok unless cua-driver reports the effect `failed`."""
     if not r.ok:
         return _Outcome(ok=False, code=r.code, detail=r.message)
     effect = r.data.get("effect")

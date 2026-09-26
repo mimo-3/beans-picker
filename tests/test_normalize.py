@@ -15,7 +15,6 @@ from cua_jev.observe.normalize import humanize_identifier, normalize_text, token
         ("\u200e84", "84"),
         ("\u202aab\u202e", "ab"),
         ("a\u3000\u2028b\t", "a b"),
-        # Not whitespace in the fixed set: kept.
         ("a\x85b", "a\x85b"),
         ("\x1c", "\x1c"),
         (1, "1"),

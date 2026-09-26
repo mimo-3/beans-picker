@@ -57,7 +57,7 @@ def test_export_as_a_name_and_skipped_lines(tmp_path: Path, monkeypatch: pytest.
     assert "CUA_NOEQ" not in os.environ
     assert os.environ["CUA_Y"] == "cr"
     assert "CUA_BAD" not in os.environ
-    assert "CUA_Z" not in os.environ  # a lone CR inside a line does not match
+    assert "CUA_Z" not in os.environ
 
 
 def test_missing_files_are_skipped(tmp_path: Path) -> None:

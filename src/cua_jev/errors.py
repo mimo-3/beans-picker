@@ -1,4 +1,4 @@
-"""Exceptions that cross layers. `str(err)` is always the exact message a tool reports."""
+"""Exceptions that cross layers."""
 
 from __future__ import annotations
 

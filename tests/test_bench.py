@@ -1,5 +1,3 @@
-"""The bench runner: arguments, accounting, records, setup and the run loop, all with fakes."""
-
 from __future__ import annotations
 
 import asyncio
@@ -53,8 +51,6 @@ type Step = Completed | Exception | Callable[[], Completed]
 
 
 class ScriptedRunner:
-    """A `Runner` answering each argv from its own queue; the last answer repeats."""
-
     def __init__(self, script: dict[tuple[str, ...], list[Step]]) -> None:
         self.script = script
         self.calls: list[tuple[str, ...]] = []
@@ -106,9 +102,6 @@ def tool_result(content: JsonValue) -> str:
     return dumps({"type": "user", "message": {"content": [{"type": "tool_result", "content": content}]}})
 
 
-# --- arguments ---------------------------------------------------------------------------------
-
-
 def test_parse_args_defaults() -> None:
     assert parse_args([]) == Options(reps=1, model="sonnet", only=None, conditions=["a", "b"])
 
@@ -135,9 +128,6 @@ def test_selected_keeps_file_order() -> None:
 @pytest.mark.parametrize(("rep", "want"), [(1, ["a", "b"]), (2, ["b", "a"]), (3, ["a", "b"])])
 def test_condition_order_alternates(rep: int, want: list[str]) -> None:
     assert condition_order(["a", "b"], rep) == want
-
-
-# --- prompt, ids and configs -------------------------------------------------------------------
 
 
 def test_run_id_is_the_utc_start_time_with_dashes() -> None:
@@ -173,9 +163,6 @@ def test_claude_argv_denies_driver_tools_only_in_a() -> None:
     assert claude_argv("a", "P", "sonnet", cfg) == [*head, "--allowedTools", "mcp__cua-driver", *deny, *tail]
     assert claude_argv("b", "P", "sonnet", cfg) == [*head, "--allowedTools", "mcp__cua-jev", *tail]
     assert len(DRIVER_DENY) == 10
-
-
-# --- accounting --------------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -277,8 +264,6 @@ def test_line_splitter_joins_chunks_and_split_characters() -> None:
     assert s.rest() == "rest"
 
 
-# --- records -----------------------------------------------------------------------------------
-
 FULL_KEYS = [
     "runId", "rep", "task", "condition", "model", "pass", "claimed", "falseSuccess", "mismatches", "actual",
     "toolCalls", "toolNames", "numTurns", "wallMs", "durationMs", "costUsd", "tokens", "jev", "focusSteals", "isError",
@@ -360,11 +345,7 @@ def test_progress_line_rounds_half_up(wall_ms: int, seconds: str) -> None:
     )
 
 
-# --- the frontmost app -------------------------------------------------------------------------
-
-
 async def _until(test: Callable[[], bool]) -> None:
-    """Poll a counter that the watcher under test bumps from its own task."""
     while not test():  # noqa: ASYNC110
         await asyncio.sleep(0.001)
 
@@ -413,9 +394,6 @@ async def test_front_watch_skips_ticks_while_a_sample_is_in_flight() -> None:
     assert not stopping.done()
     release.set()
     assert await stopping == 1
-
-
-# --- setup and judging -------------------------------------------------------------------------
 
 
 def _bench(tmp_path: Path, runner: Runner, *, claude: str = "claude") -> Bench:
@@ -621,12 +599,7 @@ async def test_a_cancelled_run_ends_the_agent_and_what_it_started(tmp_path: Path
         raise AssertionError("the agent's helper is still running")
 
 
-# --- the run loop ------------------------------------------------------------------------------
-
-
 class LoopBench(Bench):
-    """A bench whose setup, agent and judge are canned; the loop and the records are real."""
-
     order: list[tuple[str, str, int]]
     verdict: JsonObject
     metrics: Callable[[], Metrics]

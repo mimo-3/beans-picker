@@ -1,5 +1,3 @@
-"""verify_effect and expected_text on the recorded TextEdit and Calculator windows."""
-
 from __future__ import annotations
 
 import copy
@@ -40,7 +38,6 @@ class TestExpectedText:
 
 
 def with_area(s: Snapshot, value: str, exact: bool = True) -> Snapshot:
-    """The TextEdit fixture's text area, as a field with an exact value."""
     c = copy.deepcopy(s)
     c.nodes = [
         replace(n, raw_value=value, value=trim(value), exact=exact) if n.role == "AXTextArea" else n for n in c.nodes
@@ -59,7 +56,6 @@ class TestVerifyEffectOnText:
         te = snap_fixture("textedit")
         before = with_area(te, "alpha")
         assert verify_effect(te_cand("append", " beta "), before, with_area(te, "alpha beta ")).effect == "ok"
-        # The trailing space was lost: that is not what was asked.
         assert verify_effect(te_cand("append", " beta "), before, with_area(te, "alpha beta")).effect == "wrong"
 
     def test_does_not_confirm_text_it_could_not_read_exactly(self) -> None:

@@ -34,7 +34,7 @@ def test_accessors_narrow_or_give_none() -> None:
     assert get_str(d, "i") is None
     assert get_num(d, "i") == 3
     assert get_num(d, "g") == 2.5
-    assert get_num(d, "b") is None  # a bool is not a number
+    assert get_num(d, "b") is None
     assert get_int(d, "f") == 2
     assert isinstance(get_int(d, "f"), int)
     assert get_int(d, "g") is None

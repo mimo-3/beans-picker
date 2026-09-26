@@ -1,5 +1,3 @@
-"""Key order and key omission of everything the tools return."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -89,7 +87,6 @@ async def test_observe_with_an_instruction_ranks_and_reports_usage(tmp_path: Pat
     session = FakeSession([calc], jev_picking('"Seven"'), cache=tmp_path)
     out = await observe_tool(session, {"app": "Calculator", "instruction": "press 7"})
     assert list(out) == ["window", "screenText", "fields", "total", "pNone", "candidates", "jev"]
-    # More candidates than one question holds: the shards' leaders meet in a runoff.
     assert out["total"] > 60
     assert [c["does"] for c in out["candidates"]] == ['click Button "7" (Seven)']
     assert out["candidates"][0]["p"] == 0.95

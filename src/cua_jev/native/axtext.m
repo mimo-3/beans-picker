@@ -1,12 +1,6 @@
-// Prints the exact state of one app's editable text elements (text areas, text fields, search
-// fields, combo boxes, number fields and steppers) and toggles (checkboxes, radio buttons), as JSON:
-// {"fields":[{"window":"<title>","document":"<file URL>","role":"AXTextField","title":"<AXTitle or AXDescription>","value":"<text or 0/1>"}]}
-// in tree order. Read-only: it only copies accessibility attributes and never messages, activates
-// or raises the app. Secure (password) fields are skipped. cua-driver trims whitespace from values,
-// reports a placeholder as the value of an empty field and leaves out a checkbox's state; this is
-// how cua-jev reads them exactly.
-// Usage: axtext <pid> [<output file>]   (without a file, JSON goes to stdout)
-//        axtext --prompt                (asks macOS to list this helper under Accessibility)
+// Prints the exact state of an app's editable text elements and toggles as JSON, read-only.
+// cua-driver trims values and leaves out checkbox state; this reads them exactly.
+// Usage: axtext <pid> [<output file>] | axtext --prompt
 #import <ApplicationServices/ApplicationServices.h>
 #import <Foundation/Foundation.h>
 
@@ -41,8 +35,7 @@ static void walk(AXUIElementRef e, int depth, NSString *window, NSString *docume
     if (editable(role)) return;
   }
   NSArray *children = copyAttr(e, kAXChildrenAttribute);
-  // A table lists its cells under its rows and again under its columns: only the rows are walked,
-  // as cua-jev keeps only those, so that both list the same fields in the same order.
+  // Only rows are walked: cua-jev drops the column copies of a table's cells too.
   BOOL hasRows = NO;
   for (id c in children) hasRows = hasRows || [str(copyAttr((__bridge AXUIElementRef)c, kAXRoleAttribute)) isEqualToString:(NSString *)kAXRowRole];
   for (id c in children) {

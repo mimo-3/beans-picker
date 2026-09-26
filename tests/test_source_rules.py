@@ -1,12 +1,3 @@
-"""A tripwire over `src/`: regex patterns spell out their character classes, and nothing rounds with `round`.
-
-`\\s`, `\\w` and `\\d` match whatever Unicode says is a space, a word character or a digit, which is not
-the fixed sets that candidate keys, state signatures and parsers depend on. `cua_jev._text` holds those
-sets, and the one deliberate Unicode class (letters and numbers), so patterns elsewhere name them.
-The builtin `round` rounds half to even, while probabilities and pixel coordinates round half up.
-The parser and number tests prove the behavior; this only catches a new pattern or call slipping in.
-"""
-
 from __future__ import annotations
 
 import ast
@@ -27,7 +18,6 @@ def _sources() -> list[Path]:
 
 
 def _pattern_texts(node: ast.expr) -> Iterator[str]:
-    """The literal parts of a pattern argument; names and other expressions are checked where they are defined."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         yield node.value
     elif isinstance(node, ast.JoinedStr):

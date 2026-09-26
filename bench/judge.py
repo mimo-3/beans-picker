@@ -1,13 +1,4 @@
-"""The judge: compares a task's final state with its `expected` JSON by exact equality.
-
-It never sees what the agent said. Fixture tasks are read from the fixture's state file; Calculator
-tasks from its display, read over accessibility with cua-driver's CLI.
-
-    python -m bench.judge <task-id> --state <file>
-    python -m bench.judge <task-id> --pid <pid> --window <id>
-
-Prints {"task","pass","actual","mismatches"} as one line and exits 0 on pass, 1 on fail.
-"""
+"""The judge: compares a task's final state with its `expected` JSON by exact equality."""
 
 from __future__ import annotations
 
@@ -50,17 +41,14 @@ def load_tasks(path: Path = TASKS_FILE) -> list[Task]:
 TASKS: Final = load_tasks()
 
 
-class _Missing:
-    """A key that is not in the actual state (written as `undefined` in a mismatch)."""
+class _Missing: ...
 
 
 _MISSING: Final = _Missing()
 
 
 def _same(want: JsonValue, got: JsonValue | _Missing) -> bool:
-    """Exact equality: same kind of value and same value. A boolean is never equal to a number
-    (so 1 is not true), integers and floats compare by value, and lists and objects are never
-    equal to a separately read one."""
+    """Strict equality: a boolean never equals a number."""
     if isinstance(got, _Missing):
         return False
     if isinstance(want, bool) or isinstance(got, bool):
@@ -77,10 +65,7 @@ def _shown(v: JsonValue | _Missing) -> str:
 
 
 def compare(expected: Mapping[str, JsonValue], actual: Mapping[str, JsonValue]) -> list[str]:
-    """One line per expected key whose actual value is not exactly equal, in `expected`'s order.
-
-    Keys only in `actual` are ignored.
-    """
+    """One line per expected key whose actual value is not exactly equal, in `expected`'s order."""
     out: list[str] = []
     for key, want in expected.items():
         got = actual.get(key, _MISSING)
@@ -89,15 +74,14 @@ def compare(expected: Mapping[str, JsonValue], actual: Mapping[str, JsonValue]) 
     return out
 
 
-# Directional and zero-width marks Calculator puts around numbers. They format, they are not text.
+# Bidi and zero-width marks Calculator puts around numbers.
 BIDI: Final = re.compile("[\u200b-\u200f\u202a-\u202e\u2066-\u2069]")
 _STATIC_TEXT: Final = re.compile(rf'AXStaticText = "((?:[^"\\]|\\{NOT_LINE_END})*)"')
 _ESCAPED: Final = re.compile(r'\\(["\\])')
 
 
 def calculator_display(tree_markdown: str) -> str | None:
-    """Calculator's display: the last static text of its window (the current value, below the
-    expression line), with bidi marks removed; None when the window has no static text."""
+    """Calculator's display: the last static text of its window, bidi marks removed."""
     texts: list[str] = []
     for line in tree_markdown.split("\n"):
         if line.startswith("- ") and texts:
@@ -118,7 +102,6 @@ async def read_calculator(pid: float, window_id: float, *, runner: Runner = run)
 
 
 def _arg(rest: Sequence[str], name: str) -> str | None:
-    """The value after `name`; without `name`, the first argument (no validation)."""
     i = rest.index(name) + 1 if name in rest else 0
     return rest[i] if i < len(rest) else None
 
@@ -128,11 +111,7 @@ def _number(text: str | None) -> float:
 
 
 async def judge(argv: Sequence[str], *, runner: Runner = run, tasks: Sequence[Task] = TASKS) -> JsonObject:
-    """The verdict for `argv` (`<task-id> --state <file>` or `<task-id> --pid <p> --window <w>`).
-
-    The task's app decides which reader is used, not the flags given. Raises ValueError for an
-    unknown task.
-    """
+    """The verdict for `argv` (`<task-id> --state <file>` or `<task-id> --pid <p> --window <w>`)."""
     task_id = argv[0] if argv else None
     rest = argv[1:]
     task = next((t for t in tasks if t["id"] == task_id), None)

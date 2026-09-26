@@ -1,5 +1,3 @@
-"""The bench judge: exact comparison, Calculator's display and the verdict line."""
-
 from __future__ import annotations
 
 import json

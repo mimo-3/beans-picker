@@ -1,10 +1,4 @@
-"""Pixel observation of a background window.
-
-Some effects never reach the accessibility tree that cua-driver reports: a checkbox's state, a
-selection highlight, a font weight. cua-driver captures an inactive window's pixels without raising
-it, so those effects can still be observed rather than assumed. Every function here answers
-"unknown" (`None`) when the pixels cannot be compared, never "unchanged".
-"""
+"""Pixel observation of a background window."""
 
 from __future__ import annotations
 
@@ -26,7 +20,6 @@ from cua_jev.paths import Paths
 type Box = tuple[int, int, int, int]
 """A box in region pixels, `(x0, y0, x1, y1)`, the far edges excluded."""
 
-# Brightness difference (0..255) above which a pixel counts as changed.
 _LUMA_DELTA: Final = 24
 # A caret is one point wide: two or three pixels on a Retina capture, plus antialiasing.
 _CARET_COLUMNS: Final = 6
@@ -35,8 +28,6 @@ _SIGNIFICANT_PIXELS: Final = 40
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Shot:
-    """A window capture."""
-
     img: Rgba
     bounds: WindowBounds
     scale: float
@@ -97,7 +88,6 @@ def _shot_file(paths: Paths, pid: int, window_id: int) -> Path:
 
 
 def _screenshot_path(given: object, out: Path) -> Path:
-    """Where cua-driver wrote the screenshot: the requested file unless it names another."""
     if given is None:
         return out
     if not isinstance(given, str):
@@ -106,7 +96,6 @@ def _screenshot_path(given: object, out: Path) -> Path:
 
 
 def _read_png(path: Path, out: Path) -> Rgba | None:
-    """Decodes the screenshot; a file cua-driver wrote somewhere else than asked is removed."""
     img = decode_png(path.read_bytes())
     if path != out:
         path.unlink(missing_ok=True)
@@ -122,8 +111,6 @@ async def window_bounds(driver: Driver, pid: int, window_id: int) -> WindowBound
 
 
 async def _pointer_box(driver: Driver) -> Frame | None:
-    """Where the pointer's image can be: generous enough for the arrow (drawn down-right of its tip)
-    and the I-beam (centred)."""
     r = await driver.call("get_cursor_position", {})
     if not r.ok:
         return None
@@ -157,18 +144,14 @@ def pointer_mask(frame: Frame, *shots: Shot) -> list[Box]:
 
 
 def region_change(a: Shot, b: Shot, frame: Frame) -> PixelChange | None:
-    """Pixel change inside `frame` between two shots, with both shots' pointer boxes left out.
-
-    `None` when the window moved or the captures differ in scale.
-    """
+    """Pixel change inside `frame` between two shots, with both shots' pointer boxes left out."""
     if abs(a.scale - b.scale) > 1e-6 or a.bounds.x != b.bounds.x or a.bounds.y != b.bounds.y:
         return None
     return pixel_change(region_of(a, frame), region_of(b, frame), pointer_mask(frame, a, b))
 
 
 def pixel_change(a: Rgba, b: Rgba, mask: Sequence[Box] = ()) -> PixelChange | None:
-    """Compares two equally sized regions, skipping masked boxes; `None` when their sizes differ
-    (the window moved or resized) or they are empty."""
+    """Pixel change between two equally sized regions, skipping masked boxes; `None` if sizes differ."""
     if a.width != b.width or a.height != b.height or not a.width or not a.height:
         return None
     width = a.width

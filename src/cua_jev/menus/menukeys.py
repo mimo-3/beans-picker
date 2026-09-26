@@ -1,18 +1,4 @@
-"""Menu key equivalents learned from the target app itself.
-
-cua-driver does not expose AXMenuItemCmdChar/AXMenuItemCmdModifiers, cannot AXPress a menu item
-without activating the app (it refuses elements outside the target window, and invoke_menu needs the
-app frontmost), and a helper of our own reading the menu over Accessibility would need its own
-Accessibility grant. What needs neither: the menu bar of a Cocoa app is usually defined in its main
-nib (Info.plist NSMainNibFile), which declares every item's key equivalent. The native ``menukeys``
-helper instantiates that nib inside a throwaway process (the target app is never messaged) and
-prints each item's localized path, key and modifiers. It runs twice, in the user's languages and in
-English, so localized titles also get their English names.
-
-Limits: menus built in code (SwiftUI apps such as Calculator), items added or retitled at run time
-(a toggle that now reads "Hide ...") and apps without a main nib are not covered; for those the
-stock-command list and the View-menu convention in `cua_jev.menus.keyequiv` remain the fallback.
-"""
+"""Menu key equivalents learned from the target app itself."""
 
 from __future__ import annotations
 
@@ -65,10 +51,7 @@ _F12: Final = 0xF70F
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RawMenuKey:
-    """One entry of the helper's output: a menu item's localized path and its key equivalent.
-
-    `top` is the index of the item's top-level menu in the nib; 0 is the application menu.
-    """
+    """One entry of the helper's output: a menu item's localized path and its key equivalent."""
 
     path: list[str]
     key: str
@@ -78,7 +61,7 @@ class RawMenuKey:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class LearnedKey:
-    """A learned shortcut. `path` is normalized; the application menu's top level is ""."""
+    """A learned shortcut."""
 
     path: list[str]
     keys: list[str]
@@ -101,15 +84,10 @@ class MenuKeyTable:
 
     @property
     def size(self) -> int:
-        """The number of learned shortcuts."""
         return len(self.items)
 
     def lookup(self, path: Sequence[str]) -> LearnedKey | None:
-        """The learned shortcut for an observed menu path, matching titles after normalization.
-
-        The application menu's run-time title is the app's name, so a path whose top level is not
-        found is also tried under the nib's "" top level.
-        """
+        """The learned shortcut for an observed menu path, matching titles after normalization."""
         p = [normalize_title(x) for x in path]
         found = self._by_path.get(_SEP.join(p))
         if found is None and len(p) > 1:
@@ -122,11 +100,7 @@ class MenuKeyTable:
 
 
 def hotkey_for(key: str, mods: Sequence[str]) -> list[str] | None:
-    """A nib key equivalent as a cua-driver hotkey: modifiers first, one key last.
-
-    An upper-case letter means Shift. None for a key without any modifier and for keys cua-driver
-    cannot name.
-    """
+    """A nib key equivalent as a cua-driver hotkey: modifiers first, one key last."""
     if len(key) != 1:
         return None
     m = set(mods)
@@ -138,7 +112,7 @@ def hotkey_for(key: str, mods: Sequence[str]) -> list[str] | None:
         elif "A" <= key <= "Z":
             m.add("shift")
             k = key.lower()
-        elif "!" <= key <= "~":  # visible ASCII
+        elif "!" <= key <= "~":
             k = key
     if k is None or not m:
         return None
@@ -146,10 +120,7 @@ def hotkey_for(key: str, mods: Sequence[str]) -> list[str] | None:
 
 
 def table_from(local: Sequence[RawMenuKey], english: Sequence[RawMenuKey] | None = None) -> MenuKeyTable:
-    """The table from the helper's output in the user's languages and, optionally, in English.
-
-    English names are kept only when both loads list the same number of items, so entries line up.
-    """
+    """The table from the helper's output in the user's languages and, optionally, in English."""
     aligned = english if english and len(english) == len(local) else None
     items: list[LearnedKey] = []
     for i, it in enumerate(local):
@@ -204,11 +175,7 @@ class HelperBuilds(Protocol):
 
 
 class MenuKeys:
-    """Learned menu-key tables per pid, for one session.
-
-    Learning runs once per pid: a failure (no main nib, no clang, the helper failing) is remembered
-    for the life of this object and never retried.
-    """
+    """Learned menu-key tables per pid, for one session."""
 
     def __init__(self, helpers: HelperBuilds, paths: Paths, *, runner: Runner = run) -> None:
         self._helpers = helpers
@@ -222,11 +189,7 @@ class MenuKeys:
         return self._tables.get(pid)
 
     async def learn(self, pid: int) -> MenuKeyTable | None:
-        """Learns the key equivalents of the app running as `pid`, once per pid. Never raises.
-
-        None when the app has no main nib, clang is missing or the helper fails; callers then fall
-        back to the stock-command list.
-        """
+        """Learns the key equivalents of the app running as `pid`, once per pid."""
         done = self._tables.get(pid)
         if done is not None:
             return done
@@ -238,7 +201,7 @@ class MenuKeys:
         return await asyncio.shield(task)
 
     async def close(self) -> None:
-        """Cancels learning still in progress and waits for it to stop. The session calls it on shutdown."""
+        """Cancels learning still in progress and waits for it to stop."""
         running = [task for task in self._pending.values() if not task.done()]
         for task in running:
             task.cancel()
@@ -281,13 +244,11 @@ class MenuKeys:
         return table_from(local, english)
 
     async def _bundle_path_of(self, pid: int) -> str | None:
-        """The .app bundle of a running process, from its executable path."""
         out = await self._runner(["ps", "-o", "comm=", "-p", str(pid)])
         m = _BUNDLE_OF_EXECUTABLE.match(trim(out.stdout))
         return m.group(1) if m else None
 
     async def _languages(self) -> str:
-        """The user's preferred languages as `defaults` prints them, without whitespace ("" on failure)."""
         try:
             out = await self._runner(["defaults", "read", "-g", "AppleLanguages"])
         except ProcessError:
@@ -295,7 +256,6 @@ class MenuKeys:
         return _WS_RUN.sub("", out.stdout)
 
     async def _run_helper(self, helper: Path, bundle: str, extra: Sequence[str]) -> object:
-        """The helper's last output line parsed as JSON; an empty list when it fails."""
         try:
             out = await self._runner([str(helper), bundle, *extra], max_bytes=_HELPER_MAX_BYTES)
             value: object = json.loads(trim(out.stdout).split("\n")[-1])
@@ -305,7 +265,6 @@ class MenuKeys:
 
 
 def _mtime_ms(info: Path) -> float | None:
-    """Modification time of `info` in milliseconds, or None when the file does not exist."""
     try:
         st = info.stat()
     except FileNotFoundError:
@@ -314,7 +273,6 @@ def _mtime_ms(info: Path) -> float | None:
 
 
 def _read_cached(cached: Path) -> MenuKeyTable | None:
-    """The table stored at `cached`; None when there is none or it is damaged (it is rebuilt)."""
     try:
         data: object = json.loads(cached.read_text(encoding="utf-8"))
         if not isinstance(data, dict):

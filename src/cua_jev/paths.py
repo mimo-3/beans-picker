@@ -1,4 +1,4 @@
-"""Cache directories. A `Paths` is owned by the session; tests pass one rooted in a temp dir."""
+"""Cache directories."""
 
 from __future__ import annotations
 

@@ -14,8 +14,7 @@ _LOCKED: Final = re.compile(f"<key>CGSSessionScreenIsLocked</key>{WS}*<true/>")
 
 
 async def screen_locked(*, runner: Runner = run) -> bool:
-    """True when the login session's screen is locked (`CGSSessionScreenIsLocked`); GUI input
-    would go nowhere then. Any failure to ask counts as unlocked."""
+    """True when the login session's screen is locked (`CGSSessionScreenIsLocked`); GUI input would go nowhere then."""
     try:
         out = await runner(_IOREG, max_bytes=_IOREG_MAX_BYTES)
     except Exception:

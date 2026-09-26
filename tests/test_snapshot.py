@@ -25,9 +25,6 @@ def _elements(raw: JsonObject) -> list[JsonValue]:
     return elements
 
 
-# parse_tree_markdown
-
-
 def test_reads_identifiers_and_help_that_only_the_markdown_carries() -> None:
     md = parse_tree_markdown(_markdown("calculator"))
     delete = next(n for n in md if n.index == 1)
@@ -39,9 +36,6 @@ def test_reads_identifiers_and_help_that_only_the_markdown_carries() -> None:
 def test_keeps_unindexed_rows_such_as_the_display_text() -> None:
     md = parse_tree_markdown(_markdown("calculator"))
     assert any(n.index is None and n.role == "AXStaticText" for n in md)
-
-
-# build_snapshot (Calculator)
 
 
 def test_joins_elements_with_markdown_identifiers() -> None:
@@ -65,9 +59,6 @@ def test_keeps_unindexed_static_text_with_its_raw_form() -> None:
 def test_produces_a_stable_signature() -> None:
     assert snap_fixture("calculator").signature == snap_fixture("calculator").signature
     assert re.fullmatch("[0-9a-f]{16}", snap_fixture("calculator").signature)
-
-
-# build_snapshot (TextEdit)
 
 
 def test_finds_the_document_text_area() -> None:
@@ -106,9 +97,6 @@ def test_fixture_nodes_have_keys_and_containers() -> None:
     assert len(unnamed) == len(set(unnamed))
 
 
-# calculator display with a superscript exponent
-
-
 def test_keeps_a_pending_power_apart_and_keeps_the_raw_text() -> None:
     raw: JsonObject = {
         "tree_markdown": '- [0] AXWindow "Calculator" [id=main actions=[raise]]\n'
@@ -131,9 +119,6 @@ def test_keeps_a_pending_power_apart_and_keeps_the_raw_text() -> None:
     assert snap.window_title == ""
     assert [t.depth for t in snap.texts] == [2, 2]
     assert [t.parent_index for t in snap.texts] == [0, 0]
-
-
-# a window the tree lists twice
 
 
 def test_keeps_one_copy_of_each_control() -> None:
@@ -202,11 +187,7 @@ def test_windows_with_other_frames_are_both_kept() -> None:
     }
     snap = build_snapshot(raw, 1, 1)
     assert [n.index for n in snap.nodes if n.label == "7"] == [1, 3]
-    # The second "7" is told apart by order: the containers carry the same name.
     assert [n.key for n in snap.nodes if n.label == "7"] == ["AXButton||7|AXWindow: A", "AXButton||7|AXWindow: A#2"]
-
-
-# a table that lists its cells under columns too
 
 
 def test_keeps_the_cells_under_their_rows_only() -> None:
@@ -252,15 +233,11 @@ def test_keeps_the_cells_under_their_rows_only() -> None:
     assert [n.index for n in snap.nodes if n.role == "AXIncrementor"] == [4]
     assert not any(n.role == "AXColumn" for n in snap.nodes)
     assert len(snap.texts) == 1
-    # The unnamed row is named after its first text, and the controls in it say which row they are on.
     row = next(n for n in snap.nodes if n.role == "AXRow")
     assert row.label == "Teapot"
     assert row.raw_label is None
     quantity = next(n for n in snap.nodes if n.role == "AXIncrementor")
     assert quantity.within == ["AXRow: Teapot", "AXWindow: Order"]
-
-
-# a field whose placeholder cua-driver shows as its value
 
 
 def _key_with(shown: str, exact: str) -> str:
@@ -285,10 +262,6 @@ def _key_with(shown: str, exact: str) -> str:
 
 def test_keeps_one_key_before_and_after_it_is_typed_in() -> None:
     assert _key_with("Search", "") == _key_with("Harbor", "Harbor")
-
-
-# a field named only by its placeholder: cua-driver gives the placeholder as its label and value while
-# it is empty, and its content once it is typed in; the exact-text reader reports no title for it
 
 
 def _placeholder_field(label: str, shown: str, exact: str, title: str) -> UINode:
@@ -333,9 +306,6 @@ def test_text_typed_into_a_placeholder_field_is_verified_in_that_field() -> None
     c = cand("type_into", before, text=" Ada  L ")
     got = verify_effect(c, snap([before]), snap([after]))
     assert (got.effect, got.exact) == ("ok", True)
-
-
-# exact state from the native reader
 
 
 def _node(role: str, raw_value: str | None, raw_label: str | None = None) -> UINode:
@@ -409,9 +379,6 @@ def test_leaves_values_alone_when_the_lists_disagree() -> None:
     assert not any(n.exact for n in nodes)
 
 
-# field identity
-
-
 def test_keeps_an_unlabeled_fields_key_when_its_content_changes() -> None:
     raw = raw_fixture("textedit")
     edited = copy.deepcopy(raw)
@@ -423,9 +390,6 @@ def test_keeps_an_unlabeled_fields_key_when_its_content_changes() -> None:
     a = next(n for n in build_snapshot(raw, *fixture_ids(raw)).nodes if n.role == "AXTextArea")
     b = next(n for n in build_snapshot(edited, *fixture_ids(raw)).nodes if n.role == "AXTextArea")
     assert b.key == a.key
-
-
-# node fields
 
 
 def test_a_node_takes_its_fields_from_the_element_and_the_markdown_row() -> None:
@@ -482,12 +446,11 @@ def test_a_node_takes_its_fields_from_the_element_and_the_markdown_row() -> None
     assert bold.title == "Bold"
     assert (bold.value, bold.raw_value) == ("1", "1")
     assert bold.selected is True
-    assert bold.depth == 1  # from the markdown row, as the element has no depth
+    assert bold.depth == 1
     assert bold.token == ""
     assert short.label == "Short help"
     assert number.label == "0.5"
     assert (number.value, number.raw_value) == ("0.5", "0.5")
-    # An empty label from the element wins over the markdown; the value names the field for display.
     assert field.label == "hello"
     assert field.raw_label is None
     assert (field.value, field.raw_value) == ("hello", "hello")
@@ -533,9 +496,6 @@ def test_an_absent_element_value_falls_back_to_the_markdown_value() -> None:
     assert node.raw_value == "  from markdown "
 
 
-# keys
-
-
 def test_unlabeled_fields_side_by_side_are_numbered_by_order() -> None:
     nodes = [_node("AXTextField", None), _node("AXTextField", None), _node("AXTextField", None)]
     assign_keys(nodes)
@@ -560,9 +520,6 @@ def test_a_field_whose_raw_label_is_its_value_keys_with_an_empty_label() -> None
     field.label = "Notes"
     assign_keys([field])
     assert field.key == "AXTextArea|||"
-
-
-# modal and open menus
 
 
 def test_a_sheet_is_the_modal() -> None:
@@ -596,7 +553,6 @@ def test_an_open_menu_with_items_is_the_modal() -> None:
     snap = build_snapshot(raw, 1, 1)
     assert snap.modal is not None
     assert (snap.modal.role, snap.modal.label, snap.modal.index) == ("AXMenu", "open menu", 1)
-    # Items of an open context menu are not menu-bar items.
     assert snap.menu == []
 
 

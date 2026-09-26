@@ -1,9 +1,4 @@
-"""Menu items retitled in place and menu items whose enabled state flipped.
-
-Many commands only show their effect in the menu: a panel opened in its own window outside the
-snapshot turns "Show Fonts" into "Hide Fonts", and "Make Rich Text" becomes "Make Plain Text". An
-item keeps its slot (same parent, same position) when it is retitled.
-"""
+"""Menu items retitled in place and menu items whose enabled state flipped."""
 
 from __future__ import annotations
 
@@ -46,7 +41,6 @@ def _last(path: Sequence[str]) -> str:
 
 
 def _groups(menu: Sequence[MenuItem]) -> dict[str, list[str]]:
-    """Parent path (joined) -> the last titles of its items, in menu order."""
     out: dict[str, list[str]] = {}
     for m in menu:
         out.setdefault(_SEP.join(m.path[:-1]), []).append(_last(m.path))
@@ -70,10 +64,7 @@ def relabeled_menu_items(before: Sequence[MenuItem], after: Sequence[MenuItem], 
 
 
 def relabel_of(path: Sequence[str], before: Sequence[MenuItem], after: Sequence[MenuItem]) -> str | None:
-    """The new title of the slot `path` occupied, when that exact item was retitled.
-
-    `None` when the submenu's item count changed or its title is not unique in the submenu.
-    """
+    """The new title of the slot `path` occupied, when that exact item was retitled."""
     parent = _SEP.join(path[:-1])
     was = _groups(before).get(parent)
     now = _groups(after).get(parent)
@@ -87,13 +78,7 @@ def relabel_of(path: Sequence[str], before: Sequence[MenuItem], after: Sequence[
 
 
 def enabled_changes(before: Sequence[MenuItem], after: Sequence[MenuItem], limit: int = 6) -> EnabledChanges:
-    """Items whose enabled state flipped, named by their path below the menu title.
-
-    Selecting text enables Cut, Copy and the text transforms, often the only visible trace of a
-    selection. Only meaningful when both snapshots were taken with the window in front: a background
-    menu bar reflects another key window. Flips in the Window menu follow window focus and tiling,
-    not the document, and are left out.
-    """
+    """Items whose enabled state flipped, named by their path below the menu title."""
     was = {_SEP.join(m.path): m.enabled for m in before}
     window_menus = set(_window_menu_titles(before)) | set(_window_menu_titles(after))
     enabled: list[str] = []

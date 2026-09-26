@@ -1,5 +1,3 @@
-"""The Objective-C sources: shipped as package data, and the bench fixture app builds."""
-
 from __future__ import annotations
 
 import os

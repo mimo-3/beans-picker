@@ -23,10 +23,8 @@ type ActionKind = Literal[
 ]
 type ScrollDirection = Literal["up", "down"]
 
-# Kinds that enter the caller's `text` and cannot run without it.
 TEXT_KINDS: Final[frozenset[ActionKind]] = frozenset({"choose_option", "set_value", "type_into", "append", "keypad"})
 
-# A menu command's shortcut that runs it in the background.
 Shortcut = KeyEquivalent
 
 __all__ = [
@@ -41,11 +39,7 @@ __all__ = [
 
 @dataclass(slots=True, kw_only=True)
 class ActionCandidate:
-    """One action on a snapshot.
-
-    Optional fields are None when they do not apply to the kind; `text` is None when the caller gave
-    no text and may be "" when the caller's text is empty.
-    """
+    """One action on a snapshot."""
 
     id: str
     """Short id derived from `key`: the same control gets the same id in every snapshot."""

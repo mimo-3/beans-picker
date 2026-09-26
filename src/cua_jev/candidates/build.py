@@ -1,4 +1,4 @@
-"""Deterministic candidate actions from one snapshot. What to do with them is Jev's or the caller's pick."""
+"""Deterministic candidate actions from one snapshot."""
 
 from __future__ import annotations
 
@@ -24,7 +24,6 @@ from cua_jev.observe.types import Snapshot, UINode
 
 # Two-state controls; a radio button is chosen with a click instead.
 _TOGGLE_ROLES: Final = frozenset({"AXCheckBox", "AXSwitch"})
-# Areas that scroll their content: a scroll view, a table, list or outline, and a web page itself.
 _SCROLL_ROLES: Final = frozenset({"AXScrollArea", "AXTable", "AXOutline", "AXList", "AXWebArea"})
 _CLICK_ROLES: Final = frozenset(
     {
@@ -43,9 +42,7 @@ _CLICK_ROLES: Final = frozenset(
 )
 # Items whose own context menu (a right-click) often holds commands found nowhere else: rename, star, move to trash.
 _CONTEXT_ROLES: Final = frozenset({"AXRow", "AXLink", "AXImage"})
-# Containers and toolbars are window chrome: never an action of their own.
 _CHROME_ROLES: Final = frozenset({"AXWindow", "AXToolbar", "AXGroup", "AXScrollArea"})
-# Keys that only confirm, dismiss, move focus or open the focused item's context menu.
 _SAFE_KEYS: Final[tuple[tuple[tuple[str, ...], str], ...]] = (
     (("return",), "Return"),
     (("escape",), "Escape"),
@@ -62,15 +59,6 @@ _SCROLL_DIRECTIONS: Final[tuple[ScrollDirection, ...]] = ("down", "up")
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class BuildOptions:
-    """How to build candidates.
-
-    `instruction` is what the caller wants done (lexical ranking and the context-dependent safety
-    rules). `text` is the caller's text; None means no text was given, while "" is a text.
-    Text-entry candidates carry it; without it they are still listed when `list_text_kinds` is set
-    (observe), so their ids can be passed back to act together with a text. `learned` is the app's
-    learned menu-key table, when known.
-    """
-
     instruction: str | None = None
     text: str | None = None
     list_text_kinds: bool = False
@@ -111,8 +99,6 @@ def describe_short(n: UINode) -> str:
 
 
 class _Drafts:
-    """Collects candidates for one snapshot before ids and scores are assigned."""
-
     def __init__(self, snap: Snapshot, opts: BuildOptions) -> None:
         self.snap = snap
         self.opts = opts
@@ -148,7 +134,6 @@ class _Drafts:
         return c
 
     def shown(self) -> str:
-        """The caller's text as a JSON string literal, or "the given text" when none was given."""
         t = self.opts.text
         return "the given text" if t is None else quote(truncate(t, 60))
 
@@ -159,7 +144,6 @@ class _Drafts:
         # A sheet, dialog or open menu takes the input: only its own controls (and fields) are offered.
         if snap.modal is not None and not is_descendant(snap, n, snap.modal.index) and n.role not in EDITABLE_ROLES:
             return
-        # The wheel lands at a point on the area, so it needs a frame.
         if n.role in _SCROLL_ROLES and n.frame is not None:
             for direction in _SCROLL_DIRECTIONS:
                 self.add(
@@ -173,7 +157,6 @@ class _Drafts:
             return
         d = describe_short(n)
         if n.role == "AXIncrementor":
-            # A number field or stepper: its number is replaced whole, or moved one step with the arrow keys.
             if self.with_text:
                 self.add(
                     kind="set_value",
@@ -215,11 +198,8 @@ class _Drafts:
             state = "switch" if n.value is None else "turn off" if on else "turn on"
             self.add(kind="toggle", key=f"toggle|{n.key}", summary=f"{state} {d}", target=n)
         elif n.role == "AXSlider":
-            # A slider moves by its own step with the arrow keys, sent to it in the background.
             self.add_steps(n, ("right", "Right arrow"), ("left", "Left arrow"))
         elif n.role == "AXStaticText":
-            # A web page's list-box option (a combo box's suggestion) is text directly under the list;
-            # it is picked by pressing it.
             parent = self.by_index.get(n.parent) if n.parent is not None else None
             if parent is not None and parent.role == "AXList" and n.label:
                 self.add(
@@ -258,7 +238,6 @@ class _Drafts:
         )
 
     def add_steps(self, n: UINode, up: tuple[str, str], down: tuple[str, str]) -> None:
-        """One step up and one step down, each an arrow key sent to the control."""
         d = describe_short(n)
         for verb, (key, name) in (("increase", up), ("decrease", down)):
             self.add(
@@ -319,14 +298,12 @@ def _top(path: Sequence[str]) -> str | None:
 
 
 def _is_chrome(n: UINode) -> bool:
-    """Window chrome: containers, and unlabeled traffic-light buttons directly under the window."""
     if n.role in _CHROME_ROLES:
         return True
     return n.role == "AXButton" and not n.raw_label and not n.identifier and n.depth <= 1
 
 
 def _dedupe(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
-    """Identical controls (same role, label and ancestors) get an occurrence suffix, so each has its own id."""
     seen: Counter[str] = Counter()
     out: list[ActionCandidate] = []
     for c in cands:
@@ -337,11 +314,7 @@ def _dedupe(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
 
 
 def _place_twins(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
-    """Look-alike candidates ("Mark paid" on every row) say which container they sit in.
-
-    That is when the container has a name. Those still alike after that (no named container, or the
-    same one) are told apart by order.
-    """
+    """Look-alike candidates are told apart by their named container, then by order."""
     before = Counter(c.summary for c in cands)
     placed = [
         replace(c, summary=f"{c.summary} in {c.target.within[0]}")

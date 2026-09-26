@@ -1,12 +1,4 @@
-"""Runs the benchmark: each task under (a) Claude Code + cua-driver only and (b) Claude Code +
-cua-jev, headless (`claude -p`), with the same prompt, model and window. Success is decided by
-the judge alone; the agent's own "RESULT:" line is recorded only to count false success claims.
-
-    python -m bench.run [--reps N] [--model sonnet] [--only id,id] [--conditions a,b]
-
-One record per run is appended to bench/results/runs.jsonl. No time limit is set on a run.
-Nothing runs while the screen is locked: the bench stops and says so.
-"""
+"""Runs each task with Claude Code under cua-driver alone and under cua-jev, same prompt and model."""
 
 from __future__ import annotations
 
@@ -70,12 +62,9 @@ _CLAIM_SUCCESS: Final = re.compile(rf"RESULT:{WS}*success", re.IGNORECASE | re.A
 _CLAIM_FAILURE: Final = re.compile(rf"RESULT:{WS}*failure", re.IGNORECASE | re.ASCII)
 
 
-# --- arguments ---------------------------------------------------------------------------------
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Options:
-    """The command line. `reps` stays a number as given (not a number: no runs)."""
+    """The command line."""
 
     reps: float = 1
     model: str = "sonnet"
@@ -107,18 +96,12 @@ def selected(tasks: Sequence[Task], only: Sequence[str] | None) -> list[Task]:
 
 
 def condition_order(conditions: Sequence[str], rep: int) -> list[str]:
-    """Which condition goes first alternates by repetition, so neither always meets a freshly
-    started app."""
+    """Which condition goes first alternates by repetition, so neither always meets a freshly started app."""
     return list(conditions) if rep % 2 == 1 else list(reversed(conditions))
-
-
-# --- one run -----------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Target:
-    """The window a run works on."""
-
     pid: int
     window_id: int
     app_label: str
@@ -127,11 +110,7 @@ class Target:
 
 @dataclass(slots=True)
 class Metrics:
-    """What one `claude -p` stream reported.
-
-    `outcome` holds `numTurns`, `durationMs` and `costUsd` from the last result event, each only
-    when that event had it; `result` and `is_error` are None until a result event arrives.
-    """
+    """What one `claude -p` stream reported."""
 
     tool_calls: int = 0
     tool_names: dict[str, int] = field(default_factory=dict)
@@ -173,7 +152,6 @@ def mcp_servers(condition: str) -> JsonObject:
 
 
 def claude_argv(condition: str, prompt: str, model: str, mcp_config: Path) -> list[str]:
-    """The `claude` arguments for one run."""
     deny = ["--disallowedTools", *(f"mcp__cua-driver__{t}" for t in DRIVER_DENY)] if condition == "a" else []
     return [
         "-p",
@@ -196,7 +174,6 @@ def claude_argv(condition: str, prompt: str, model: str, mcp_config: Path) -> li
 
 
 def _text_of(v: JsonValue) -> str:
-    """A received value as text; absent and null are empty."""
     return "" if v is None else scalar_text(v)
 
 
@@ -303,7 +280,6 @@ def build_record(
 
 
 def progress_line(task_id: str, condition: str, rep: int, judge: JsonObject, m: Metrics, wall_ms: int) -> str:
-    """The stderr line printed after each run."""
     verdict = "PASS" if judge.get("pass") else "FAIL"
     seconds = round_half_up(wall_ms / 1000)
     return f"{task_id} [{condition}] rep {rep}: {verdict} claimed={claimed(m.result)} tools={m.tool_calls} {seconds}s\n"
@@ -328,9 +304,6 @@ class LineSplitter:
         return self._buf
 
 
-# --- the frontmost app -------------------------------------------------------------------------
-
-
 async def front_pid(runner: Runner) -> int | None:
     """The pid of the frontmost app."""
     asn = trim((await runner(["lsappinfo", "front"])).stdout)
@@ -339,8 +312,7 @@ async def front_pid(runner: Runner) -> int | None:
 
 
 class FrontWatch:
-    """Samples the frontmost app every `interval` seconds while a run lasts; the app under test in
-    front is a focus steal. A tick is skipped while the previous sample is still running."""
+    """Samples the frontmost app while a run lasts and counts focus steals."""
 
     def __init__(self, pid: int, *, runner: Runner = run, interval: float = FRONT_INTERVAL) -> None:
         self.pid = pid
@@ -357,7 +329,6 @@ class FrontWatch:
                 self._sample = asyncio.create_task(self._take_sample())
 
     async def _take_sample(self) -> None:
-        # A missed sample is only a missed sample.
         with contextlib.suppress(Exception):
             if await front_pid(self._runner) == self.pid:
                 self.steals += 1
@@ -373,15 +344,10 @@ class FrontWatch:
 
 
 async def _end_process_group(child: asyncio.subprocess.Process) -> None:
-    """Kills an agent that is still running, with everything it started, and reaps it (also when
-    the caller is being cancelled)."""
     if child.returncode is None:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(child.pid, signal.SIGKILL)
     await asyncio.shield(child.wait())
-
-
-# --- the bench ---------------------------------------------------------------------------------
 
 
 def _now_ms() -> int:
@@ -434,7 +400,6 @@ class Bench:
         return result
 
     async def windows_of(self, pid: int) -> list[JsonObject]:
-        """The app's windows as cua-driver lists them."""
         windows = (await self.driver_call("list_windows", {"pid": pid})).get("windows")
         return _objects(windows)
 
@@ -502,12 +467,10 @@ class Bench:
         raise RuntimeError("Calculator did not start")
 
     async def setup(self, task: Task, rid: str) -> Target:
-        """The target window for `task`."""
         return await self.setup_fixture(task, rid) if task["app"] == "fixture" else await self.setup_calculator()
 
     async def run_judge(self, task_id: str, target: Target) -> JsonObject:
-        """The judge's verdict, run as its own process from the repository root (a failed task
-        exits 1 and still prints its verdict)."""
+        """The judge's verdict, run from the repository root (a failed task exits 1 but still prints)."""
         if target.state_file is not None:
             where = ["--state", str(target.state_file)]
         else:
@@ -599,14 +562,12 @@ class Bench:
 
 
 def _int(v: JsonValue) -> int:
-    """A window id or pid as reported; anything else is a broken report."""
     if isinstance(v, int) and not isinstance(v, bool):
         return v
     raise RuntimeError(f"not an integer id: {dumps(v)}")
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the bench with the given command line."""
     options = parse_args(sys.argv[1:] if argv is None else argv)
     bench = Bench(options=options, tasks=selected(load_tasks(), options.only))
     return asyncio.run(bench.main())

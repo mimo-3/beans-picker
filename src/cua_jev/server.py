@@ -81,10 +81,7 @@ async def run(
     acts: bool,
     screen_locked: ScreenLocked = lock.screen_locked,
 ) -> types.CallToolResult:
-    """One tool call, after every earlier one, and never while the screen is locked.
-
-    No exception leaves this function: every failure becomes a tool-level error.
-    """
+    """One tool call, after every earlier one, and never while the screen is locked."""
 
     async def body() -> types.CallToolResult:
         try:
@@ -102,13 +99,12 @@ async def run(
 
     try:
         return await session.exclusive(body)
-    except CuaJevError as err:  # the session is shutting down
+    except CuaJevError as err:
         return error("internal", str(err))
 
 
 class _Server(Server[Session]):
-    """The low-level server. It announces that its tool list can change (as MCP clients expect of
-    it) and no experimental capabilities: an empty `experimental` object is left out."""
+    """Announces a changeable tool list and omits an empty `experimental` capability, as MCP clients expect."""
 
     def create_initialization_options(
         self,

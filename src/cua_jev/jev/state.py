@@ -27,7 +27,6 @@ def _by_index(snap: Snapshot) -> dict[int, UINode]:
 
 
 def _up(by_index: dict[int, UINode], index: int | None) -> Iterator[UINode]:
-    """The node at `index`, then its parent, grandparent and so on."""
     cur = by_index.get(index if index is not None else -1)
     while cur is not None:
         yield cur
@@ -35,9 +34,7 @@ def _up(by_index: dict[int, UINode], index: int | None) -> Iterator[UINode]:
 
 
 def reading_texts(snap: Snapshot) -> list[TextNode]:
-    """The window's texts in reading order, with the name of each table-row control that has no
-    text of its own put in its place: without it a row reads "2026-09-21 | 142 KB" and the file
-    is nameless. Returns `snap.texts` itself when there is nothing to add."""
+    """The window's texts in reading order, with unlabeled table-row controls named in place."""
     by_index = _by_index(snap)
     holds_text = {n.index for t in snap.texts for n in _up(by_index, t.parent_index)}
     named = [
@@ -71,11 +68,7 @@ def reading_texts(snap: Snapshot) -> list[TextNode]:
 
 
 def screen_text(snap: Snapshot, limit: int = 20) -> list[str]:
-    """The window's texts in order, repeats left out.
-
-    A table row's texts are one line ("Room D | 260 | Yes"): taken one by one, a cell that repeats
-    another row's ("Yes") would be left out, and a reader would think the row has no such cell.
-    """
+    """The window's texts in order, repeats left out."""
     by_index = _by_index(snap)
 
     def row_of(t: TextNode) -> int | None:
@@ -123,7 +116,7 @@ def fields_of(snap: Snapshot, limit: int = 12) -> list[Field]:
 
 
 def build_state(instruction: str, snap: Snapshot, text: str | None = None) -> JevState:
-    """What Jev is told about the window. A given `text` is included even when empty."""
+    """What Jev is told about the window."""
     state: JevState = {"instruction": instruction}
     if text is not None:
         state["text"] = text
@@ -159,7 +152,6 @@ def _field_value(n: UINode) -> str:
 
 
 def _field_change(n: UINode, was: str) -> str:
-    """`TextField "Seats": "120" -> "210"` with a U+2192 arrow; the name only when it is not the value."""
     name = f' "{truncate(n.raw_label, 30)}"' if n.raw_label and n.raw_label != n.value else ""
     return f"{bare_role(n.role)}{name}: {quote(truncate(was, 60))} \u2192 {quote(truncate(_field_value(n), 60))}"
 

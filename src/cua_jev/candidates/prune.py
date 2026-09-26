@@ -24,26 +24,17 @@ _SUMMARY_KINDS: Final = frozenset({"key", "scroll", "context_menu"})
 
 
 class HasLexical(Protocol):
-    """Anything ranked by a lexical score."""
-
     @property
     def lexical(self) -> float: ...
 
 
 def quoted_spans(instruction: str) -> list[str]:
-    """The quoted words of an instruction, lowercased ('click "Save"', 「保存」).
-
-    ASCII single quotes count too, so apostrophes ("don't ... it's") can pair up into a span.
-    """
+    """The quoted words of an instruction, lowercased."""
     return [next((g for g in m.groups() if g is not None), "").lower() for m in _QUOTED.finditer(instruction)]
 
 
 def lexical_score(c: ActionCandidate, instruction: str, learned: MenuKeyTable | None = None) -> int:
-    """How well a candidate matches the instruction's words.
-
-    3 per name hit (or a menu item's stock English name), 2 per identifier or help hit, 1 per hit in
-    the enclosing groups or the value, and 5 when the name is quoted in the instruction.
-    """
+    """How well a candidate matches the instruction's words."""
     goal = set(tokenize(instruction))
     if not goal:
         return 0
@@ -64,8 +55,7 @@ def lexical_score(c: ActionCandidate, instruction: str, learned: MenuKeyTable | 
         path = c.menu.path
         leaf = path[-1] if path else ""
         score += 3 * hits(leaf) + hits(" ".join(path)) + 2 * hits(c.menu.identifier)
-        # A localized item's stock English name ("標準テキストにする" is "Make Plain Text") matches
-        # an English instruction where the display title cannot.
+        # A localized item's stock English name lets an English instruction match it.
         english = english_title(leaf, learned)
         if english and english.lower() != leaf.lower():
             score += 3 * hits(english)

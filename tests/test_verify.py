@@ -1,6 +1,3 @@
-"""verify.effect rules on hand-built windows: toggles, menu retitles, text exactness, messages,
-and UTF-16 positions."""
-
 from __future__ import annotations
 
 import pytest
@@ -20,7 +17,6 @@ class TestExpectedTextPositions:
         assert ok("ba" + ASTRAL)
         assert ok("ab" + ASTRAL)
         assert ok("a" + ASTRAL + "b")
-        # Inside the pair is a position too, as the accessibility API counts it.
         assert ok("a\ud83db\ude00")
         assert not ok("a" + ASTRAL)
         assert not ok("a" + ASTRAL + "bb")

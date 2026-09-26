@@ -86,9 +86,6 @@ def test_keeps_an_unlabeled_fields_key_when_its_content_changes() -> None:
     assert b.key == a.key
 
 
-# edge cases
-
-
 def test_a_submenu_whose_item_count_changed_is_not_compared() -> None:
     before = [item("Format", "Show Fonts"), item("Format", "Bold")]
     after = [item("Format", "Hide Fonts")]
@@ -132,7 +129,6 @@ def test_enabled_changes_are_named_below_the_menu_title_and_capped() -> None:
     changes = enabled_changes(before, after, limit=6)
     assert changes["enabled"] == [f"Transform > {i}" for i in range(6)]
     assert changes["disabled"] == ["Paste"]
-    # Items new in `after` have no earlier state to compare.
     assert enabled_changes([], after) == {"enabled": [], "disabled": []}
 
 

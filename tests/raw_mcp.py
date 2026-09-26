@@ -1,5 +1,3 @@
-"""Talks JSON-RPC to an in-process server and returns the raw wire dicts, key order included."""
-
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
@@ -14,8 +12,6 @@ from mcp.shared.message import SessionMessage
 
 
 class RawClient:
-    """Sends requests and notifications; responses are matched to their request id."""
-
     def __init__(
         self,
         read: ReadStream[SessionMessage | Exception],
@@ -27,14 +23,12 @@ class RawClient:
         self._early: dict[int | str, types.JSONRPCResponse | types.JSONRPCError] = {}
 
     async def send(self, method: str, params: dict[str, Any] | None) -> int:
-        """Sends a request and returns its id without waiting for the answer."""
         self._next_id += 1
         request = types.JSONRPCRequest(jsonrpc="2.0", id=self._next_id, method=method, params=params)
         await self._write.send(SessionMessage(request))
         return self._next_id
 
     async def result(self, rid: int) -> dict[str, Any]:
-        """The result of request `rid` (answers to other requests are kept for later)."""
         while rid not in self._early:
             incoming = await self._read.receive()
             if isinstance(incoming, Exception):

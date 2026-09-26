@@ -10,11 +10,7 @@ type Clock = Callable[[], float]
 
 
 async def gather_settled[T](*aws: Awaitable[T]) -> list[T]:
-    """Wait for every awaitable, then return their results in order, or raise the first failure
-    by position. Nothing is cancelled when one of them fails, so nothing outlives the call.
-
-    If the caller is cancelled, the awaitables still running are cancelled and awaited.
-    """
+    """Wait for every awaitable, then return their results in order, or raise the first failure by position."""
     tasks = [asyncio.ensure_future(a) for a in aws]
     try:
         if tasks:

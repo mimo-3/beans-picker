@@ -1,14 +1,4 @@
-"""Builds of the two native helpers, compiled with clang into the cache on first use.
-
-`axtext` reads fields' exact text over Accessibility. It is built as a background-only app bundle
-so that macOS can list it under Privacy & Security > Accessibility by its own name ("cua-jev
-axtext"). `menukeys` reads an app's menu key equivalents from its main nib in a throwaway process.
-Both are built once per source version (the file name carries a hash of the source) and need the
-Xcode Command Line Tools. Each build is compiled in a private staging directory and moved into
-place only when it succeeded, so a build seen in the cache (by this or another process) is always
-complete. A failed build, including one that cannot write to the cache, is remembered and yields
-`None` for the life of the `Helpers` object.
-"""
+"""Builds of the two native helpers, compiled with clang into the cache on first use."""
 
 from __future__ import annotations
 
@@ -43,8 +33,7 @@ AXTEXT_PLIST: Final = (
     "<key>CFBundleName</key><string>cua-jev axtext</string><key>CFBundleExecutable</key><string>axtext</string>"
     "<key>CFBundlePackageType</key><string>APPL</string><key>LSBackgroundOnly</key><true/></dict></plist>\n"
 )
-# Without an embedded Info.plist allowing mixed localizations, AppKit would localize the nib to the
-# bare executable's language (English) instead of the user's.
+# Without an Info.plist allowing mixed localizations, AppKit localizes the nib to English.
 MENUKEYS_PLIST: Final = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
@@ -60,18 +49,15 @@ class AxtextBuild(Protocol):
 
 
 def native_sources() -> Traversable:
-    """The helper sources shipped in `cua_jev.native`."""
     return resources.files("cua_jev.native")
 
 
 def axtext_binary(app: Path) -> Path:
-    """The executable inside the axtext app bundle."""
     return app / "Contents" / "MacOS" / "axtext"
 
 
 class Helpers:
-    """The helper builds of one session: each is compiled at most once, concurrent callers share
-    the build, and its result (a path or `None`) is kept."""
+    """The helper builds of one session, each compiled at most once and shared by concurrent callers."""
 
     def __init__(self, paths: Paths, *, runner: Runner = run, sources: Traversable | None = None) -> None:
         self._paths = paths
@@ -93,7 +79,7 @@ class Helpers:
         return await _shared(self._menukeys)
 
     async def close(self) -> None:
-        """Cancels builds still running and waits for them to stop. The session calls it on shutdown."""
+        """Cancels builds still running and waits for them to stop."""
         running = [t for t in (self._axtext, self._menukeys) if t is not None and not t.done()]
         for task in running:
             task.cancel()
@@ -118,7 +104,7 @@ class Helpers:
             try:
                 staged.rename(app)
             except OSError:
-                if not axtext_binary(app).exists():  # another build finished first: use that one
+                if not axtext_binary(app).exists():
                     raise
             return app
         finally:
@@ -154,7 +140,6 @@ class Helpers:
 
 
 async def _or_none(name: str, build: Callable[[], Awaitable[Path | None]]) -> Path | None:
-    """Runs a build; any failure (clang, an unwritable cache, a full disk) means "no helper"."""
     try:
         return await build()
     except Exception as err:
@@ -163,18 +148,15 @@ async def _or_none(name: str, build: Callable[[], Awaitable[Path | None]]) -> Pa
 
 
 async def _shared(task: asyncio.Task[Path | None]) -> Path | None:
-    """Awaits a build without cancelling it when this caller is cancelled (others may wait on it)."""
     return await asyncio.shield(task)
 
 
 def _staging_dir(directory: Path, name: str) -> Path:
-    """A new private directory next to the final build, so moving the result into place is atomic."""
     directory.mkdir(parents=True, exist_ok=True)
     return Path(tempfile.mkdtemp(prefix=f".{name}.", dir=directory))
 
 
 def _source_hash(source: Traversable) -> str:
-    """The first 12 hex digits of the SHA-256 of the source bytes (independent of the install path)."""
     return hashlib.sha256(source.read_bytes()).hexdigest()[:12]
 
 
@@ -184,7 +166,6 @@ def _prepare_bundle(app: Path) -> None:
 
 
 def _write_menukeys_plist(directory: Path) -> Path:
-    """Writes the shared plist through a private file, so a concurrent build never links a partial one."""
     directory.mkdir(parents=True, exist_ok=True)
     plist = directory / "Info.plist"
     fd, tmp = tempfile.mkstemp(prefix=".Info.plist.", dir=directory)

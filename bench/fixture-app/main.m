@@ -1,6 +1,4 @@
-// cua-jev bench fixture: a small AppKit window with the controls the benchmark tasks use, and no
-// user data. The controls' values are written to a JSON state file whenever they change (--state <path>), so a separate judge
-// can check the final state by exact equality. It never activates itself.
+// Bench fixture: an AppKit window whose control values are written to a JSON state file.
 // Usage: CuaJevFixture --state <file.json> [--title <t>] [--body <b>] [--search <s>] [--name <n>] [--email <e>]
 #import <AppKit/AppKit.h>
 
@@ -105,8 +103,7 @@
   self.email.stringValue = initial[@"email"] ?: @"";
   [self.window orderFront:nil];
   [self write];
-  // Accessibility writes (AXValue) change a control without its delegate hearing of it, so the
-  // state file also follows the controls themselves, a few times a second.
+  // AXValue writes bypass delegates, so the state file also polls the controls.
   [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *t) { [self write]; }];
 }
 

@@ -10,7 +10,6 @@ from cua_jev import __version__, cli
 
 @pytest.fixture
 def no_side_effects(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
-    """Env files come from `tmp_path` only; logging setup and serving are recorded, not run."""
     events: list[str] = []
     monkeypatch.setattr("cua_jev.config.env_dirs", lambda: [tmp_path])
     monkeypatch.setattr("cua_jev.log.configure", lambda: events.append("log"))
@@ -56,7 +55,7 @@ def test_serves_and_ignores_unknown_arguments(
     capsys: pytest.CaptureFixture[str], no_side_effects: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("TYPESAFE_BASE_URL", "")
-    monkeypatch.delenv("TYPESAFE_BASE_URL")  # whatever the env file sets is undone after the test
+    monkeypatch.delenv("TYPESAFE_BASE_URL")
     (tmp_path / ".env.local").write_text("TYPESAFE_BASE_URL=http://localhost:1\n", encoding="utf-8")
     assert cli.main(["--verbose", "extra"], platform="darwin") == 0
     assert no_side_effects == ["log", "serve"]

@@ -1,5 +1,4 @@
-"""Logging setup. Library modules only call `logging.getLogger(__name__)`; the command line entry
-point calls `configure()` once, and all output goes to stderr (stdout carries the MCP protocol)."""
+"""Logging setup."""
 
 from __future__ import annotations
 
@@ -13,8 +12,7 @@ LOGGER_NAME: Final = "cua_jev"
 _FORMAT: Final = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
-class _StderrHandler(logging.StreamHandler[TextIO]):
-    """The handler `configure()` installs, recognizable so a second call replaces it."""
+class _StderrHandler(logging.StreamHandler[TextIO]): ...
 
 
 def parse_level(name: str | int | None) -> int:
@@ -31,8 +29,7 @@ def parse_level(name: str | int | None) -> int:
 
 
 def configure(level: str | int | None = None, *, stream: TextIO | None = None) -> logging.Logger:
-    """Send the `cua_jev` logger's records to `stream` (default stderr) at `level` (default: the
-    `CUA_JEV_LOG_LEVEL` setting). Calling it again replaces the handler it installed before."""
+    """Send the `cua_jev` logger's records to `stream`; calling again replaces the handler."""
     logger = logging.getLogger(LOGGER_NAME)
     for h in list(logger.handlers):
         if isinstance(h, _StderrHandler):
@@ -45,8 +42,7 @@ def configure(level: str | int | None = None, *, stream: TextIO | None = None) -
 
 
 def silence(name: str) -> None:
-    """Turn one logger off completely: no records, and nothing propagated to the root handlers.
-    Only that logger (and its children) is affected."""
+    """Turn one logger off completely: no records, and nothing propagated to the root handlers."""
     logger = logging.getLogger(name)
     logger.propagate = False
     logger.disabled = True

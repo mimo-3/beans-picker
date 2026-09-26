@@ -1,9 +1,3 @@
-"""Builders and fakes for the executor, pixel mapper and effect tests.
-
-`CallDriver` implements only `call` (the `act.pixel.ToolCaller` protocol): it records every call
-with its complete payload and answers from per-tool scripts.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
@@ -42,7 +36,6 @@ def node(
     frame: Frame | None = None,
     in_menu_bar: bool = False,
 ) -> UINode:
-    """A window node; its key defaults to `role:label` and its token (`tok`) to `t:<index>`."""
     return UINode(
         index=index,
         token=tok if tok is not None else f"t:{index}",
@@ -129,9 +122,6 @@ type Answer = ToolResult | Exception | Callable[[Mapping[str, object]], ToolResu
 
 
 class CallDriver:
-    """Answers each tool from its script (first entry first, the last one repeated); tools
-    without a script answer `ok()`. Every call is recorded as (tool, payload)."""
-
     def __init__(self, scripts: Mapping[str, Sequence[Answer]] | None = None) -> None:
         self.scripts: dict[str, list[Answer]] = {k: list(v) for k, v in (scripts or {}).items()}
         self.calls: list[tuple[str, dict[str, object]]] = []
@@ -155,8 +145,6 @@ class CallDriver:
 
 
 class Reobserve:
-    """A snapshot function walking a list and repeating its last entry; counts its calls."""
-
     def __init__(self, *snaps: Snapshot) -> None:
         self.snaps = list(snaps)
         self.count = 0
@@ -169,8 +157,6 @@ class Reobserve:
 
 
 class FakeMenuKeys:
-    """Learned menu keys: always `table`, with each asked pid recorded."""
-
     def __init__(self, table: MenuKeyTable | None = None) -> None:
         self.table = table
         self.asked: list[int] = []
@@ -194,7 +180,6 @@ def window(
     z: int | None = 10,
     layer: int | None = 0,
 ) -> JsonObject:
-    """A `list_windows` entry; a None field is left out."""
     w: JsonObject = {"window_id": window_id, "pid": pid, "is_on_screen": on_screen}
     if bounds is not None:
         x, y, width, height = bounds
@@ -213,7 +198,6 @@ def geometry_driver(
     window_bounds: JsonObject | None = None,
     scripts: Mapping[str, Sequence[Answer]] | None = None,
 ) -> CallDriver:
-    """A driver whose window 1 (pid 1) sits at (100, 50), 400x300 points, shot at 2 px per point."""
     shot: JsonObject = {"screenshot_width": screenshot_width}
     if window_bounds is not None:
         shot["window_bounds"] = window_bounds

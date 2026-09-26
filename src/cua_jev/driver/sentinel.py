@@ -1,11 +1,4 @@
-"""Activation guard.
-
-While an act call drives an app, that app must never become the frontmost app, not even for a
-moment. The sentinel samples the frontmost process periodically and once more after every driver
-action; the first sample that shows a watched pid in front (when it was not already in front
-before the call's first action) is a violation. The driver then refuses every later action of that
-call, and the call reports it.
-"""
+"""Activation guard."""
 
 from __future__ import annotations
 
@@ -40,7 +33,6 @@ async def front_pid(*, runner: Runner = run) -> int | None:
 
 
 def _now_utc() -> str:
-    """The current UTC time as `HH:MM:SS.mmm`."""
     now = datetime.now(UTC)
     return now.strftime("%H:%M:%S.") + f"{now.microsecond // 1000:03d}"
 
@@ -65,7 +57,6 @@ class ActivationSentinel:
         self._inflight: asyncio.Task[None] | None = None
         # Bumped by `stop`, so a probe that started under an earlier watch never records anything.
         self._generation = 0
-        # The driver call in flight, or the last one when none is.
         self._current = "start"
         self.violation: Activation | None = None
 
@@ -74,8 +65,7 @@ class ActivationSentinel:
         return bool(self._pids)
 
     async def watch(self, pid: int) -> None:
-        """Start watching `pid`. An app that is already in front at this moment was put there by
-        the person (or it was launched frontmost), so only a later change into it counts."""
+        """Start watching `pid`."""
         if not self._pids:
             self.violation = None
         if await self._sample_front() == pid:
@@ -85,7 +75,7 @@ class ActivationSentinel:
             self._ticker = asyncio.create_task(self._tick())
 
     def stop(self) -> None:
-        """Stop watching every pid. A recorded violation is kept until the next `watch`."""
+        """Stop watching every pid."""
         if self._ticker is not None:
             self._ticker.cancel()
             self._ticker = None
@@ -105,12 +95,10 @@ class ActivationSentinel:
         self._current = f"after {tool}"
 
     async def sample(self) -> Activation | None:
-        """Take one sample right now (on top of the periodic ones) and return the violation, if
-        any. The first violation is kept; later samples never replace it."""
+        """Take one sample right now (on top of the periodic ones) and return the violation, if any."""
         if not self._pids or self.violation is not None:
             return self.violation
         if self._inflight is not None:
-            # A sample is in flight: wait for it, then take a fresh one.
             await asyncio.wait({self._inflight})
             if not self._pids or self.violation is not None:
                 return self.violation
@@ -140,7 +128,6 @@ class ActivationSentinel:
             _log.debug("pid %d came to the front during %s", front, during)
 
     async def _tick(self) -> None:
-        """Start a sample every interval, whether or not the previous one has finished."""
         while True:
             await self._sleep(self._interval_s)
             task = asyncio.create_task(self.sample())

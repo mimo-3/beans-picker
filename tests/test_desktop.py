@@ -17,9 +17,6 @@ def _window(window_id: int, pid: int = 1, **fields: object) -> Window:
     return Window(window_id=window_id, pid=pid, **fields)  # type: ignore[arg-type]
 
 
-# desktop_facts
-
-
 def test_the_front_ordinary_window_and_the_apps_other_windows() -> None:
     windows = [
         _window(10, title="Doc", z_index=5),
@@ -60,9 +57,6 @@ def test_windows_without_z_index_sort_last_in_list_order() -> None:
     assert facts.app_windows == ["C", "A", "B", "D"]
     assert facts.own is None
     assert desktop_facts([], 1, 1).frontmost is False
-
-
-# observe
 
 
 _STATE: JsonObject = {
@@ -201,7 +195,6 @@ async def test_observe_fails_when_the_window_state_cannot_be_read() -> None:
 
     with pytest.raises(DriverError, match="no_window"):
         await observe(FakeDriver(on_call), 7, 3, front_pid=lambda: _front(None), read_exact=_Exact(None))
-    # The other reads were awaited before the failure was reported.
     assert reads == ["get_window_state", "list_windows", "list_windows done"]
 
 

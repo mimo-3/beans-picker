@@ -1,5 +1,3 @@
-"""The server's wire answers against captures of what MCP clients of this server already see."""
-
 from __future__ import annotations
 
 import json
@@ -39,7 +37,6 @@ def _server() -> Any:
 
 
 def _nested_key_orders(value: Any) -> list[list[str]]:
-    """Key order of every object below the top level of each property (what this package writes)."""
     out: list[list[str]] = []
     if isinstance(value, dict):
         out.append(list(value))

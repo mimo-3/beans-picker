@@ -12,13 +12,7 @@ _SEP = "\x01"
 
 
 def state_signature(s: Snapshot) -> str:
-    """16 hex digits of the SHA-1 over the window title, the node count (in fives), the modal,
-    every node value, the exact text of fields read exactly, selections, visible text and the app's
-    other windows.
-
-    Exact text is included quoted, so a line break or space at either end changes the signature
-    even though the normalized value hides it.
-    """
+    """A short SHA-1 over everything that counts as a visible change of the window."""
     parts: list[str] = [
         s.window_title,
         f"n{len(s.nodes) // 5}",

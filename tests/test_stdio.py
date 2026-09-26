@@ -1,5 +1,3 @@
-"""The installed entry point over real stdio: only protocol frames on stdout, and a clean exit on EOF."""
-
 from __future__ import annotations
 
 import asyncio
@@ -106,7 +104,7 @@ async def test_a_signal_ends_serving_while_stdin_stays_open(tmp_path: Path, sig:
         await proc.stdin.drain()
         assert json.loads(await asyncio.wait_for(proc.stdout.readline(), 20))["id"] == 1
         proc.send_signal(sig)
-        assert await asyncio.wait_for(proc.wait(), 10) == 0  # stdin is still open
+        assert await asyncio.wait_for(proc.wait(), 10) == 0
     finally:
         if proc.returncode is None:
             proc.kill()

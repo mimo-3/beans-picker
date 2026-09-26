@@ -1,8 +1,4 @@
-"""The Jev criterion object for a candidate action.
-
-Each field is truncated so a question with MAX_OPTIONS candidates stays well inside Jev's
-32k-token request window.
-"""
+"""The Jev criterion object for a candidate action."""
 
 from __future__ import annotations
 
@@ -60,8 +56,7 @@ def describe(c: ActionCandidate, snap: Snapshot, learned: MenuKeyTable | None = 
         if len(twins) > 1:
             pos = twins.index(t.index) + 1 if t.index in twins else 0
             d["occurrence"] = f"{pos} of {len(twins)}"
-        # Controls that expose showmenu+cancel may only pop up a menu. That menu is invisible to us
-        # (it is not part of the window's tree), so its choices can never be picked from this list.
+        # A showmenu+cancel control may open a pop-up menu that is not in the window's tree.
         if may_only_open_popup(c):
             d["pop_up"] = "pressing it may only open a pop-up menu whose choices are not in this list"
     if c.menu is not None:

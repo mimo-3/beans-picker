@@ -1,11 +1,4 @@
-"""Data shapes received from cua-driver, the arguments sent to it, and the activation record of
-the foreground guard.
-
-cua-driver's `structuredContent` is read defensively: the `get_*` accessors narrow one field with
-`isinstance` and return None for a value that is missing or of another type, and the readers
-(`window_of`, `window_state_of`, ...) build small frozen dataclasses through them, so a declared
-field type is always a checked one.
-"""
+"""Data shapes received from cua-driver, the arguments sent to it, and the activation record of the foreground guard."""
 
 from __future__ import annotations
 
@@ -16,12 +9,8 @@ from typing import Literal, NotRequired, TypedDict
 
 from cua_jev._json import JsonObject
 
-# ---------------------------------------------------------------------------------------------
-# Accessors
-
 
 def as_obj(value: object) -> Mapping[str, object] | None:
-    """`value` when it is a JSON object, else None."""
     if isinstance(value, dict) and all(isinstance(k, str) for k in value):
         return value
     return None
@@ -70,10 +59,6 @@ def get_str_list(d: Mapping[str, object], key: str) -> list[str] | None:
     return None if items is None else [s for s in items if isinstance(s, str)]
 
 
-# ---------------------------------------------------------------------------------------------
-# Geometry
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Frame:
     """An element's frame in screen points."""
@@ -86,8 +71,6 @@ class Frame:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class WindowBounds:
-    """A window's bounds in screen points."""
-
     x: float
     y: float
     width: float
@@ -114,10 +97,6 @@ def bounds_of(value: object) -> WindowBounds | None:
     if x is None or y is None or width is None or height is None:
         return None
     return WindowBounds(x=x, y=y, width=width, height=height)
-
-
-# ---------------------------------------------------------------------------------------------
-# Windows, elements, window state
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -158,8 +137,7 @@ def window_of(value: object) -> Window | None:
 
 
 def windows_of(data: Mapping[str, object]) -> list[Window] | None:
-    """The `windows` list of a `list_windows` or `launch_app` result (entries that are not window
-    records are skipped), or None when there is no list."""
+    """The window records of a `list_windows` or `launch_app` result, or None without a list."""
     items = get_list(data, "windows")
     if items is None:
         return None
@@ -225,8 +203,6 @@ def element_of(value: object) -> Element | None:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class WindowState:
-    """A `get_window_state` result."""
-
     snapshot_id: str | None = None
     app_name: str | None = None
     window_title: str | None = None
@@ -240,8 +216,7 @@ class WindowState:
 
 
 def window_state_of(data: Mapping[str, object]) -> WindowState:
-    """The fields of a `get_window_state` result (entries of `elements` that are not element
-    records are skipped)."""
+    """The fields of a `get_window_state` result (entries of `elements` that are not element records are skipped)."""
     items = get_list(data, "elements")
     elements = None if items is None else [e for e in map(element_of, items) if e is not None]
     return WindowState(
@@ -260,8 +235,7 @@ def window_state_of(data: Mapping[str, object]) -> WindowState:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ActionResult:
-    """What cua-driver reports about an action it carried out. `effect` is its own word
-    (`"confirmed"`, `"unverifiable"`, `"failed"`, or another) and is forwarded unchanged."""
+    """What cua-driver reports about an action it carried out."""
 
     effect: str | None = None
     route: str | None = None
@@ -282,10 +256,6 @@ def action_result_of(data: Mapping[str, object]) -> ActionResult:
         escalation_target=get_str(escalation, "target"),
         value_readback=data.get("value_readback"),
     )
-
-
-# ---------------------------------------------------------------------------------------------
-# Call results
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -313,10 +283,6 @@ class ToolRefused:
 type ToolResult = ToolOk | ToolRefused
 
 
-# ---------------------------------------------------------------------------------------------
-# Call arguments, one TypedDict per cua-driver tool (keys in the order they are sent)
-
-
 class ListWindowsArgs(TypedDict, total=False):
     pid: int
 
@@ -340,8 +306,7 @@ class EndSessionArgs(TypedDict):
 
 
 class ClickArgs(TypedDict):
-    """An accessibility press (`element_token`) or a pixel click (`window_id`, `x`, `y`, and
-    optionally `modifier`, a list despite its singular name)."""
+    """An accessibility press or a pixel click; `modifier` is a list despite its singular name."""
 
     pid: int
     window_id: NotRequired[int]
@@ -392,14 +357,9 @@ class HotkeyArgs(TypedDict):
     keys: list[str]
 
 
-# ---------------------------------------------------------------------------------------------
-# Foreground guard
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Activation:
-    """The app under test was seen in front: `pid`, the driver call running then (`during`, or
-    `"after <tool>"` / `"start"`), and the UTC time `at` as `HH:MM:SS.mmm`."""
+    """The app under test was seen in front: when, and during which driver call."""
 
     pid: int
     during: str

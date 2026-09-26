@@ -1,11 +1,4 @@
-"""Pixel fast path: an AX press costs about 2.5 s per click, a pixel click about 0.2 s.
-
-A pixel click is used only when the window is on screen, the element has a frame, and no other
-window of the same app covers the point. cua-driver posts pixel clicks to the pid, so another app's
-window floating above ours (a companion or always-on-top window) never receives them and does not
-block the path; one of our own app's windows above the point (a sheet, a panel) would, because the
-app hit-tests it.
-"""
+"""Pixel fast path: an AX press costs about 2.5 s per click, a pixel click about 0.2 s."""
 
 from __future__ import annotations
 
@@ -47,14 +40,11 @@ class _Bounds:
     height: float
 
     def contains(self, x: float, y: float) -> bool:
-        """Whether the point lies inside, edges included."""
         return self.x <= x <= self.x + self.width and self.y <= y <= self.y + self.height
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class _Window:
-    """The fields of a `list_windows` entry this module reads, narrowed."""
-
     window_id: int | None
     pid: int | None
     bounds: _Bounds | None
@@ -86,11 +76,7 @@ class _WindowStateArgs(TypedDict):
 
 
 class PixelMapper:
-    """Maps a node's centre to a screenshot pixel of its window, when a pixel click there is safe.
-
-    Window geometry is cached per window id for `GEOMETRY_TTL_S` while the snapshot's window set
-    looks the same; a failed measurement is cached too.
-    """
+    """Maps a node's centre to a screenshot pixel of its window, when a pixel click there is safe."""
 
     def __init__(self, driver: ToolCaller, *, clock: Clock = time.monotonic) -> None:
         self._driver = driver
@@ -114,8 +100,7 @@ class PixelMapper:
         return Point(round_half_up((cx - g.bounds.x) * g.scale), round_half_up((cy - g.bounds.y) * g.scale))
 
     async def _geometry_of(self, snap: Snapshot) -> _Geometry | None:
-        # A sheet, panel or new window of our app can cover the point. Such changes show in the
-        # snapshot, so the cache is only reused while the snapshot's window set looks the same.
+        # Sheets or new windows can cover the point, so the cache holds only while the window set is unchanged.
         shape = window_shape(snap)
         cached = self._geometry.get(snap.window_id)
         if cached is not None and cached.shape == shape and self._clock() - cached.at < GEOMETRY_TTL_S:
@@ -148,9 +133,7 @@ class PixelMapper:
         if frame is None:
             return None
         scale = width / frame.width
-        # Every on-screen window of the app, whatever its level: a pop-up list or menu (a combo
-        # box's choices) floats at a higher level than our window, and a click posted to our
-        # window at that point would land on what lies underneath it in our window.
+        # Pop-up lists float above our window, so every on-screen window of the app counts, whatever its level.
         others = tuple(
             w
             for w in windows
@@ -173,8 +156,6 @@ def window_shape(snap: Snapshot) -> str:
 
 
 def _covers(w: _Window, g: _Geometry, x: float, y: float) -> bool:
-    """Whether another window of the app is drawn over this point of ours: a higher level, or a
-    higher z-index (above us) at the same level."""
     if not w.on_screen or w.bounds is None or not w.bounds.contains(x, y):
         return False
     layer = w.layer if w.layer is not None else 0

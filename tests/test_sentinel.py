@@ -14,8 +14,6 @@ AT = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\Z")
 
 
 class Front:
-    """A front sampler whose answer the test sets; counts its calls."""
-
     def __init__(self, pid: int | None = None) -> None:
         self.pid = pid
         self.calls = 0
@@ -26,7 +24,6 @@ class Front:
 
 
 async def until(done: Callable[[], bool]) -> None:
-    """Let other tasks run until `done()` holds (at most a thousand turns)."""
     for _ in range(1000):
         if done():
             return
@@ -35,7 +32,6 @@ async def until(done: Callable[[], bool]) -> None:
 
 
 async def hold() -> None:
-    """A sleep for the ticker that never ends, so only explicit samples run."""
     await asyncio.Event().wait()
 
 
@@ -101,7 +97,7 @@ async def test_the_first_violation_is_kept() -> None:
     s.begin("click")
     calls = front.calls
     assert await s.sample() is first
-    assert front.calls == calls  # no new sample once a violation is recorded
+    assert front.calls == calls
     s.stop()
 
 
@@ -116,7 +112,7 @@ async def test_stop_keeps_the_violation_and_the_next_watch_clears_it() -> None:
     assert s.violation is v
     assert await s.sample() is v
     front.pid = 5
-    await s.watch(5)  # already in front: not watched, but the old violation is gone
+    await s.watch(5)
     assert s.violation is None
     assert not s.watching
 
@@ -150,8 +146,8 @@ async def test_a_sample_in_flight_is_awaited_before_a_fresh_one() -> None:
     await asyncio.sleep(0)
     second = asyncio.create_task(s.sample())
     await asyncio.sleep(0)
-    assert calls == 2  # the second sample waits for the first
-    s.begin("click")  # named after the wait, so the second sample sees it
+    assert calls == 2
+    s.begin("click")
     release.set()
     assert await first is None
     v = await second
@@ -258,7 +254,7 @@ async def test_a_probe_from_a_stopped_watch_does_not_reach_the_next_one() -> Non
         return answers.pop()
 
     s = ActivationSentinel(sampler, sleep=never)
-    await s.watch(5)  # baseline: pid 1 in front
+    await s.watch(5)
     s.begin("old-click")
     old = asyncio.ensure_future(s.sample())
     await blocked.wait()
@@ -266,7 +262,7 @@ async def test_a_probe_from_a_stopped_watch_does_not_reach_the_next_one() -> Non
     old.cancel()
     await asyncio.wait({old})
     answers.append(1)
-    await s.watch(5)  # a new watch; its baseline again shows pid 1
+    await s.watch(5)
     release.set()
     for _ in range(5):
         await asyncio.sleep(0)

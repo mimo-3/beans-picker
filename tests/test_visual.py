@@ -22,8 +22,6 @@ from cua_jev.paths import Paths
 from tests.fakes import FakeDriver
 from tests.helpers import blank, encode_png, paint
 
-# decode_png
-
 
 def test_round_trips_an_rgb_image_through_the_row_filters() -> None:
     img = paint(blank(9, 7), 2, 1, 6, 5, 40)
@@ -42,9 +40,6 @@ def test_crops_within_bounds() -> None:
     assert (c.width, c.height) == (6, 6)
     assert c.data[0] == 255
     assert c.data[(1 * 6 + 1) * 4] == 0
-
-
-# pixel_change
 
 
 def test_a_caret_blink_is_not_an_effect_a_selection_highlight_is() -> None:
@@ -68,7 +63,6 @@ def test_ignores_the_pointers_box_and_refuses_different_sizes() -> None:
 
 def test_pixel_change_counts_and_thresholds() -> None:
     a = blank(20, 20)
-    # 50 pixels in 3 columns: a caret, however tall.
     narrow = pixel_change(a, paint(blank(20, 20), 0, 0, 3, 17, 0))
     assert narrow is not None
     assert (narrow.changed, narrow.columns, narrow.caret_only, narrow.significant) == (51, 3, True, False)
@@ -78,7 +72,6 @@ def test_pixel_change_counts_and_thresholds() -> None:
     few = pixel_change(a, paint(paint(blank(20, 20), 0, 0, 10, 3, 0), 0, 3, 9, 4, 0))
     assert few is not None
     assert (few.changed, few.significant) == (39, False)
-    # A brightness step of exactly 24 is not a change; 25 is.
     assert pixel_change(a, blank(20, 20, 231)) == pixel_change(a, a)
     faint = pixel_change(a, blank(20, 20, 230))
     assert faint is not None
@@ -90,9 +83,6 @@ def test_unchanged_regions_report_nothing() -> None:
     change = pixel_change(blank(5, 5), blank(5, 5))
     assert change is not None
     assert (change.changed, change.columns, change.caret_only, change.significant) == (0, 0, False, False)
-
-
-# regions of shots
 
 
 def _shot(
@@ -120,7 +110,6 @@ def test_pointer_mask_is_in_the_regions_pixels() -> None:
     frame = Frame(x=110, y=60, w=10, h=5)
     assert pointer_mask(frame, shot) == [(4, 2, 85, 98)]
     assert pointer_mask(frame, shot, _shot(pointer=[p, p])) == [(4, 2, 85, 98)] * 3
-    # A frame left of the window starts the region at its edge.
     assert pointer_mask(Frame(x=90, y=40, w=10, h=5), shot) == [(24, 22, 105, 118)]
 
 
@@ -146,9 +135,6 @@ def test_region_change_leaves_out_both_pointers() -> None:
     assert change is not None
     assert change.changed == 0
     assert region_change(_shot(), after, frame) is not None
-
-
-# capture_window
 
 
 def _png_file(path: Path, width: int = 20, height: int = 10) -> None:
@@ -264,7 +250,6 @@ async def test_capture_window_answers_none_when_the_driver_fails(paths: Paths) -
         raise RuntimeError("stream closed")
 
     assert await capture_window(FakeDriver(on_call), 1, 2, paths=paths) is None
-    # No file was written, so reading the requested path fails too.
     assert (
         await capture_window(
             FakeDriver(

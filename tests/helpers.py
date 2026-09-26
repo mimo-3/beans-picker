@@ -1,6 +1,3 @@
-"""Shared test helpers: captured `get_window_state` results and their snapshots, and small images
-with a PNG encoder for the decoder and the pixel judges."""
-
 from __future__ import annotations
 
 import json
@@ -20,13 +17,11 @@ type FixtureName = Literal["calculator", "textedit"]
 
 
 def raw_fixture(name: FixtureName) -> JsonObject:
-    """A cleaned-up `get_window_state` capture, plus its `pid` and `window_id`."""
     data: JsonObject = json.loads((FIXTURES / f"{name}.window-state.json").read_text(encoding="utf-8"))
     return data
 
 
 def fixture_ids(raw: JsonObject) -> tuple[int, int]:
-    """The capture's `pid` and `window_id`."""
     pid, window_id = raw["pid"], raw["window_id"]
     assert isinstance(pid, int)
     assert isinstance(window_id, int)
@@ -34,18 +29,15 @@ def fixture_ids(raw: JsonObject) -> tuple[int, int]:
 
 
 def snap_fixture(name: FixtureName) -> Snapshot:
-    """The snapshot built from a capture."""
     raw = raw_fixture(name)
     return build_snapshot(raw, *fixture_ids(raw))
 
 
 def blank(w: int, h: int, v: int = 255) -> Rgba:
-    """A `w` x `h` image of gray level `v`, opaque."""
     return Rgba(w, h, bytes([v]) * (w * h * 4))
 
 
 def paint(img: Rgba, x0: int, y0: int, x1: int, y1: int, v: int) -> Rgba:
-    """`img` with the box `[x0, x1) x [y0, y1)` painted gray level `v` (alpha kept)."""
     data = bytearray(img.data)
     for y in range(y0, y1):
         for x in range(x0, x1):
@@ -69,10 +61,6 @@ def _paeth_predictor(a: int, b: int, c: int) -> int:
 
 
 def encode_png(img: Rgba, *, color_type: int = 2, filters: Sequence[int] = (0, 2, 1)) -> bytes:
-    """A PNG of `img` (8-bit, one IDAT). Row `y` uses filter `filters[y % len(filters)]`.
-
-    Gray types take the red channel as the gray level.
-    """
     channels = _CHANNELS_OF[color_type]
     stride = img.width * channels
     raw = bytearray()

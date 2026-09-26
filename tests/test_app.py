@@ -28,8 +28,6 @@ CALC = AppTarget(bundle_id="com.apple.calculator")
 
 
 class SeqRunner:
-    """A runner answering each argv from a queue, one answer per call (the last one repeats)."""
-
     def __init__(self, answers: Mapping[tuple[str, ...], Sequence[Completed | Exception]]) -> None:
         self.answers = {k: list(v) for k, v in answers.items()}
         self.calls: list[tuple[str, ...]] = []
@@ -90,9 +88,6 @@ def w(**fields: object) -> Window:
     return Window(window_id=window_id, pid=pid, title=title, z_index=z, layer=layer, is_on_screen=shown)
 
 
-# resolve_bundle ---------------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     ("app", "expected"),
     [
@@ -114,9 +109,6 @@ def test_resolve_bundle(app: str | None, expected: str | None) -> None:
     assert resolve_bundle(app) == expected
 
 
-# pick_window -------------------------------------------------------------------------------------
-
-
 def test_pick_window_prefers_titled_then_front_most() -> None:
     a = w(window_id=1, layer=1, title="A")
     untitled = w(window_id=2, title="", z_index=5)
@@ -132,7 +124,7 @@ def test_pick_window_with_a_title_hint_ignores_screen_and_order() -> None:
     b2 = w(window_id=4, title="B2", z_index=9)
     assert pick_window([a, b_off, b2], "B") is b_off
     assert pick_window([a, b_off], "A") is None
-    assert pick_window([a, b_off], "") is None  # an empty hint is no hint; b_off is off screen
+    assert pick_window([a, b_off], "") is None
 
 
 def test_pick_window_ranks_a_missing_z_index_as_minus_one() -> None:
@@ -142,16 +134,13 @@ def test_pick_window_ranks_a_missing_z_index_as_minus_one() -> None:
     y_low = w(window_id=2, title="Y", z_index=-2)
     assert pick_window([x, y_low]) is x
     same = w(window_id=3, title="Z")
-    assert pick_window([x, same]) is x  # ties keep their order
+    assert pick_window([x, same]) is x
 
 
 def test_pick_window_counts_a_missing_layer_as_zero() -> None:
     assert pick_window([w(window_id=1, title="T")]) is not None
     assert pick_window([w(window_id=1, title="T", layer=3)]) is None
     assert pick_window([]) is None
-
-
-# running_pid ---------------------------------------------------------------------------------------
 
 
 async def test_running_pid_asks_launch_services_by_bundle() -> None:
@@ -180,9 +169,6 @@ async def test_running_pid_is_none_on_failure_or_without_a_pid() -> None:
     assert await running_pid(CALC, runner=no_pid) is None
     failing_info = SeqRunner({FIND_CALC: [Completed(ASN, 0)], INFO: [ProcessError("boom")]})
     assert await running_pid(CALC, runner=failing_info) is None
-
-
-# ensure_app ---------------------------------------------------------------------------------------------
 
 
 async def test_a_running_app_with_a_window_is_not_launched() -> None:

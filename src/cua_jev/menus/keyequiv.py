@@ -1,17 +1,4 @@
-"""Keyboard equivalents for menu commands.
-
-A command is sent to a background app as a pid-targeted shortcut instead of through the menu bar,
-which belongs to the frontmost app and cannot be driven without activating the target. cua-driver
-does not expose AXMenuItemCmdChar, so the shortcut has to be known up front. Sources, in order:
-
-- ``learned``: read from the app's own main nib (see `cua_jev.menus.menukeys`), without
-  Accessibility and without activation. Covers any shortcut the app declares, in the user's language.
-- ``standard``: the stock AppKit menu commands and their shortcuts (the Xcode MainMenu template,
-  TextEdit and Apple's HIG), matched by title in English or Japanese. Toggle pairs (Show/Hide
-  Ruler) share a shortcut, so a stale title still maps to the right key.
-- ``convention``: the leading run of items in the View menu, which macOS apps number Cmd-1,
-  Cmd-2, ... (Finder, Calculator, Mail, Notes). It is a guess, so its effect is always verified.
-"""
+"""Keyboard equivalents for menu commands."""
 
 from __future__ import annotations
 
@@ -75,11 +62,8 @@ _STANDARD: Final[tuple[tuple[tuple[str, ...], tuple[str, ...]], ...]] = (
     (("New", "新規", "New Document", "新規書類"), ("cmd", "n")),
 )
 
-# Items AppKit adds or rewires at run time, so an app's nib does not show them. A document-based app
-# that autosaves gets "Duplicate" on Shift-Cmd-S, and the nib's "Save As..." becomes its Option
-# alternate. Used only when the live menu shows the runtime item (see `key_equivalent`).
+# Items AppKit adds at run time: an autosaving app's Duplicate takes Save As's Shift-Cmd-S.
 _RUNTIME: Final = ((("Duplicate", "複製"), ("cmd", "shift", "s")),)
-# The shortcut a nib item keeps once a runtime item took its own: Save As -> Option-Shift-Cmd-S.
 _DISPLACED: Final = ((("Save As", "別名で保存"), ("cmd", "option", "shift", "s")),)
 
 _TRAILING_ELLIPSIS: Final = re.compile(f"(?:\N{HORIZONTAL ELLIPSIS}|\\.\\.\\.){WS}*\\Z")
@@ -100,7 +84,6 @@ def _by_title(rows: Sequence[tuple[tuple[str, ...], tuple[str, ...]]]) -> Mappin
 
 
 def _english_names() -> Mapping[str, str]:
-    """Localized title -> English name of the same stock command (toggle titles pair up in order)."""
     out: dict[str, str] = {}
     for titles, _keys in _STANDARD:
         english = [t for t in titles if _PRINTABLE_ASCII.fullmatch(t)]
@@ -117,11 +100,7 @@ _ENGLISH: Final = _english_names()
 
 
 def english_title(leaf: str, learned: MenuKeyTable | None = None) -> str | None:
-    """The English name of a localized menu command ("ページサイズで表示" -> "Wrap to Page").
-
-    The stock command list comes first (it knows both titles of a toggle), then the app's own nib
-    when its keys were learned.
-    """
+    """The English name of a localized menu command."""
     found = _ENGLISH.get(normalize_title(leaf))
     if found is not None:
         return found
@@ -147,11 +126,7 @@ def _same_keys(a: Sequence[str] | None, b: Sequence[str]) -> bool:
 def key_equivalent(
     path: Sequence[str], menu: Sequence[HasPath], learned: MenuKeyTable | None = None
 ) -> KeyEquivalent | None:
-    """The shortcut for the menu item at `path`, or None.
-
-    `menu` is the whole observed menu, needed for the View-menu convention (item order) and for
-    shortcuts AppKit moves at run time; `learned` is the app's own table when known.
-    """
+    """The shortcut for the menu item at `path`, or None."""
     leaf = _last(path)
     if not leaf:
         return None
@@ -160,8 +135,7 @@ def key_equivalent(
         own = learned.lookup(path)
         if own is not None:
             return _learned_key(path, own.keys, menu, learned)
-    # Only in the pattern AppKit builds (the runtime item next to the item it displaced): elsewhere
-    # "Duplicate" is an app's own command with its own shortcut (Cmd-D in a file browser).
+    # Only next to the item it displaced; elsewhere Duplicate is the app's own command.
     runtime = _RUNTIME_BY_TITLE.get(normalize_title(leaf))
     if runtime is not None and any(
         _top(m.path) == top and normalize_title(_last(m.path)) in _DISPLACED_BY_TITLE for m in menu
@@ -183,12 +157,7 @@ def key_equivalent(
 def _learned_key(
     path: Sequence[str], own: Sequence[str], menu: Sequence[HasPath], learned: MenuKeyTable
 ) -> KeyEquivalent | None:
-    """The app's own shortcut for `path`, unless AppKit handed it to an item added at run time.
-
-    Save As's Shift-Cmd-S goes to Duplicate in an autosaving app: sending it would run the other
-    command. The displaced shortcut is used when one is known, else none (the command then cannot
-    run in the background).
-    """
+    """AppKit may hand a shortcut to an item added at run time (Save As's Shift-Cmd-S goes to Duplicate)."""
     taken = any(
         _top(m.path) == path[0]
         and _joined(m.path) != _joined(path)
@@ -205,10 +174,7 @@ def _learned_key(
 
 
 def view_modes(path: Sequence[str], menu: Sequence[HasPath]) -> list[str] | None:
-    """The sibling views when `path` is one of the View menu's leading modes (two or more), else None.
-
-    Used to tell Jev that switching the view changes which controls the window shows.
-    """
+    """The sibling views when `path` is one of the View menu's leading modes (two or more), else None."""
     if len(path) != 2 or not _VIEW_MENU.fullmatch(path[0]):
         return None
     run = _view_mode_run(path[0], menu)
@@ -216,11 +182,6 @@ def view_modes(path: Sequence[str], menu: Sequence[HasPath]) -> list[str] | None
 
 
 def _view_mode_run(top: str, menu: Sequence[HasPath]) -> list[str]:
-    """The leading View-menu items that read as modes.
-
-    Direct leaves in menu order, up to the first one that opens a dialog (a trailing ellipsis),
-    opens a submenu, or has a standard shortcut of its own.
-    """
     parents = {_joined(m.path[:-1]) for m in menu}
     out: list[str] = []
     for m in menu:

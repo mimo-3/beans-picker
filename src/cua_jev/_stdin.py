@@ -1,10 +1,4 @@
-"""Standard input for the MCP transport, read so that a signal can end serving at once.
-
-A read from a pipe blocks until the client writes or closes it, and a read blocked in an ordinary
-worker thread cannot be interrupted: shutting down on SIGINT/SIGTERM would wait for the next line.
-`StdinLines` reads on a daemon thread of its own that nothing waits for, so cancelling `readline`
-returns immediately and the process can exit while the thread is still blocked.
-"""
+"""Standard input for the MCP transport, read so that a signal can end serving at once."""
 
 from __future__ import annotations
 
@@ -20,8 +14,7 @@ _CHUNK: Final = 65536
 
 
 class StdinLines(anyio.AsyncFile[str]):
-    """Lines of a descriptor (standard input by default) as UTF-8 text, each with its newline; an
-    empty string at end of input, as from a file."""
+    """Lines of a descriptor as UTF-8 text; an empty string at end of input, as from a file."""
 
     def __init__(self, fd: int = 0) -> None:
         own = fcntl.fcntl(fd, fcntl.F_DUPFD_CLOEXEC, 3)
@@ -42,12 +35,11 @@ class StdinLines(anyio.AsyncFile[str]):
             pump.start()
         line = await self._lines.get()
         if not line:
-            self._lines.put_nowait(line)  # end of input stays the answer
+            self._lines.put_nowait(line)
         return line
 
 
 def _pump(fd: int, loop: asyncio.AbstractEventLoop, lines: asyncio.Queue[str]) -> None:
-    """Reads `fd` to its end, handing each line to the loop; closes `fd` when done."""
     pending = bytearray()
     try:
         while chunk := os.read(fd, _CHUNK):
@@ -67,7 +59,6 @@ def _pump(fd: int, loop: asyncio.AbstractEventLoop, lines: asyncio.Queue[str]) -
 
 
 def _deliver(loop: asyncio.AbstractEventLoop, lines: asyncio.Queue[str], line: str) -> bool:
-    """Queues `line` on the loop's thread; False once the loop is gone."""
     try:
         loop.call_soon_threadsafe(lines.put_nowait, line)
     except RuntimeError:

@@ -1,7 +1,4 @@
-"""Fail unless every given wheel ships the native helper sources and the typing marker.
-
-python scripts/check_wheel.py dist/*.whl
-"""
+"""Fail unless every given wheel ships the native helper sources and the typing marker."""
 
 from __future__ import annotations
 

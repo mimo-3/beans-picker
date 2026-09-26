@@ -48,7 +48,6 @@ def test_depth_follows_the_indentation_width() -> None:
     md = "- [0] AXWindow\n    - [1] AXButton\n   - [2] AXButton\n\t- [3] AXButton"
     nodes = parse_tree_markdown(md)
     assert [n.depth for n in nodes] == [0, 2, 1.5, 0.5]
-    # A shallower row closes the deeper ones; a row at the same depth closes its sibling.
     assert [n.parent_line for n in nodes] == [None, 0, 0, 0]
 
 
@@ -102,7 +101,7 @@ def test_a_row_needs_a_numeric_index_or_none() -> None:
     ("rest", "expected"),
     [
         ('"t" (l) = "v" [id=a]', {"title": "t", "label": "l", "value": "v", "identifier": "a"}),
-        ('(l) "t" [id=a]', {"label": "l"}),  # a title after the label is not read, nor what follows
+        ('(l) "t" [id=a]', {"label": "l"}),
         ('= "v" (l) [id=a]', {"value": "v"}),
         ('[id=Delete help="x" actions=[press]]', {"identifier": "Delete", "help": "x"}),
         ("[id=closeAll: actions=[press]]", {"identifier": "closeAll:"}),

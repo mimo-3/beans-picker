@@ -1,7 +1,4 @@
-"""Settings read from the environment and from `.env.local` / `.env` files.
-
-Environment values are read on every call, so values loaded by `load_env` later still apply.
-"""
+"""Settings read from the environment and from `.env.local` / `.env` files."""
 
 from __future__ import annotations
 
@@ -24,7 +21,6 @@ DEFAULT_MODEL: Final = "jev-latest"
 DEFAULT_EFFECT_RETAKES: Final = 5
 DEFAULT_LOG_LEVEL: Final = "WARNING"
 
-# Jev requests are retried this many times on retryable failures.
 JEV_RETRIES: Final = 3
 
 _PACKAGE_DIR: Final = Path(__file__).resolve().parent
@@ -36,13 +32,7 @@ _LINE_SPLIT_RE: Final = re.compile(r"\r?\n")
 
 
 def load_env(directory: Path) -> None:
-    """Set variables from `directory/.env.local`, then `directory/.env`.
-
-    A variable already in the environment (even as an empty string) is never overridden, so
-    `.env.local` wins over `.env` and the real environment wins over both. Each line is
-    `[export ]NAME=value`; one pair of matching surrounding quotes is removed from the value and
-    nothing else is interpreted (no escapes, no inline comments). Other lines are ignored.
-    """
+    """Set variables from `directory/.env.local`, then `directory/.env`."""
     for name in ENV_FILES:
         path = directory / name
         if not path.is_file():
@@ -60,8 +50,7 @@ def load_env(directory: Path) -> None:
 
 
 def checkout_root(package_dir: Path = _PACKAGE_DIR) -> Path | None:
-    """The source checkout this package runs from, if any: `<root>` when the package directory is
-    `<root>/src/cua_jev` and `<root>/pyproject.toml` declares the `cua-jev` project."""
+    """The source checkout this package runs from, if it runs from one."""
     if package_dir.name != "cua_jev" or package_dir.parent.name != "src":
         return None
     root = package_dir.parent.parent
@@ -83,8 +72,7 @@ def config_dir() -> Path:
 
 
 def env_dirs(package_dir: Path = _PACKAGE_DIR) -> list[Path]:
-    """Directories whose env files are loaded, in order: the cua-jev checkout this package runs
-    from (only when it is one), then the user config directory."""
+    """Directories whose env files are loaded, in order: the source checkout, then the config directory."""
     dirs: list[Path] = []
     root = checkout_root(package_dir)
     if root is not None:
@@ -112,9 +100,7 @@ def driver_bin() -> str:
 
 
 def effect_retakes() -> int:
-    """How many fresh snapshots act takes after an action before judging it; a state signature
-    unchanged across all of them is `no_effect`. `CUA_JEV_EFFECT_RETAKES` when it denotes a
-    positive integer, else 5."""
+    """How many fresh snapshots act takes before judging an action's effect."""
     raw = os.environ.get("CUA_JEV_EFFECT_RETAKES")
     n = parse_number(raw) if raw is not None else math.nan
     if math.isfinite(n) and n == math.floor(n) and n > 0:
@@ -148,7 +134,6 @@ class Thresholds:
 
 THRESHOLDS: Final = Thresholds()
 
-# App names (lowercase) the tools accept in place of a bundle id.
 APP_BUNDLES: Final[Mapping[str, str]] = MappingProxyType(
     {
         "calculator": "com.apple.calculator",

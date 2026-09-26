@@ -28,7 +28,6 @@ def first(cands: list[ActionCandidate], kind: str, label: str | None = None) -> 
 
 
 def popup_window(value: str, is_open: bool) -> Snapshot:
-    """A window with one pop-up button showing `value`, its menu of Small / Medium / Large open or not."""
     items = ["Small", "Medium", "Large"]
     elements: list[JsonValue] = [
         el(0, "AXWindow", title="Form"),
@@ -62,17 +61,14 @@ def _field_window(title: str, role: str, label: str, value: str, signature: str)
 
 
 def number_window(value: str) -> Snapshot:
-    """A web page with one number field reading `value` exactly."""
     return _field_window("Order", "AXIncrementor", "Quantity", value, f"qty:{value}")
 
 
 def text_window(value: str) -> Snapshot:
-    """A web page with one text field reading `value` exactly."""
     return _field_window("Tickets", "AXTextField", "Seats", value, f"seats:{value}")
 
 
 def row_window() -> Snapshot:
-    """A file row with no frame (so no pixel point for it)."""
     elements: list[JsonValue] = [
         el(0, "AXWindow", title="Team drive"),
         el(1, "AXOutline", 0, 1, label="Folders"),
@@ -220,7 +216,6 @@ async def test_retypes_a_web_text_field_whose_page_ignored_the_axvalue_write(tmp
     assert session.fake_driver.tools == ["set_value", "press_key", "press_key", "type_text"]
     assert out["status"] == "done"
     assert '"210"' in out["message"]
-    # The app's pages ignore AXValue writes: the next field is typed into straight away.
     session.calls.clear()
     again = await act_tool(
         session, {"pid": 1, "instruction": "set seats to 12", "candidateId": set_value.id, "text": "12"}
@@ -271,7 +266,6 @@ async def test_runs_the_steps_in_then_on_the_window_each_step_left_and_stops_at_
     )
     assert out["status"] == "done"
     assert [s["status"] for s in out["steps"]] == ["done", "done"]
-    # One snapshot before the first step and one after each: the second step starts from the first's.
     assert session.snapshots == 3
     stopped = await act_tool(
         session,

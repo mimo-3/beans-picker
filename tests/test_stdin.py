@@ -28,5 +28,5 @@ async def test_a_blocked_read_is_cancelled_at_once() -> None:
         await asyncio.wait_for(asyncio.wait({reading}), 1)
         assert reading.cancelled()
     finally:
-        os.close(write_end)  # ends the reader thread
+        os.close(write_end)
         os.close(read_end)

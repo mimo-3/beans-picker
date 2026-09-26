@@ -1,5 +1,3 @@
-"""Typed fakes for the seams in `cua_jev` (no unittest.mock in the core suite)."""
-
 from __future__ import annotations
 
 import inspect
@@ -14,13 +12,6 @@ from cua_jev.errors import DriverError, ProcessError
 
 
 class FakeRunner:
-    """A `Runner` answering from a table keyed by the full argv.
-
-    A `Completed` entry is returned (a non-zero exit raises ProcessError when `check` is set, as
-    the real runner does); an exception entry is raised; an argv not in the table raises
-    ProcessError. Every call is recorded in `calls` (argv) and `cwds`.
-    """
-
     def __init__(self, outputs: Mapping[tuple[str, ...], Completed | Exception] | None = None) -> None:
         self.outputs: dict[tuple[str, ...], Completed | Exception] = dict(outputs or {})
         self.calls: list[tuple[str, ...]] = []
@@ -55,8 +46,6 @@ def fake_runner(outputs: Mapping[tuple[str, ...], Completed | Exception] | None 
 
 
 class RecordingSleep:
-    """A `Sleep` that returns at once and records each requested delay (seconds)."""
-
     def __init__(self) -> None:
         self.delays: list[float] = []
 
@@ -65,8 +54,6 @@ class RecordingSleep:
 
 
 class FakeClock:
-    """A `Clock` that only moves when told to."""
-
     def __init__(self, start: float = 0.0) -> None:
         self.now = start
 
@@ -78,7 +65,6 @@ class FakeClock:
 
 
 async def no_front() -> int | None:
-    """A front sampler that never sees any app in front."""
     return None
 
 
@@ -86,12 +72,6 @@ type OnCall = Callable[[str, dict[str, object]], ToolResult | Awaitable[ToolResu
 
 
 class FakeDriver:
-    """A `Driver` that records every call and answers through `on_call` (sync or async).
-
-    The default answer is `ToolOk(data={"effect": "confirmed"}, text="", ms=1)`. `on_call` may
-    also raise. The sentinel never sees an app in front unless a test replaces it.
-    """
-
     def __init__(self, on_call: OnCall | None = None) -> None:
         self.on_call = on_call
         self.calls: list[tuple[str, dict[str, object]]] = []

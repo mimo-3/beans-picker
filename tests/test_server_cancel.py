@@ -1,5 +1,3 @@
-"""A request the client cancels still runs to the end, and the next one waits for it."""
-
 from __future__ import annotations
 
 import asyncio
@@ -19,8 +17,6 @@ from tests.tool_fakes import shown
 
 
 class ScriptedSession(Session):
-    """A real Session whose windows come from a fixture instead of cua-driver."""
-
     def __init__(self, driver: FakeDriver, snaps: list[Snapshot], cache: Path) -> None:
         async def connect() -> FakeDriver:
             return driver
@@ -66,10 +62,10 @@ async def test_a_cancelled_act_finishes_before_the_next_call_acts(tmp_path: Path
         await client.notify("notifications/cancelled", {"requestId": first, "reason": "user"})
         second = await client.send_call("act", args)
         await asyncio.sleep(0.05)
-        assert driver.tools == ["click"]  # the second act has not started
+        assert driver.tools == ["click"]
         release.set()
         result = await asyncio.wait_for(client.result(second), 2)
-        assert not client.answered(first)  # a cancelled request gets no answer
+        assert not client.answered(first)
     assert finished == ["first click done"]
     assert driver.tools == ["click", "click"]
     assert result["isError"] is False

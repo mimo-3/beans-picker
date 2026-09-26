@@ -28,8 +28,6 @@ APPLE_LOGO = chr(0xF8FF)
 
 @dataclass(frozen=True)
 class Item:
-    """A menu item as key lookup sees it."""
-
     path: list[str]
 
 
@@ -37,7 +35,6 @@ def raw(path: list[str], key: str, top: int, mods: list[str] | None = None) -> R
     return RawMenuKey(path=path, key=key, mods=mods if mods is not None else ["cmd"], top=top)
 
 
-# Shape of the menukeys helper's output for TextEdit, in Japanese and in English.
 LOCAL = [
     raw(["TextEdit", "テキストエディットを非表示"], "h", 0),
     raw(["フォーマット", "フォント", "大きく"], "+", 4),
@@ -174,7 +171,6 @@ class TestStandardKeys:
         assert key_equivalent(["File", "Save As\N{HORIZONTAL ELLIPSIS}"], menu, table) == KeyEquivalent(
             keys=["cmd", "option", "shift", "s"], source="standard"
         )
-        # Without Duplicate in the menu, the nib's own shortcut stands.
         assert key_equivalent(["File", "Save As"], [Item(["File", "Save As"])], table) == KeyEquivalent(
             keys=["cmd", "shift", "s"], source="learned"
         )
@@ -182,7 +178,6 @@ class TestStandardKeys:
     def test_a_taken_learned_shortcut_without_a_displaced_one_is_dropped(self) -> None:
         table = table_from([raw(["File", "Export"], "S", 1)])
         assert key_equivalent(["File", "Export"], [Item(["File", "Duplicate"])], table) is None
-        # A runtime item the nib itself declares is not taking anything.
         both = table_from([raw(["File", "Export"], "S", 1), raw(["File", "Duplicate"], "d", 1)])
         found = key_equivalent(["File", "Export"], [Item(["File", "Duplicate"])], both)
         assert found is not None
@@ -288,7 +283,6 @@ class TestMenuKeys:
         assert len(cached) == 1
         assert len(cached[0].stem.removeprefix("table-")) == 16
 
-        # A new session reads the table from the disk cache instead of running the helper.
         again = learning_runner(bundle, helper)
         fresh = await MenuKeys(FakeHelpers(helper), paths, runner=again).learn(PID)
         assert fresh is not None

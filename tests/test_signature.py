@@ -95,6 +95,5 @@ def test_a_lone_surrogate_hashes_as_the_replacement_character() -> None:
     lone = _snap(window_title="\ud800")
     replaced = _snap(window_title="\ufffd")
     assert state_signature(lone) == state_signature(replaced)
-    # Its exact text is written as a JSON escape, not as the character.
     exact = _snap([_node("a", raw_value="\ud83d", exact=True)])
     assert state_signature(exact) == _sha(["Doc", "n0", "-", 'x:a="\\ud83d"'])

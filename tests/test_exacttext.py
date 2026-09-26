@@ -15,8 +15,6 @@ from tests.fakes import FakeClock, fake_runner
 
 
 class _App:
-    """An `AxtextBuild` with a fixed answer."""
-
     def __init__(self, app: Path | None) -> None:
         self.app = app
 
@@ -28,9 +26,6 @@ type _Answer = Completed | Exception | Callable[[tuple[str, ...]], Completed]
 
 
 class _Runner:
-    """Answers the direct run and `open` from lists (first entry first, the last one repeated);
-    records argv and max_bytes."""
-
     def __init__(self, direct: Sequence[_Answer], via_app: Sequence[_Answer] = ()) -> None:
         self.direct = list(direct)
         self.via_app = list(via_app)
@@ -111,7 +106,6 @@ async def test_falls_back_to_the_helper_app_and_keeps_using_it(app: Path, paths:
     assert out.name.endswith(".json")
     assert not _exists(out)
     assert runner.max_bytes[1] == DEFAULT_MAX_BYTES
-    # The app worked, so the next read goes straight to it.
     await reader.read_fields(5)
     assert [c[0] for c in runner.calls] == [str(app / "Contents" / "MacOS" / "axtext"), "open", "open"]
 
@@ -154,10 +148,10 @@ async def test_a_direct_read_after_the_app_way_stopped_working(app: Path, paths:
     clock = FakeClock()
     runner = _Runner([FAILED, Completed(FIELDS, 0)], [_writes(FIELDS), _silent])
     reader = _reader(app, paths, runner, clock)
-    assert await reader.read_fields(1) is not None  # direct fails, app works
-    assert await reader.read_fields(1) is None  # app only: it now writes nothing
+    assert await reader.read_fields(1) is not None
+    assert await reader.read_fields(1) is None
     clock.advance(30)
-    assert await reader.read_fields(1) is not None  # direct is probed again
+    assert await reader.read_fields(1) is not None
     assert [c[0] for c in runner.calls] == [
         str(app / "Contents" / "MacOS" / "axtext"),
         "open",
@@ -180,9 +174,6 @@ async def test_prompt_for_access(app: Path) -> None:
     assert len(runner.calls) == 1
     with pytest.raises(ProcessError):
         await prompt_for_access(_App(app), runner=fake_runner({}))
-
-
-# apply_exact_text
 
 
 def _node(role: str, raw_value: str | None = None, raw_label: str | None = None) -> UINode:
@@ -216,7 +207,6 @@ def test_fields_of_the_window_are_preferred_over_others() -> None:
         "Doc",
     )
     assert (field.raw_value, field.exact) == ("b ", True)
-    # With no field of that window, every field is considered.
     other = _node("AXTextField", "a")
     apply_exact_text([other], [{"window": "Other", "role": "AXTextField", "value": " a"}], "Doc")
     assert other.raw_value == " a"
@@ -292,7 +282,6 @@ def test_entries_that_are_not_objects_match_nothing() -> None:
 def test_a_field_without_text_is_refused_when_its_text_is_compared() -> None:
     with pytest.raises(TypeError):
         apply_exact_text([_node("AXTextField", "a")], [{"window": "W", "role": "AXTextField"}], "W")
-    # A node without a value pairs by role alone and takes the entry as it is.
     stepper = _node("AXIncrementor")
     apply_exact_text([stepper], [{"window": "W", "role": "AXIncrementor", "value": 3}], "W")
     assert (stepper.raw_value, stepper.value, stepper.exact) == ("3", "3", True)

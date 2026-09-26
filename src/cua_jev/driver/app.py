@@ -1,5 +1,4 @@
-"""App and window resolution. Launching goes through cua-driver's `launch_app`, which never
-activates the app."""
+"""App and window resolution."""
 
 from __future__ import annotations
 
@@ -20,13 +19,9 @@ from cua_jev.errors import AppLaunchError
 if TYPE_CHECKING:
     from cua_jev.driver.mcp import Driver
 
-# At least three dot-separated parts of ASCII word characters and hyphens: `com.apple.TextEdit`.
 _BUNDLE_ID: Final = re.compile(f"[{WORD_CLASS_BODY}-]+(?:\\.[{WORD_CLASS_BODY}-]+){{2,}}\\Z")
-# A LaunchServices application serial number, as `lsappinfo find` prints it.
 _ASN: Final = re.compile(f'ASN:[^{WS_CLASS_BODY}:"]+')
 
-# A just-launched app shows its window after a moment: the window list is read again, this many
-# times, this far apart.
 WINDOW_CHECKS: Final = 34
 WINDOW_CHECK_INTERVAL_S: Final = 0.15
 
@@ -56,11 +51,7 @@ def resolve_bundle(app: str | None) -> str | None:
 
 
 async def running_pid(target: AppTarget, *, runner: Runner = run) -> int | None:
-    """The pid of a running app, from LaunchServices (`lsappinfo`).
-
-    cua-driver's `list_apps` and `get_accessibility_tree` walk every app's accessibility tree, and
-    one unresponsive app makes them hang; LaunchServices answers without asking any app.
-    """
+    """The pid of a running app, from LaunchServices (`lsappinfo`)."""
     query = f"bundleid={target.bundle_id}" if target.bundle_id is not None else f"name={target.name or ''}"
     try:
         found = await runner(("lsappinfo", "find", query))
@@ -75,11 +66,7 @@ async def running_pid(target: AppTarget, *, runner: Runner = run) -> int | None:
 
 
 def pick_window(windows: Sequence[Window], title: str | None = None) -> Window | None:
-    """The window matching the title hint, else the front-most on-screen layer-0 window.
-
-    A titled window goes before an untitled one: an untitled layer-0 surface (a transient overlay
-    the app left on screen) can have no accessibility window behind it at all.
-    """
+    """The window matching the title hint, else the front-most on-screen layer-0 window."""
     usable = [w for w in windows if (w.layer if w.layer is not None else 0) == 0]
     if title:
         return next((w for w in usable if title in (w.title or "")), None)
@@ -102,10 +89,7 @@ async def ensure_app(
     runner: Runner = run,
     sleep: Sleep = asyncio.sleep,
 ) -> AppContext:
-    """The target app's pid and window, launching it in the background when needed.
-
-    Raises AppLaunchError when the app cannot be launched or shows no window.
-    """
+    """The target app's pid and window, launching it in the background when needed."""
     running = await running_pid(target, runner=runner)
     launched: _Launched | None = None
     # launch_app costs ~3 s even for a running app; skip it when the app already shows a usable window.
@@ -121,8 +105,7 @@ async def ensure_app(
         elif target.name is not None:
             args["name"] = target.name
         r = await driver.call("launch_app", args)
-        # The launch can land while the driver's reply does not (its daemon gives up on a reply
-        # after a while): what counts is whether the app is running now.
+        # The daemon may drop the reply after launching; what counts is whether the app runs now.
         pid = get_int(r.data, "pid") if r.ok else await running_pid(target, runner=runner)
         if pid is None:
             wanted = target.bundle_id if target.bundle_id is not None else target.name
@@ -139,7 +122,6 @@ async def ensure_app(
 
 
 def _shown(value: str | None) -> str:
-    """A possibly absent name as it appears in a message: an absent one reads `undefined`."""
     return "undefined" if value is None else value
 
 
@@ -152,7 +134,6 @@ async def _list_windows(driver: Driver, pid: int) -> list[Window]:
 
 
 async def _wait_for_window(driver: Driver, pid: int, initial: list[Window], sleep: Sleep) -> Window | None:
-    """Check the window list a fixed number of times, reading it again after each check."""
     windows = initial
     for _ in range(WINDOW_CHECKS):
         if (w := pick_window(windows)) is not None:

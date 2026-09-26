@@ -7,8 +7,6 @@ from typing import Protocol
 
 
 class KeyParts(Protocol):
-    """What a stable key is made of."""
-
     @property
     def role(self) -> str: ...
     @property
@@ -25,10 +23,7 @@ def key_of(role: str, identifier: str | None, label: str, within: Sequence[str])
 
 
 def stable_key(n: KeyParts) -> str:
-    """The node's identity: role, identifier, label and nearest named containers.
-
-    `AXButton||OK|AXSheet: Save>AXWindow: Doc` for an OK button without identifier in a sheet.
-    """
+    """The node's identity: role, identifier, label and nearest named containers."""
     return key_of(n.role, n.identifier, n.label, n.within)
 
 

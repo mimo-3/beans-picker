@@ -1,10 +1,3 @@
-"""Smoke tests against real windows through a real cua-driver: Calculator and the bench fixture app.
-
-They run only on a Mac with `CUA_JEV_E2E=1` (plus cua-driver installed and a Jev key). Settings come
-from the same env files the server reads. Calculator is left open afterwards; the fixture app is
-built if needed, launched in the background with its own state file and quit afterwards.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +29,6 @@ pytestmark = [
 
 @pytest.fixture
 def real_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """The caller's environment and env files, as the installed server would see them; restored afterwards."""
     for name, value in _REAL_ENV.items():
         monkeypatch.setenv(name, value)
     before = dict(os.environ)
@@ -72,8 +64,6 @@ def _candidate_id(observed: JsonObject, marker: str, kind: str = "click") -> str
 
 @pytest.mark.usefixtures("real_env")
 async def test_observe_act_and_extract_on_calculator() -> None:
-    """Observe without an instruction, press 7 by candidateId after clearing, then read the display back."""
-
     session = Session()
     try:
         async with Client(create_server(session), mode="legacy") as client:
@@ -103,7 +93,6 @@ _FIXTURE_APP = Path.home() / "Library" / "Caches" / "cua-jev" / "fixture" / "Cua
 
 @pytest.fixture
 def fixture_app(tmp_path: Path) -> Iterator[tuple[int, Path]]:
-    """The fixture app's pid and state file, launched in the background with a window of its own."""
     subprocess.run(["sh", str(_ROOT / "bench" / "fixture-app" / "build.sh")], check=True, capture_output=True)
     state = tmp_path / "state.json"
     title = f"cua-jev e2e {os.getpid()}"
@@ -131,7 +120,6 @@ def _fixture_pids() -> list[int]:
 
 
 async def _state(path: Path, key: str, want: str) -> str:
-    """The fixture's saved `key`, once it reads `want` (it saves on every change) or after a short wait."""
     got = ""
     for _ in range(20):
         value = json.loads(await anyio.Path(path).read_text(encoding="utf-8")).get(key)
@@ -151,8 +139,6 @@ def _ids(observed: JsonObject) -> list[str]:
 
 @pytest.mark.usefixtures("real_env")
 async def test_text_entry_on_a_placeholder_field_is_verified_and_ids_stay(fixture_app: tuple[int, Path]) -> None:
-    """Text typed into a field named only by its placeholder is read back exactly in that field, and
-    the window's candidate ids are the same before and after, so an id from the first observe still works."""
     pid, state = fixture_app
     session = Session()
     try:

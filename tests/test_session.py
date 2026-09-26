@@ -113,7 +113,7 @@ async def test_snapshot_observes_the_target_window(tmp_path: Path) -> None:
     snap = await s.snapshot(Target(1001, 567))
     assert (snap.pid, snap.window_id, snap.window_title) == (1001, 567, "\u8a08\u7b97\u6a5f")
     assert "get_window_state" in driver.tools
-    assert s.menu_keys.table_for(1001) is None  # the helper could not be built here
+    assert s.menu_keys.table_for(1001) is None
 
 
 async def test_exclusive_runs_calls_one_at_a_time_in_order(tmp_path: Path) -> None:
@@ -241,7 +241,7 @@ async def test_close_cancels_the_running_call_drops_queued_ones_and_closes_every
     assert driver.closed
     assert jev.closed
     assert not driver.sentinel.watching
-    await s.close()  # a second close does nothing
+    await s.close()
     with pytest.raises(CuaJevError, match="server is shutting down"):
         await s.exclusive(queued)
 

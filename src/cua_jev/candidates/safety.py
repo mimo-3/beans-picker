@@ -1,9 +1,4 @@
-"""Code-level marking of destructive actions.
-
-act never runs a destructive action without allowDestructive, whoever picked it. Every pattern with
-a word boundary or a case-insensitive English word is ASCII-only: a word boundary sits next to
-``[A-Za-z0-9_]`` only, and only ASCII letters fold case.
-"""
+"""Code-level marking of destructive actions."""
 
 from __future__ import annotations
 
@@ -31,7 +26,6 @@ _AVOID: Final = re.compile(
     _FLAGS,
 )
 
-# Roles whose only action here is entering text into the field itself.
 _TEXT_ENTRY_ROLES: Final = frozenset({"AXTextField", "AXTextArea", "AXSearchField", "AXComboBox"})
 
 # A closing parenthesis or bracket key types a character; "close" there closes nothing.
@@ -39,9 +33,7 @@ _CLOSING_MARK: Final = re.compile(
     f"\\b(?:close|right)(?:{WS}|-)?(?:paren(?:thesis)?|bracket|brace)s?\\b|(?:右|閉じ)(?:丸)?(?:かっこ|括弧|カッコ)",
     _FLAGS,
 )
-# "Hide" in a window's own control shows or hides part of that window ("Hide Binary",
-# "バイナリを非表示"). Hiding the app or other apps happens in the app menu, never from a window
-# control, but a control named only "Hide", or "Hide Others", stays withheld.
+# "Hide" in a window control hides part of that window; hiding apps happens only in the app menu.
 _VIEW_HIDE: Final = re.compile("\\bhide\\b|非表示", _FLAGS)
 _APP_HIDE: Final = re.compile(
     f"\\A{WS}*(?:hide|非表示){WS}*\\Z"
@@ -49,17 +41,11 @@ _APP_HIDE: Final = re.compile(
     "|(?:ほか|他|その他|すべて)を非表示",
     _FLAGS,
 )
-# On an on-screen keypad, delete and clear edit only the entry shown on its display (a backspace
-# key, AC). Those words are harmless there; any other destructive word still counts.
+# On a keypad, delete and clear only edit the displayed entry.
 _ENTRY_EDIT: Final = re.compile("delete|backspace|erase|clear|削除|消去|クリア", _FLAGS)
-# A popover's own close button dismisses a transient overlay, like Escape does: nothing is closed
-# but the popover itself. Only a button whose whole label is that word, and whose parent is the
-# popover, counts; a sheet's or dialog's Close still counts as destructive, since it can discard
-# what the sheet holds.
+# A popover's own Close only dismisses it; a sheet's or dialog's Close can discard its content.
 _POPOVER_CLOSE: Final = re.compile(f"{WS}*(?:close|dismiss|閉じる){WS}*", _FLAGS)
-# A find bar's Replace and Replace All edit only the document's text, which Undo restores: when the
-# goal itself asks to replace text, they do what was asked. The same words in a sheet or dialog
-# still count (a save panel's "Replace" overwrites a file).
+# Find-bar Replace is undoable; in a sheet or dialog it can overwrite a file.
 _TEXT_REPLACE: Final = re.compile(f"\\breplace(?:{WS}+all)?\\b|すべてを置換|置換|置き換え", _FLAGS)
 
 _GOAL_REPLACES: Final = re.compile("\\breplac(?:e|es|ing)\\b|置き?換え|置換", _FLAGS)
@@ -85,10 +71,7 @@ def is_destructive_label(text: str) -> bool:
 
 
 def goal_replaces_text(goal: str) -> bool:
-    """Whether an instruction asks to replace or change existing text.
-
-    For example 'replace "cat" with "dog"', 'change "a" to "b"' or 「猫を犬に置き換えて」.
-    """
+    """Whether an instruction asks to replace or change existing text."""
     return _GOAL_REPLACES.search(goal) is not None or _GOAL_CHANGES.search(goal) is not None
 
 
@@ -118,7 +101,6 @@ def control_context(snap: Snapshot, goal: str | None = None) -> ControlContext:
 
 
 def _inside_dialog(n: UINode, by_index: dict[int, UINode]) -> bool:
-    """Whether a strict ancestor of `n` (at most 64 levels up) is a sheet or dialog."""
     p = by_index.get(n.parent) if n.parent is not None else None
     hops = 0
     while p is not None and hops < _MAX_HOPS:
@@ -130,15 +112,7 @@ def _inside_dialog(n: UINode, by_index: dict[int, UINode]) -> bool:
 
 
 def is_destructive_control(n: UINode, ctx: ControlContext | None = None) -> bool:
-    """Whether operating this control could be destructive.
-
-    A text field never is: typing changes only the field, and its name is often just its placeholder
-    or content (a "Replace" field is named after the word it shows), so filtering it by name would
-    hide the harmless input and leave the button that acts. Buttons are judged by label, identifier
-    and help together, after removing the words that are harmless in context (a closing-parenthesis
-    key, a view's own Hide toggle, a keypad's delete key, a find bar's Replace when the goal asks to
-    replace text).
-    """
+    """Whether operating this control could be destructive."""
     ctx = ctx if ctx is not None else ControlContext()
     if n.role in _TEXT_ENTRY_ROLES:
         return False
@@ -162,12 +136,7 @@ def is_destructive_control(n: UINode, ctx: ControlContext | None = None) -> bool
 
 
 def is_destructive_menu(path: Sequence[str], app_menu: str | None = None) -> bool:
-    """Whether a menu command could be destructive.
-
-    A menu's own "Hide ..." shows or hides part of the window (a toolbar, a separator). In the
-    application menu (the first menu after Apple's) it hides the app or other apps, and there it
-    still counts.
-    """
+    """Whether a menu command could be destructive."""
     text = " ".join(path)
     top = path[0] if path else None
     if top != app_menu and not any(_APP_HIDE.search(p) for p in path):
@@ -181,11 +150,7 @@ def writes_clipboard(english_leaf: str) -> bool:
 
 
 def clipboard_withheld(path: Sequence[str], goal: str, learned: MenuKeyTable | None = None) -> bool:
-    """A Cut or Copy menu item the instruction does not ask for.
-
-    Overwriting the clipboard is a side effect outside the app, so Jev is offered these only when
-    the instruction is about the clipboard (cut, copy, paste, move ...).
-    """
+    """A Cut or Copy menu item the instruction does not ask for."""
     leaf = path[-1] if path else ""
     english = english_title(leaf, learned)
     return writes_clipboard(english if english is not None else leaf) and not goal_uses_clipboard(goal)

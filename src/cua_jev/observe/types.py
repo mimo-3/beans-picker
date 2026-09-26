@@ -1,7 +1,4 @@
-"""The observed state of one window: its controls, visible text, menu bar and modal state.
-
-Optional fields hold `None` when absent; an empty string is a real value.
-"""
+"""The observed state of one window: its controls, visible text, menu bar and modal state."""
 
 from __future__ import annotations
 

@@ -1,5 +1,3 @@
-"""Compiles both native helpers with the real clang (macOS with the Xcode Command Line Tools)."""
-
 from __future__ import annotations
 
 import shutil
@@ -21,7 +19,6 @@ async def test_builds_both_helpers(paths: Paths) -> None:
     binary = await helpers.menukeys_bin()
     assert binary is not None
     assert binary.is_file()
-    # A second session finds the builds in the cache.
     again = Helpers(paths)
     assert await again.axtext_app() == app
     assert await again.menukeys_bin() == binary

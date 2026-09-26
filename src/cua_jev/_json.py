@@ -1,10 +1,4 @@
-"""Compact JSON output and JSON string literals, written by hand so every byte is fixed.
-
-Numbers are written with `_numbers.number_text` (`1`, not `1.0`); NaN and the infinities become
-`null`. Keys keep insertion order. Strings escape `"`, `\\`, `\\b`, `\\f`, `\\n`, `\\r`, `\\t`, other
-control characters below U+0020 as `\\u00xx`, and lone surrogates as `\\udxxx` (lowercase hex);
-everything else is written as it is, so the output always encodes to UTF-8.
-"""
+"""Compact JSON output and JSON string literals, written by hand so every byte is fixed."""
 
 from __future__ import annotations
 
@@ -64,8 +58,7 @@ def quote(s: str) -> str:
 
 
 def dumps(obj: object) -> str:
-    """`obj` as compact JSON (no spaces). Accepts dict (str keys), list, tuple, str, int, float,
-    bool and None; anything else raises TypeError."""
+    """`obj` as compact JSON (no spaces)."""
     parts: list[str] = []
     _write(obj, parts)
     return "".join(parts)

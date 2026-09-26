@@ -109,8 +109,7 @@ async def extract_tool(session: ToolSession, args: ExtractArgs) -> ExtractOutput
 
 
 def elements_of(snap: Snapshot) -> list[Element]:
-    """Indexed elements that carry text, and every table, outline and list (a web page's table often
-    has no name), then the unindexed static texts. Menu-bar items are not content."""
+    """Elements that carry text, every table, outline and list, then the unindexed static texts."""
     by_index = {n.index: n for n in snap.nodes}
     nodes: list[Element] = [
         NodeElement(n)
@@ -185,8 +184,7 @@ def extracted(snap: Snapshot, e: Element, p: float, limit: int) -> Extracted:
 
 
 def content_of(snap: Snapshot, node: UINode, limit: int) -> Content:
-    """The texts under a container, which has no value of its own: a table, outline or list gives
-    them row by row (its rows, or a list's direct children), anything else as one run in tree order."""
+    """The texts under a container: row by row for a table, outline or list, else one run in tree order."""
     by_index = {n.index: n for n in snap.nodes}
 
     def at(index: int | None) -> UINode | None:
@@ -212,14 +210,12 @@ def content_of(snap: Snapshot, node: UINode, limit: int) -> Content:
                 return False
             return n.parent == node.index if node.role == "AXList" else n.role == "AXRow"
 
-        # Rows in first-seen order: a row node's index, or ("text", i) for a text that is a row itself.
         rows: dict[int | tuple[str, int], list[str]] = {}
         for i, (t, path) in enumerate(under):
             row = next((k for k in path if is_row(by_index.get(k))), None)
             if row is not None:
                 rows.setdefault(row, []).append(t.raw)
             elif node.role == "AXList" and t.parent_index == node.index:
-                # A list's option can be a text itself, directly under the list: it is a row of its own.
                 rows[("text", i)] = [t.raw]
         if rows:
             everything = list(rows.values())

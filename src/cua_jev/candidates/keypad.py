@@ -1,7 +1,4 @@
-"""Compile a key sequence into on-screen button presses.
-
-Buttons are found by AXIdentifier first (locale-independent), then by label or glyph.
-"""
+"""Compile a key sequence into on-screen button presses."""
 
 from __future__ import annotations
 
@@ -59,10 +56,8 @@ _BY_LABEL: Final[Mapping[str, tuple[str, ...]]] = {
     ),
 }
 
-# How keys are shown to Jev: the calculator glyphs for the ASCII operators.
 GLYPH: Final[Mapping[str, str]] = {"*": "\N{MULTIPLICATION SIGN}", "/": "\N{DIVISION SIGN}", "-": "\N{MINUS SIGN}"}
 
-# Typed glyphs to keys; a lowercase ASCII x also means multiply ("3x4").
 _FROM_GLYPH: Final[Mapping[str, str]] = {
     "\N{MULTIPLICATION SIGN}": "*",
     "\N{DIVISION SIGN}": "/",
@@ -76,10 +71,7 @@ _DIGIT_KEYS: Final = tuple((k, ids) for k, ids in _BY_ID.items() if _ONE_DIGIT.f
 
 
 def keypad_keys(text: str) -> list[str] | None:
-    """The key sequence for text entered on an on-screen keypad ("12*7=" or "12x7=" -> 1 2 * 7 =).
-
-    Whitespace is skipped; any other character without a key makes it None, as does empty text.
-    """
+    """The key sequence for text entered on an on-screen keypad ("12*7=" or "12x7=" -> 1 2 * 7 =)."""
     keys = [_FROM_GLYPH.get(ch, ch) for ch in _WS_RUN.sub("", text)]
     if not keys or any(not _ONE_DIGIT.fullmatch(k) and k not in _BY_ID for k in keys):
         return None
@@ -99,7 +91,6 @@ def compile_keypad(keys: Sequence[str], snap: Snapshot) -> list[UINode] | None:
 
 
 def _find_key(k: str, buttons: Sequence[UINode]) -> UINode | None:
-    """The button for key `k`: an identifier match anywhere wins over a label match."""
     ids = _BY_ID.get(k, ())
     for b in buttons:
         if b.identifier and b.identifier in ids:
@@ -112,11 +103,7 @@ def _find_key(k: str, buttons: Sequence[UINode]) -> UINode | None:
 
 
 def keypad_parents(snap: Snapshot) -> set[int]:
-    """Parents (node indices) that hold an on-screen keypad.
-
-    That is at least eight of the digit keys 0-9 as buttons side by side. Keys there only edit the
-    entry on the keypad's display.
-    """
+    """Parents (node indices) that hold an on-screen keypad."""
     digits: dict[int, set[str]] = {}
     for n in snap.nodes:
         if n.role != "AXButton" or n.parent is None:

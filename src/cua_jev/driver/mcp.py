@@ -1,8 +1,4 @@
-"""One persistent MCP stdio session with cua-driver. Snapshot tokens only live inside it.
-
-Background only: calls that activate, raise or make key an app, or move the real cursor, are
-refused here before they reach cua-driver. There is no switch to turn this off.
-"""
+"""One persistent MCP stdio session with cua-driver."""
 
 from __future__ import annotations
 
@@ -70,8 +66,7 @@ def steals_focus(tool: str, args: Mapping[str, object]) -> bool:
 
 
 def is_transport_error(err: BaseException) -> bool:
-    """True when `err` means the connection to cua-driver is gone (the child exited or its pipes
-    broke), as opposed to an error answer. Exception groups and causes are searched."""
+    """True when the connection to cua-driver is gone, as opposed to an error answer."""
     for e in _chain(err):
         if isinstance(e, _TRANSPORT_TYPES):
             return True
@@ -83,7 +78,6 @@ def is_transport_error(err: BaseException) -> bool:
 
 
 def _chain(err: BaseException) -> Iterator[BaseException]:
-    """`err`, the members of exception groups and every `__cause__`, each once."""
     seen: set[int] = set()
     todo = [err]
     while todo:
@@ -99,7 +93,6 @@ def _chain(err: BaseException) -> Iterator[BaseException]:
 
 
 def _first_leaf(group: ExceptionGroup[Exception]) -> Exception:
-    """The only exception inside `group`, or the group itself when there are several."""
     leaves: list[Exception] = []
     todo: list[Exception] = [group]
     while todo:
@@ -112,8 +105,6 @@ def _first_leaf(group: ExceptionGroup[Exception]) -> Exception:
 
 
 def _truthy(value: object) -> bool:
-    """Whether a received JSON value counts as given: `""`, `0`, NaN, `false` and `null` do not;
-    lists and objects always do."""
     if isinstance(value, float) and math.isnan(value):
         return False
     if isinstance(value, list | dict):
@@ -135,27 +126,17 @@ def _open_devnull() -> TextIO:
 
 
 class _LenientSession(ClientSession):
-    """A client session that does not check results against the tools' output schemas.
-
-    cua-driver's output schemas use formats outside JSON Schema (`uint64`); results are read
-    defensively instead (`driver.types`).
-    """
+    """Skips output-schema checks: cua-driver's schemas use formats outside JSON Schema (`uint64`)."""
 
     async def validate_tool_result(self, name: str, result: CallToolResult) -> None:
         return None
 
 
-class _ConnectionLost(ConnectionError):
-    """A call on a connection whose owner has ended."""
+class _ConnectionLost(ConnectionError): ...
 
 
 class _Connection:
-    """One `cua-driver mcp` child and its MCP session.
-
-    The SDK's cancel scopes must be entered and exited by one task, while calls come from many, so
-    a dedicated owner task opens the transport and the session, publishes the session, and holds
-    both until `close()`.
-    """
+    """Opens and holds the transport in one owner task: the SDK's cancel scopes must not cross tasks."""
 
     def __init__(self, bin_path: str) -> None:
         self._bin = bin_path
@@ -167,7 +148,6 @@ class _Connection:
 
     @classmethod
     async def open(cls, bin_path: str) -> _Connection:
-        """Start `<bin_path> mcp` and complete the MCP handshake."""
         conn = cls(bin_path)
         conn._owner = asyncio.create_task(conn._own(), name="cua-driver connection")
         try:
@@ -185,7 +165,6 @@ class _Connection:
         return self._session
 
     async def close(self) -> None:
-        """Stop the owner (which ends the session and the child) and wait for it."""
         self._stop.set()
         owner = self._owner
         if owner is None:
@@ -227,16 +206,9 @@ class CuaDriverOptions:
 
 
 class CuaDriver:
-    """A cua-driver connection: adds the session label to tools that take one, reconnects when the
-    child dies (reads are retried once, actions never), and refuses foreground calls.
-
-    `sentinel` asserts the background-only contract: while an app is watched, an action after which
-    that app is seen in front raises ForegroundViolation, and so does every later action until the
-    watch ends.
-    """
+    """A cua-driver connection that labels sessions, reconnects, and refuses foreground calls."""
 
     def __init__(self, conn: _Connection, bin_path: str, session: str) -> None:
-        """Use `connect()`."""
         self._conn = conn
         self._bin = bin_path
         self._reconnecting: asyncio.Task[None] | None = None
@@ -272,9 +244,7 @@ class CuaDriver:
         self.session_tools = frozenset(names)
 
     async def call(self, tool: str, args: Mapping[str, object] | None = None) -> ToolResult:
-        """Call a tool. While the sentinel watches, an action raises ForegroundViolation when a
-        violation was recorded before it (no call is made) or is seen right after it (the call's
-        result or error is replaced)."""
+        """Call a tool."""
         payload: Mapping[str, object] = args if args is not None else {}
         guarded = self.sentinel.watching and tool not in READ_TOOLS and tool != "end_session"
         if not guarded:
@@ -294,15 +264,14 @@ class CuaDriver:
                 raise ForegroundViolation(v)
 
     async def must(self, tool: str, args: Mapping[str, object] | None = None) -> JsonObject:
-        """Like `call`, but a refusal raises DriverError. For calls the request cannot go on without."""
+        """Like `call`, but a refusal raises DriverError."""
         r = await self.call(tool, args)
         if not r.ok:
             raise DriverError(tool, r.code, r.message)
         return r.data
 
     async def close(self) -> None:
-        """Stop the sentinel, end the session in the daemon, and stop the child. Never raises, and
-        the child is stopped even when `end_session` gets no answer or this call is cancelled."""
+        """Stop the sentinel, end the session in the daemon, and stop the child."""
         self.sentinel.stop()
         try:
             task = self._reconnecting
@@ -326,17 +295,15 @@ class CuaDriver:
                 raise
             _log.debug("%s: connection to cua-driver lost (%r); reconnecting", tool, err)
         await self._reconnect(generation)
-        # Only reads are replayed. An action may have landed before the transport died, and
-        # repeating it would press a key or click twice.
+        # Only reads are replayed: an action may have landed before the transport died.
         if tool in READ_TOOLS:
             return await self._call_once(tool, args, self._conn)
         message = f"{tool}: connection to cua-driver was lost; reconnected but did not retry the action"
         return ToolRefused(code="transport_lost", message=message, data={}, text=message, ms=0)
 
     async def _reconnect(self, failed_generation: int) -> None:
-        """Replace the connection that failed, once for all callers that saw it fail."""
         if self.generation != failed_generation:
-            return  # another caller already replaced it
+            return
         task = self._reconnecting
         if task is None or task.done():
             task = asyncio.create_task(self._replace_connection())
@@ -364,7 +331,6 @@ class CuaDriver:
         res = await session.call_tool(tool, arguments)
         ms = round_half_up((time.perf_counter() - t0) * 1000)
         text = "\n".join(c.text if isinstance(c, TextContent) else "" for c in res.content)
-        # structuredContent is decoded JSON, so it is a JSON object whenever it is present.
         data: JsonObject = res.structured_content if res.structured_content is not None else {}
         if res.is_error:
             refusal = get_obj(data, "refusal") or {}
@@ -383,6 +349,5 @@ class CuaDriver:
 
 
 def _retrieve(task: asyncio.Task[None]) -> None:
-    """Mark a reconnect's failure as seen; the callers waiting on it are the ones told."""
     if not task.cancelled():
         task.exception()

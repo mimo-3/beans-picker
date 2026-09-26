@@ -15,8 +15,6 @@ from cua_jev.paths import Paths
 
 
 class _Clang:
-    """A runner standing in for clang: succeeds (writing the output file) or fails; can be held."""
-
     def __init__(self, *, fails: bool = False) -> None:
         self.fails = fails
         self.calls: list[tuple[str, ...]] = []
@@ -76,7 +74,7 @@ async def test_builds_the_axtext_app_once(paths: Paths, sources: Path, caplog: p
     ]
     staged = Path(clang.calls[0][8])
     assert staged.parts[-4:] == (expected.name, "Contents", "MacOS", "axtext")
-    assert staged.parents[3].parent == paths.axtext  # compiled in a private directory next to the app
+    assert staged.parents[3].parent == paths.axtext
     assert list(paths.axtext.iterdir()) == [expected]
     assert (expected / "Contents" / "Info.plist").read_text(encoding="utf-8") == AXTEXT_PLIST
     assert [r.getMessage() for r in caplog.records] == [
@@ -161,7 +159,7 @@ async def test_concurrent_callers_share_one_build(paths: Paths, sources: Path) -
     first = asyncio.create_task(helpers.axtext_app())
     second = asyncio.create_task(helpers.axtext_app())
     await asyncio.sleep(0)
-    first.cancel()  # one caller giving up does not stop the build for the other
+    first.cancel()
     clang.release.set()
     assert await second is not None
     with pytest.raises(asyncio.CancelledError):
@@ -192,10 +190,10 @@ async def test_a_build_in_progress_elsewhere_is_not_taken_as_done(paths: Paths, 
     first_clang.release.clear()
     first = asyncio.create_task(Helpers(paths, runner=first_clang, sources=sources).axtext_app())
     await first_clang.started.wait()
-    _write_output(Path(first_clang.calls[0][8]))  # the compiler has created its output, not finished
+    _write_output(Path(first_clang.calls[0][8]))
     second_clang = _Clang()
     second = await Helpers(paths, runner=second_clang, sources=sources).axtext_app()
-    assert len(second_clang.calls) == 1  # built its own copy instead of returning the partial one
+    assert len(second_clang.calls) == 1
     first_clang.release.set()
     assert await first == second
     assert second is not None

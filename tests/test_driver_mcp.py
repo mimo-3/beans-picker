@@ -1,5 +1,3 @@
-"""CuaDriver over real stdio, against `tests/fake_driver.py` started with this interpreter."""
-
 from __future__ import annotations
 
 import asyncio
@@ -35,9 +33,6 @@ FAKE_DRIVER = Path(__file__).with_name("fake_driver.py")
 
 
 class FakeBin:
-    """A `cua-driver` stand-in: a shell script that starts the fake driver. While `refuse` is set,
-    the script exits at once instead (a start that fails)."""
-
     def __init__(self, root: Path) -> None:
         self.state = root / "state"
         self.state.mkdir()
@@ -93,9 +88,6 @@ class Front:
         return self.pid
 
 
-# Pure helpers -------------------------------------------------------------------------------------
-
-
 def test_tool_sets() -> None:
     assert {
         "get_window_state",
@@ -147,9 +139,6 @@ def test_is_transport_error() -> None:
 
 def test_base36() -> None:
     assert [_base36(n) for n in (0, 35, 36, 1_700_000_000_000)] == ["0", "z", "10", "loyw3v28"]
-
-
-# Connection ---------------------------------------------------------------------------------------
 
 
 async def test_connect_names_a_unique_session_and_reads_session_tools(
@@ -251,7 +240,6 @@ async def test_text_joins_every_content_item(driver: CuaDriver) -> None:
     ],
 )
 async def test_foreground_calls_are_refused_locally(tool: str, args: dict[str, object], message: str) -> None:
-    # Never connected: a call that reached the connection would fail.
     offline = CuaDriver(_Connection("cua-driver-never-started"), "cua-driver-never-started", "cua-jev")
     r = await offline.call(tool, args)
     assert r == ToolRefused(code="foreground_disallowed", message=message, data={}, text=message, ms=0)
@@ -266,9 +254,6 @@ async def test_a_foreground_call_never_reaches_the_driver(driver: CuaDriver, fak
     assert fake_bin.calls() == []
 
 
-# Reconnect ----------------------------------------------------------------------------------------
-
-
 async def test_a_read_is_retried_once_after_the_child_dies(driver: CuaDriver, fake_bin: FakeBin) -> None:
     session = driver.session
     r = await driver.call("list_windows", {"die_in_launch": 1})
@@ -276,7 +261,7 @@ async def test_a_read_is_retried_once_after_the_child_dies(driver: CuaDriver, fa
     assert r.data["launch"] == 2
     assert driver.generation == 1
     assert driver.session == session
-    assert "echo" in driver.session_tools  # the new child's schemas were loaded
+    assert "echo" in driver.session_tools
     await driver.call("echo")
     assert [(c["launch"], c["tool"], c["args"]) for c in fake_bin.calls()] == [
         (1, "list_windows", {"session": session, "die_in_launch": 1}),
@@ -314,7 +299,7 @@ async def test_a_failed_reconnect_reaches_every_waiting_call(driver: CuaDriver, 
         driver.call("list_windows", args), driver.call("list_windows", args), return_exceptions=True
     )
     assert all(isinstance(r, Exception) for r in results)
-    assert fake_bin.attempts() == 2  # the first start and one shared reconnect attempt
+    assert fake_bin.attempts() == 2
     assert driver.generation == 0
     fake_bin.refuse(False)
     r = await driver.call("list_windows")
@@ -342,9 +327,6 @@ async def test_a_failing_tool_list_fails_the_connect(fake_bin: FakeBin) -> None:
     with pytest.raises(MCPError, match="tools are not available"):
         await CuaDriver.connect(CuaDriverOptions(bin=str(fake_bin.path)))
     assert asyncio.all_tasks() == before
-
-
-# Close --------------------------------------------------------------------------------------------
 
 
 async def test_close_ends_the_session(fake_bin: FakeBin) -> None:
@@ -406,9 +388,6 @@ async def test_a_cancelled_connect_leaves_nothing_running(fake_bin: FakeBin) -> 
     assert asyncio.all_tasks() == before
 
 
-# Foreground guard ---------------------------------------------------------------------------------
-
-
 async def test_an_action_after_which_the_app_is_in_front_raises(driver: CuaDriver, fake_bin: FakeBin) -> None:
     front = Front(1)
     driver.sentinel = ActivationSentinel(front)
@@ -418,13 +397,13 @@ async def test_an_action_after_which_the_app_is_in_front_raises(driver: CuaDrive
     with pytest.raises(ForegroundViolation, match=r"\(pid 5\) came to the front during after click at ") as info:
         await driver.call("click", {"pid": 5})
     assert info.value.activation.during == "after click"
-    assert len(fake_bin.calls()) == 2  # the action itself was carried out
+    assert len(fake_bin.calls()) == 2
     with pytest.raises(ForegroundViolation):
-        await driver.call("click")  # refused before reaching the driver
+        await driver.call("click")
     with pytest.raises(ForegroundViolation):
         await driver.must("type_text")
     assert len(fake_bin.calls()) == 2
-    assert isinstance(await driver.call("list_windows"), ToolOk)  # reads are not guarded
+    assert isinstance(await driver.call("list_windows"), ToolOk)
     assert isinstance(await driver.call("end_session"), ToolOk)
     driver.sentinel.stop()
     assert isinstance(await driver.call("click"), ToolOk)

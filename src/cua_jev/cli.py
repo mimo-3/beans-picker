@@ -1,11 +1,4 @@
-"""Entry point: `cua-jev` serves MCP over stdio.
-
-stdout carries the protocol, so nothing else is written there while serving. Settings are read
-from `.env.local` / `.env` in the cua-jev checkout and in `~/.config/cua-jev/`, whatever the
-caller's working directory; the real environment wins. `cua-jev grant-ax` asks macOS to list the
-exact-text helper under Accessibility; `cua-jev --version` prints the version and `cua-jev --help`
-the usage.
-"""
+"""Entry point: `cua-jev` serves MCP over stdio."""
 
 from __future__ import annotations
 
@@ -33,7 +26,7 @@ USAGE: Final = (
 
 
 def main(argv: Sequence[str] | None = None, *, platform: str | None = None) -> int:
-    """Runs the command line; returns the exit code. Arguments other than the ones above are ignored."""
+    """Runs the command line; returns the exit code."""
     args = list(sys.argv[1:] if argv is None else argv)
     if args == ["--version"]:
         print(__version__)  # noqa: T201 - the one line this command prints
@@ -60,8 +53,7 @@ async def _grant_ax() -> str:
 
 
 async def _serve() -> None:
-    """Serves until stdin closes or SIGINT/SIGTERM arrives, then closes the session. Signals that
-    arrive while the session closes are ignored, so they cannot cut the cleanup short."""
+    """Serves until stdin closes or a signal arrives; signals during cleanup are ignored."""
     session = Session()
     server = create_server(session)
     task = asyncio.current_task()
@@ -82,7 +74,7 @@ async def _serve() -> None:
     except asyncio.CancelledError:
         if not stopping or task is None:
             raise
-        task.uncancel()  # a signal: shut down like on end of input
+        task.uncancel()
     finally:
         stopping = True
         await session.close()

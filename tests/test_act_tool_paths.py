@@ -1,5 +1,3 @@
-"""act's less common paths: sequences that stop early, pre-checks, failures, and the extra judges."""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -95,7 +93,6 @@ async def test_a_sequence_that_runs_through_has_no_skipped_count(tmp_path: Path)
     out = await act_tool(
         session, {"pid": calc.pid, "instruction": "7", "candidateId": seven.id, "then": [{"instruction": "7"}]}
     )
-    # The second step has no candidateId, so Jev (who wants nothing here) finds nothing.
     assert out["status"] == "not_found"
     out = await act_tool(
         FakeSession(snaps, cache=tmp_path),
@@ -233,7 +230,7 @@ async def test_the_retype_after_an_ignored_write_is_judged_against_the_first_bef
     def on_call(tool: str, args: dict[str, object]) -> ToolResult:
         nonlocal value
         if tool == "set_value":
-            value = "120"  # the page puts its own value back
+            value = "120"
         if tool == "type_text":
             value = "wrong"
         return _ok()
@@ -258,9 +255,8 @@ async def test_a_failed_retype_reports_the_window_it_left(tmp_path: Path) -> Non
     out = await act_tool(session, {"pid": 1, "instruction": "seats 9", "candidateId": set_value.id, "text": "9"})
     assert list(out) == ["status", "code", "window", "message", "action"]
     assert (out["status"], out["code"], out["message"]) == ("failed", "key_refused", "no keys today")
-    # The AXValue write, then the retype's first key: both routes are reported.
     assert out["action"]["route"] == ["set_value", "press_key"]
-    assert session.snapshots == 6  # the one before, and the five of the first judgment
+    assert session.snapshots == 6
 
 
 def _checkbox_window(value: str | None) -> Snapshot:

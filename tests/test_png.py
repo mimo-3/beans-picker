@@ -9,7 +9,6 @@ from tests.helpers import blank, encode_png, paint
 
 
 def _gradient(w: int, h: int, *, alpha: bool = False) -> Rgba:
-    """Pixels that differ in every channel, so every filter predicts something."""
     data = bytearray()
     for y in range(h):
         for x in range(w):
@@ -130,7 +129,6 @@ def test_crop_clamps_and_may_be_empty() -> None:
     assert (whole.width, whole.height) == (4, 4)
     assert whole.data == img.data
     assert crop(img, 10, 10, 5, 5) == Rgba(0, 0, b"")
-    # Edges round half up: 0.5 -> 1, 2.5 -> 3.
     part = crop(img, 0.5, 0.5, 2, 2)
     assert (part.width, part.height) == (2, 2)
     assert crop(img, -0.5, -0.5, 1, 1).width == 1

@@ -1,8 +1,4 @@
-"""act: one operation, or a short sequence of them, per call.
-
-The target is the caller's candidateId, or Jev's pick for the instruction; each effect is judged on
-fresh snapshots, a fixed number of them.
-"""
+"""act: one operation, or a short sequence of them, per call."""
 
 from __future__ import annotations
 
@@ -115,8 +111,6 @@ def _without_window(out: ActOutput) -> ActOutput:
 
 
 class _Seen:
-    """The window as the step left it: `before` until a snapshot was taken after the action."""
-
     __slots__ = ("after",)
 
     def __init__(self, before: Snapshot) -> None:
@@ -130,8 +124,6 @@ async def _act_once(session: ToolSession, t: Target, args: Step, before: Snapsho
 
 
 def _shown_action(c: ActionCandidate) -> ShownAction:
-    """The candidate as shown in `action`; the route is added once the action ran."""
-    # show_candidate never sets `route`, so its result is a ShownAction without one.
     return cast("ShownAction", show_candidate(c))
 
 
@@ -149,7 +141,6 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
     )
 
     def with_usage(out: ActOutput) -> ActOutput:
-        """Jev's usage goes with every step that asked Jev (no candidateId), whatever its outcome."""
         if candidate_id is None:
             out["jev"] = session.jev().take_usage().as_output()
         return out
@@ -166,7 +157,6 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
             message = f"{chosen.kind} enters no text; leave `text` out or pick a text candidate"
             return _failed("text_not_used", window, message, _shown_action(chosen))
     else:
-        # With a text to enter, only the actions that enter text are in the running.
         pool = [c for c in cands if (c.kind in TEXT_KINDS) == (text is not None)]
         if not pool:
             message = (
@@ -256,7 +246,6 @@ async def _execute(
     window: ShownWindow,
     seen: _Seen,
 ) -> ActOutput:
-    """Runs the action and judges its effect; `pick` and usage are added by the caller."""
     target = chosen.target
     # A toggle whose state cua-driver does not report is judged by its pixels as well.
     shot = (
@@ -321,7 +310,6 @@ async def _execute(
 
 
 def _retypeable(c: ActionCandidate, snap: Snapshot) -> bool:
-    """A set_value on a web page's one-line text field, which a person's keystrokes can replace."""
     target = c.target
     return (
         c.kind == "set_value"
@@ -337,11 +325,7 @@ async def _judge(
     snapshot: Callable[[], Awaitable[Snapshot]],
     pixels: Callable[[], Awaitable[EffectVerdict | None]] | None = None,
 ) -> tuple[EffectVerdict, Snapshot, int]:
-    """Fresh snapshots, up to the configured number of them, until the effect asked for shows.
-
-    The count decides, not a wait: a window unchanged across all of them is no_effect. `pixels` is
-    extra evidence for an effect the snapshot cannot show.
-    """
+    """Retakes snapshots until the effect shows; the count decides, not a wait."""
     retakes = config.effect_retakes()
     after = await snapshot()
     n = 1
@@ -360,8 +344,6 @@ async def _judge(
 def _toggled_pixels(
     session: ToolSession, driver: Driver, t: Target, before: Shot, c: ActionCandidate
 ) -> Callable[[], Awaitable[EffectVerdict | None]]:
-    """Whether the toggle's own pixels changed since `before` (its state is not in the tree)."""
-
     async def check() -> EffectVerdict | None:
         target = c.target
         now = await capture_window(driver, t.pid, t.window_id, paths=session.paths)

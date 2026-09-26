@@ -1,5 +1,3 @@
-"""PixelMapper: where a pixel click lands, and when the pixel path is refused."""
-
 from __future__ import annotations
 
 import pytest
@@ -45,7 +43,6 @@ async def test_scale_comes_from_the_bounds_reported_with_the_screenshot() -> Non
 async def test_a_point_outside_the_window_is_refused() -> None:
     px = PixelMapper(geometry_driver())
     assert await px.point(WIN, node(1, "AXButton", frame=frame(600, 100))) is None
-    # The edges belong to the window.
     assert await px.point(WIN, node(2, "AXButton", frame=frame(490, 340))) == Point(800, 600)
 
 
@@ -120,7 +117,6 @@ async def test_geometry_is_reused_while_the_window_looks_the_same_failures_inclu
     clock.advance(GEOMETRY_TTL_S / 2)
     await px.point(WIN, target)
     assert driver.tools == ["list_windows", "list_windows"]
-    # A sheet appearing changes the window's shape: measured again at once.
     await px.point(snap(title="Doc", modal=Modal(role="AXSheet", label="Save", index=9)), target)
     assert driver.tools == ["list_windows"] * 3
 

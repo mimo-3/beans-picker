@@ -83,8 +83,6 @@ async def test_rank_shards_a_long_list_and_runs_off_the_leaders() -> None:
 
 
 class _Scripted:
-    """Answers each call with the probabilities given for it (by call order), after a delay."""
-
     def __init__(self, delays: list[float], fail_at: int | None = None) -> None:
         self.delays = delays
         self.fail_at = fail_at
@@ -111,7 +109,6 @@ async def test_rank_keeps_shard_order_whatever_order_the_answers_come_in() -> No
     jev = _Scripted([0.05, 0])
     r = await rank(jev, {}, items, _spec())
     assert jev.finished[:2] == [1, 0]
-    # The runoff lists shard 0's leader first, then shard 1's.
     assert [x.item for x in r.ranked] == ["i0", f"i{MAX_OPTIONS}"]
 
 

@@ -1,5 +1,3 @@
-"""The bench summary tables."""
-
 from __future__ import annotations
 
 import math

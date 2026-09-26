@@ -1,21 +1,3 @@
-"""A stand-in for `cua-driver mcp`: a stdio MCP server with a few of its tools.
-
-Run as `python fake_driver.py --state DIR mcp`. Every start appends a line to `DIR/launches`, so a
-process knows its launch number (1 for the first start); every tool call is appended to
-`DIR/calls.jsonl` as `{"launch", "tool", "args"}`. Tools:
-
-- `list_windows`, `get_window_state` (reads) and `click`, `end_session` (actions) take `session`;
-  `echo` takes it only from the second launch on, so a reconnect has new schemas to load.
-- `get_window_state` declares an output schema with a `uint64` format and answers with data that
-  does not match it.
-- `list_windows` and `click` exit the process mid-call when `die_in_launch` equals the launch
-  number, after `die_after` seconds.
-- `refuse` answers with an error and a refusal; `fail_plain` with an error and text only;
-  `mixed` with text, an image and more text; `whoami` with the process id.
-- `click` waits `hold` seconds before answering.
-- While the file `DIR/fail_list` exists, `tools/list` fails.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -97,7 +79,7 @@ def build(state: Path, launch: int) -> Server[Any]:
             await asyncio.sleep(float(args.get("die_after", 0)))
             os._exit(3)
         if name == "end_session" and (state / "hold_end_session").exists():
-            await asyncio.Event().wait()  # a daemon that stopped answering
+            await asyncio.Event().wait()
         if name == "click" and "hold" in args:
             await asyncio.sleep(float(args["hold"]))
         if name == "list_windows":

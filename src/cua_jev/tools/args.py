@@ -1,8 +1,4 @@
-"""Tool input schemas (served verbatim in `tools/list`) and the validator that checks calls against them.
-
-Issues are reported in schema property order, nested issues at their parent's position, with the
-wording MCP clients of this server already see.
-"""
+"""Tool input schemas (served verbatim in `tools/list`) and the validator that checks calls against them."""
 
 from __future__ import annotations
 
@@ -139,7 +135,6 @@ class Issue:
 
 
 def _received(v: JsonValue | None) -> str:
-    """The received-type word of a validation message."""
     match v:
         case None:
             return "null"
@@ -194,14 +189,12 @@ def _integer_value(schema: JsonObject, v: JsonValue, path: str, issues: list[Iss
 
 
 def _schema_object(part: JsonValue) -> JsonObject:
-    """A part of one of the schemas above that is an object by construction."""
     if not isinstance(part, dict):
         raise TypeError(f"malformed input schema: expected an object, got {type(part).__name__}")
     return part
 
 
 def _schema_list(part: JsonValue) -> list[JsonValue]:
-    """A part of one of the schemas above that is a list by construction."""
     if not isinstance(part, list):
         raise TypeError(f"malformed input schema: expected a list, got {type(part).__name__}")
     return part
@@ -275,10 +268,6 @@ def validation_text(tool: str, issues: Sequence[Issue]) -> str:
     """The error text an invalid call gets back."""
     lines = "\n".join(f"{i.message} at {i.path}" if i.path else i.message for i in issues)
     return f"MCP error -32602: Input validation error: Invalid arguments for tool {tool}: {lines}"
-
-
-# The builders below turn checked arguments into their typed form; a value of the wrong type
-# cannot reach them, so they only narrow.
 
 
 def _str(a: JsonObject, key: str) -> str | None:

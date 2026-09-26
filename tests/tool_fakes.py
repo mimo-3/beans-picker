@@ -1,6 +1,3 @@
-"""Fakes for the tool layer: Jev stand-ins that answer by matching option text, and a ToolSession
-that serves snapshots from a list (or a function) and records how often it was asked."""
-
 from __future__ import annotations
 
 import copy
@@ -27,9 +24,6 @@ def _criteria(q: Question) -> dict[str, JsonValue]:
 
 
 class JevPicking:
-    """Puts the probability on the option whose description contains `want` (split between two
-    with `rival`), or on `none`; usage is always one call of 10 input tokens."""
-
     def __init__(self, want: str | None, rival: str | None = None) -> None:
         self.want = want
         self.rival = rival
@@ -71,8 +65,6 @@ def jev_picking(want: str | None, rival: str | None = None) -> JevPicking:
 
 
 class FakeJev:
-    """Puts 0.9 on the first option whose description holds `"<want>"` (quoted), the rest spread evenly."""
-
     def __init__(self, want: str) -> None:
         self.want = want
         self.calls = 0
@@ -93,7 +85,6 @@ def fake_jev(want: str) -> FakeJev:
 
 
 def shown(s: Snapshot, text: str) -> Snapshot:
-    """A copy of `s` whose only text is `text` (so its signature and texts differ)."""
     c = copy.deepcopy(s)
     c.texts = [TextNode(role="AXStaticText", value=text, raw=text, depth=5)]
     c.signature = f"shows:{text}"
@@ -101,9 +92,6 @@ def shown(s: Snapshot, text: str) -> Snapshot:
 
 
 class FakeSession:
-    """A ToolSession over fixed snapshots: `snapshot()` walks `snaps` and then repeats the last one,
-    or calls `snaps` when it is a function. The target is the first snapshot's window."""
-
     def __init__(
         self,
         snaps: Sequence[Snapshot] | Callable[[], Snapshot],

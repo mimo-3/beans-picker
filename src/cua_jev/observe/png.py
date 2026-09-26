@@ -1,9 +1,4 @@
-"""A minimal PNG decoder for the window screenshots cua-driver writes, and cropping.
-
-Only 8-bit, non-interlaced gray, gray+alpha, RGB and RGBA images are decoded. Anything else
-(16-bit, palette, interlaced, damaged) yields `None`, which callers treat as "not observable", never
-as "unchanged". CRCs are not checked.
-"""
+"""A minimal PNG decoder for the window screenshots cua-driver writes, and cropping."""
 
 from __future__ import annotations
 
@@ -68,8 +63,6 @@ def decode_png(buf: bytes) -> Rgba | None:
 
 
 def _inflate(data: bytes) -> bytes | None:
-    """The zlib stream's content; bytes after the end of the stream are ignored. `None` when the
-    stream is damaged or ends early."""
     inflater = zlib.decompressobj()
     try:
         out = inflater.decompress(data)
@@ -79,7 +72,6 @@ def _inflate(data: bytes) -> bytes | None:
 
 
 def _unfilter(raw: bytes, height: int, stride: int, channels: int) -> bytearray | None:
-    """Undoes the per-row filters (None, Sub, Up, Average, Paeth); `None` for an unknown filter."""
     px = bytearray(height * stride)
     prev: _Row = bytes(stride)
     for y in range(height):
@@ -105,7 +97,6 @@ def _unfilter(raw: bytes, height: int, stride: int, channels: int) -> bytearray 
 
 
 def _add(line: bytes, prev: _Row) -> bytes:
-    """Byte-wise `(line + prev) & 0xff`, computed on whole rows at once."""
     n = len(line)
     low = int.from_bytes(b"\x7f" * n)
     high = int.from_bytes(b"\x80" * n)
@@ -164,10 +155,7 @@ def _to_rgba(px: bytearray, count: int, channels: int) -> bytes:
 
 
 def crop(img: Rgba, x: float, y: float, w: float, h: float) -> Rgba:
-    """The pixels of `[x, x + w) x [y, y + h)`, edges rounded half up and clamped to the image.
-
-    The result may be empty (zero width or height).
-    """
+    """The pixels of `[x, x + w) x [y, y + h)`, edges rounded half up and clamped to the image."""
     x0 = max(0, min(img.width, round_half_up(x)))
     y0 = max(0, min(img.height, round_half_up(y)))
     x1 = max(x0, min(img.width, round_half_up(x + w)))

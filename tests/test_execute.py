@@ -1,6 +1,3 @@
-"""Executor call traces: the ordered cua-driver calls (complete payloads) of every route, and what
-must not be called."""
-
 from __future__ import annotations
 
 import pytest
@@ -36,9 +33,6 @@ def executor(driver: CallDriver, *snaps: Snapshot, keys: FakeMenuKeys | None = N
 
 def outcome(r: ActResult) -> tuple[bool, str | None, str | None, str | None]:
     return r.ok, r.code, r.effect, r.detail
-
-
-# -- press / click -------------------------------------------------------------------------------
 
 
 async def test_a_click_presses_the_element_by_token() -> None:
@@ -94,9 +88,6 @@ async def test_other_refusals_are_not_retried_by_pixel() -> None:
     assert again.count == 0
 
 
-# -- stale tokens --------------------------------------------------------------------------------
-
-
 async def test_a_stale_token_is_rebound_by_stable_key_once() -> None:
     driver = CallDriver({"click": [STALE, ok()]})
     ex, again = executor(driver, snap([node(1, "AXButton", "OK", tok="t:9")]))
@@ -134,9 +125,6 @@ def test_stale_is_recognized_by_code_or_message() -> None:
     assert is_stale(refused("internal", "unknown token; Call Get_Window_State First"))
     assert not is_stale(refused("internal", "element not found"))
     assert not is_stale(ok())
-
-
-# -- element tools -------------------------------------------------------------------------------
 
 
 async def test_context_menu_is_a_background_right_click() -> None:
@@ -215,8 +203,6 @@ async def test_a_driver_exception_propagates() -> None:
         await ex.execute(cand("click", BTN), WIN)
 
 
-# -- retype --------------------------------------------------------------------------------------
-
 WEB = node(1, "AXWebArea", "Order")
 QTY = node(2, "AXIncrementor", "Quantity", parent=1, raw_value="2", value="2", exact=True)
 ORDER = snap([WEB, QTY])
@@ -265,9 +251,6 @@ async def test_retyping_stops_at_the_first_refused_step(fail_at: int) -> None:
     assert len(driver.calls) == fail_at + 1
 
 
-# -- modifiers -----------------------------------------------------------------------------------
-
-
 async def test_a_modifier_click_needs_a_visible_control() -> None:
     driver = CallDriver()
     ex, _ = executor(driver)
@@ -293,12 +276,10 @@ async def test_a_modifier_click_is_a_pixel_click_holding_the_keys() -> None:
     assert driver.calls[-1] == ("click", {"pid": 1, "window_id": 1, "x": 120, "y": 120, "modifier": ["shift", "cmd"]})
 
 
-# -- keypad --------------------------------------------------------------------------------------
-
 SEVEN = node(7, "AXButton", "7", frame=frame(150, 100))
 EIGHT = node(8, "AXButton", "8")
 PAD = snap([SEVEN, EIGHT])
-PLAIN_PAD = snap([node(7, "AXButton", "7"), EIGHT])  # no key visible: every press goes by token
+PLAIN_PAD = snap([node(7, "AXButton", "7"), EIGHT])
 
 
 async def test_keypad_presses_by_pixel_where_visible_and_by_token_elsewhere() -> None:
@@ -354,8 +335,6 @@ async def test_keypad_stops_at_a_refused_key() -> None:
     assert driver.tools == ["click", "click"]
     assert again.count == 0
 
-
-# -- pop-ups -------------------------------------------------------------------------------------
 
 POP = node(1, "AXPopUpButton", "Small", key="pop", value="Small")
 
@@ -447,15 +426,13 @@ async def test_a_refused_item_press_does_not_reobserve() -> None:
 def test_pop_up_menu_items_are_found_through_their_parents() -> None:
     s = popup("Small", True)
     assert in_popup_menu(s, s.nodes[2])
-    assert not in_popup_menu(s, s.nodes[5])  # the menu bar's own item
+    assert not in_popup_menu(s, s.nodes[5])
     assert not in_popup_menu(s, s.nodes[0])
     orphan = node(9, "AXMenuItem", "Loose", parent=42)
     assert not in_popup_menu(snap([orphan]), orphan)
     looped = [node(1, "AXMenu", parent=2), node(2, "AXMenu", parent=1), node(3, "AXMenuItem", "X", parent=1)]
     assert not in_popup_menu(snap(looped), looped[2])
 
-
-# -- menu commands -------------------------------------------------------------------------------
 
 COPY = menu_item("Edit", "Copy")
 EDIT_MENU = [menu_item("Edit"), COPY]
@@ -517,10 +494,8 @@ def test_path_state_checks_every_level_below_the_menu_bar_title() -> None:
     assert path_state(s, ["Gone"]) == "enabled"
     assert path_state(s, ["Format", "Font", "Bold"]) == "disabled"
     assert path_state(s, ["Format", "Size", "Bigger"]) == "gone"
-    assert path_state(s, ["Edit", "Copy"]) == "enabled"  # the first item with that path counts
+    assert path_state(s, ["Edit", "Copy"]) == "enabled"
 
-
-# -- append --------------------------------------------------------------------------------------
 
 AREA = node(1, "AXTextArea", key="area", raw_value="alpha ", value="alpha", exact=True)
 
@@ -577,9 +552,6 @@ async def test_append_to_a_field_that_is_gone() -> None:
     r = await ex.execute(cand("append", text="x"), snap([AREA]))
     assert outcome(r) == (False, "target_gone", None, "could not rebind undefined")
     assert driver.calls == []
-
-
-# -- results -------------------------------------------------------------------------------------
 
 
 def test_cua_driver_words_and_codes_are_forwarded_unchanged() -> None:

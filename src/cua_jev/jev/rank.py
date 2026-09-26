@@ -1,9 +1,4 @@
-"""Ranking by Jev.
-
-Options go out in shards of MAX_OPTIONS (best lexical first); when there is more than one shard, the
-leaders of each go to a runoff. The last round can ask the question twice, with and without `none`,
-and `gate` decides whether the leader is clear enough to act on.
-"""
+"""Ranking by Jev."""
 
 from __future__ import annotations
 
@@ -130,11 +125,7 @@ async def _round[T](jev: Asker, state: JevState, items: Sequence[T], spec: RankS
 
 
 def gate[T](r: Ranking[T], shortlist_size: int = 5) -> Gate[T]:
-    """Whether the leader is clear enough to act on.
-
-    A strict pick this sure is taken on its own; a weaker one needs the forced question to back it
-    and a clear lead. Otherwise the likely ones are listed, or nothing is found.
-    """
+    """Whether the leader is clear enough to act on."""
     t = THRESHOLDS
     top = r.ranked[0] if r.ranked else None
     second = r.ranked[1] if len(r.ranked) > 1 else None

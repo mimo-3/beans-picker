@@ -1,7 +1,4 @@
-"""Summarizes bench/results/runs.jsonl into the Markdown tables the README shows.
-
-python -m bench.summarize [runs.jsonl]
-"""
+"""Summarizes bench/results/runs.jsonl into the Markdown tables the README shows."""
 
 from __future__ import annotations
 
@@ -27,7 +24,6 @@ HEAD: Final = (
 
 
 def load_runs(path: Path) -> list[JsonObject]:
-    """One record per non-empty line of `path`."""
     return [json.loads(line) for line in path.read_text(encoding="utf-8").split("\n") if line]
 
 
@@ -46,7 +42,6 @@ def fmt(n: float, digits: int = 0) -> str:
 
 
 def _num(v: object) -> float:
-    """A recorded number; anything else (an absent cost, say) is NaN."""
     return float(v) if isinstance(v, int | float) and not isinstance(v, bool) else math.nan
 
 

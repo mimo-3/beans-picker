@@ -1,9 +1,4 @@
-"""Per-action effect verification.
-
-Transport success alone never counts, and text is checked by exact equality: no trimming, no
-"contains", and only in the field the action targeted (a search field that received the text is
-not the document).
-"""
+"""Per-action effect verification."""
 
 from __future__ import annotations
 
@@ -37,8 +32,7 @@ _ARROW: Final = "\u2192"
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class EffectVerdict:
-    """The judgment on one action. `exact` (text actions) says whether the field's text was read
-    exactly, whitespace included."""
+    """The judgment on one action."""
 
     effect: VerifyEffect
     detail: str
@@ -70,8 +64,7 @@ def verify_effect(c: ActionCandidate, before: Snapshot, after: Snapshot) -> Effe
 
 
 def expected_text(kind: ActionKind, was: str, text: str) -> Callable[[str], bool] | None:
-    """The test the field's exact text must pass after the action, given its exact text before;
-    None for kinds that enter no text. Positions count UTF-16 units, as the accessibility API does."""
+    """The test the field's exact text must pass after the action; None for kinds that enter no text."""
     match kind:
         case "set_value" | "choose_option":
             return lambda now: now == text
@@ -84,8 +77,6 @@ def expected_text(kind: ActionKind, was: str, text: str) -> Callable[[str], bool
 
 
 def _inserted_once(was: bytes, text: bytes, now: bytes) -> bool:
-    """Whether `now` is `was` with `text` inserted whole at one position (UTF-16LE bytes, so every
-    position is an even offset)."""
     if len(now) != len(was) + len(text):
         return False
     for i in range(0, len(was) + 1, 2):
@@ -104,8 +95,7 @@ def _verify_text(c: ActionCandidate, before: Snapshot, after: Snapshot, moved: b
     exact = _exactness(c.kind, was, now, text)
     old, new = _value_of(was), _value_of(now)
     if not exact:
-        # cua-driver's reading is trimmed (and shows a placeholder for an empty field): it can show
-        # that the field changed, never that it now holds exactly the text.
+        # cua-driver's reading is trimmed, so it can show a change but never the exact text.
         if new != old or (c.kind == "choose_option" and new == normalize_text(text)):
             return EffectVerdict(
                 effect="unverified",
@@ -132,9 +122,7 @@ def _unchanged_field(moved: bool, exact: bool) -> EffectVerdict:
 
 
 def _exactness(kind: ActionKind, was: UINode | None, now: UINode, text: str) -> bool:
-    """Whether equality on these values is exact. Field text counts only when the native reader
-    gave it (cua-driver trims whitespace at both ends); a pop-up's value is its chosen title, which
-    is exact as long as the text asked for has no whitespace to lose."""
+    """Field text is exact only when read natively, since cua-driver trims whitespace."""
     if kind == "choose_option":
         return text == normalize_text(text)
     return now.exact is True and (kind == "set_value" or (was is not None and was.exact is True))
@@ -155,7 +143,6 @@ def _value_of(n: UINode | None) -> str:
 
 
 def _shown(v: str | None) -> str:
-    """A value as the message shows it; an absent one reads `undefined`."""
     return v if v is not None else "undefined"
 
 

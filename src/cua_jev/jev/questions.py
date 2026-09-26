@@ -1,4 +1,4 @@
-"""Question templates sent to Jev. Question ids never reach the model; meaning lives in the instructions."""
+"""Question templates sent to Jev."""
 
 from __future__ import annotations
 
@@ -36,10 +36,7 @@ def action_question(options: Options) -> Choice:
 
 
 def action_question_forced(options: Options) -> Choice:
-    """The same question as a forced choice (no `none`): its answer only confirms or contests the leader.
-
-    A choice needs two labels, so a single option is offered together with `none`.
-    """
+    """The same question as a forced choice (no `none`): its answer only confirms or contests the leader."""
     return _choice(
         "Which single action best carries out `instruction` on this window? "
         "When `text` is given, it is the exact text the action must enter.",
