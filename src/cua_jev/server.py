@@ -1,0 +1,183 @@
+"""The MCP server: observe, act and extract over one background cua-driver session."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import asynccontextmanager
+from types import MappingProxyType
+from typing import Any, Final
+
+import mcp.types as types
+from mcp.server import NotificationOptions, Server, ServerRequestContext
+from mcp.server.models import InitializationOptions
+
+from cua_jev import __version__, _json
+from cua_jev._json import JsonObject
+from cua_jev.driver import lock
+from cua_jev.errors import CuaJevError, JevUnavailable, ToolError
+from cua_jev.tools.act import act_tool
+from cua_jev.tools.args import INPUT_SCHEMAS, act_args, check_arguments, extract_args, observe_args, validation_text
+from cua_jev.tools.extract import extract_tool
+from cua_jev.tools.observe import observe_tool
+from cua_jev.tools.session import Session
+
+_log = logging.getLogger(__name__)
+
+SERVER_NAME: Final = "cua-jev"
+
+INSTRUCTIONS: Final = "\n".join(
+    [
+        "macOS app control in the background (the app is never brought to the front).",
+        "- observe: lists a window's candidate actions with stable ids; with an instruction, Jev ranks them.",
+        "- act: performs one action, picked by Jev from the instruction or given as candidateId, then checks the "
+        "effect on fresh snapshots. Steps you already know (fill these fields, tick these boxes, then press Save) go "
+        "in one call with `then`: they run in order and stop at the first that is not done. Text is entered exactly "
+        "as given in `text` and verified by exact equality.",
+        "  status: done | unverified (the field changed but its exact text could not be read) | no_effect | mismatch "
+        "(something changed, not what was asked) | ambiguous (choose a candidateId) | needs_confirmation "
+        "(irreversible: repeat with allowDestructive) | not_found | failed.",
+        "- extract: returns the text or value of the element Jev picks, exactly as read; a table or list comes back "
+        "row by row.",
+        "Rows scrolled out of view are not on the window until a scroll candidate brings them in.",
+        'Commands that live only in a right-click menu (rename, star, move to trash) are reached with an "open the '
+        'context menu" candidate; its items are then pressed like any other.',
+        "Keys (Return, Escape, Tab, Space, the arrows) go to the focused control: a keyboard drag is focus the "
+        "handle, Space, arrows, Space.",
+        "Speed: observe without an instruction and act with a candidateId make no Jev call. Name the step with an "
+        "instruction when the id is not in hand or several controls look alike.",
+        "Plan the steps yourself and read each step's status.",
+    ]
+)
+
+DESCRIPTIONS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "observe": "List the candidate actions on a window (id, kind, what it does). With `instruction`, Jev ranks "
+        "them and the most likely come first with their probability `p`.",
+        "act": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev "
+        "picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given.",
+        "extract": "Return the text or value of the element Jev picks for `instruction` (e.g. 'the result shown on "
+        "the display'), exactly as read from accessibility. A table or list is returned as `rows`.",
+    }
+)
+
+type ScreenLocked = Callable[[], Awaitable[bool]]
+
+
+def error(code: str, message: str) -> types.CallToolResult:
+    """A tool-level failure: `isError` with `{"status":"failed","code","message"}` as its text."""
+    text = _json.dumps({"status": "failed", "code": code, "message": message})
+    return types.CallToolResult(is_error=True, content=[types.TextContent(type="text", text=text)])
+
+
+def _protocol_error(text: str) -> types.CallToolResult:
+    return types.CallToolResult(is_error=True, content=[types.TextContent(type="text", text=text)])
+
+
+async def run(
+    session: Session,
+    fn: Callable[[], Awaitable[object]],
+    *,
+    acts: bool,
+    screen_locked: ScreenLocked = lock.screen_locked,
+) -> types.CallToolResult:
+    """One tool call, after every earlier one, and never while the screen is locked.
+
+    No exception leaves this function: every failure becomes a tool-level error.
+    """
+
+    async def body() -> types.CallToolResult:
+        try:
+            if await screen_locked():
+                verb = "done" if acts else "read"
+                return error("screen_locked", f"the screen is locked; nothing was {verb}. Unlock it and call again")
+            return types.CallToolResult(content=[types.TextContent(type="text", text=_json.dumps(await fn()))])
+        except ToolError as err:
+            return error(err.code, err.message)
+        except JevUnavailable as err:
+            return error("jev_unavailable", str(err))
+        except Exception as err:
+            _log.debug("tool call failed", exc_info=True)
+            return error("internal", str(err))
+
+    try:
+        return await session.exclusive(body)
+    except CuaJevError as err:  # the session is shutting down
+        return error("internal", str(err))
+
+
+class _Server(Server[Session]):
+    """The low-level server. It announces that its tool list can change (as MCP clients expect of
+    it) and no experimental capabilities: an empty `experimental` object is left out."""
+
+    def create_initialization_options(
+        self,
+        notification_options: NotificationOptions | None = None,
+        experimental_capabilities: dict[str, dict[str, Any]] | None = None,
+        extensions: dict[str, dict[str, Any]] | None = None,
+    ) -> InitializationOptions:
+        options = notification_options if notification_options is not None else NotificationOptions(tools_changed=True)
+        init = super().create_initialization_options(options, experimental_capabilities, extensions)
+        if not init.capabilities.experimental:
+            init.capabilities = init.capabilities.model_copy(update={"experimental": None})
+        return init
+
+
+def _tools() -> list[types.Tool]:
+    return [
+        types.Tool(
+            name=name,
+            description=DESCRIPTIONS[name],
+            input_schema=dict(schema),
+            execution=types.ToolExecution(task_support="forbidden"),
+        )
+        for name, schema in INPUT_SCHEMAS.items()
+    ]
+
+
+def create_server(
+    session: Session | None = None, *, screen_locked: ScreenLocked = lock.screen_locked
+) -> Server[Session]:
+    """The configured server (not connected); `Session()` when no session is given."""
+    the_session = session if session is not None else Session()
+
+    @asynccontextmanager
+    async def lifespan(_: Server[Session]) -> AsyncIterator[Session]:
+        yield the_session
+
+    async def on_list_tools(
+        ctx: ServerRequestContext[Session], params: types.PaginatedRequestParams | None
+    ) -> types.ListToolsResult:
+        return types.ListToolsResult(tools=_tools())
+
+    async def on_call_tool(
+        ctx: ServerRequestContext[Session], params: types.CallToolRequestParams
+    ) -> types.CallToolResult:
+        name = params.name
+        if name not in INPUT_SCHEMAS:
+            return _protocol_error(f"MCP error -32602: Tool {name} not found")
+        checked, issues = check_arguments(name, params.arguments)
+        if issues:
+            return _protocol_error(validation_text(name, issues))
+        return await run(
+            the_session, _handler(the_session, name, checked), acts=name == "act", screen_locked=screen_locked
+        )
+
+    return _Server(
+        SERVER_NAME,
+        version=__version__,
+        instructions=INSTRUCTIONS,
+        lifespan=lifespan,
+        on_list_tools=on_list_tools,
+        on_call_tool=on_call_tool,
+    )
+
+
+def _handler(session: Session, name: str, arguments: JsonObject) -> Callable[[], Awaitable[object]]:
+    match name:
+        case "observe":
+            return lambda: observe_tool(session, observe_args(arguments))
+        case "act":
+            return lambda: act_tool(session, act_args(arguments))
+        case _:
+            return lambda: extract_tool(session, extract_args(arguments))
