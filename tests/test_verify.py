@@ -89,13 +89,13 @@ class TestToggles:
         got = verify_effect(cand("toggle", TOGGLE_OFF), snap([TOGGLE_OFF]), after)
         assert got == EffectVerdict(effect="ok", detail="value 0 \u2192 1")
 
-    def test_an_absent_value_reads_undefined(self) -> None:
+    def test_an_absent_value_reads_none(self) -> None:
         before = node(1, "AXCheckBox", "Wrap")
         after = snap([node(1, "AXCheckBox", "Wrap", value="1")])
         got = verify_effect(cand("toggle", before), snap([before]), after)
-        assert got == EffectVerdict(effect="ok", detail="value undefined \u2192 1")
+        assert got == EffectVerdict(effect="ok", detail="value (none) \u2192 1")
         gone = verify_effect(cand("toggle", TOGGLE_OFF), snap([TOGGLE_OFF]), snap([node(1, "AXCheckBox", "Wrap")]))
-        assert gone.detail == "value 0 \u2192 undefined"
+        assert gone.detail == "value 0 \u2192 (none)"
 
     def test_a_changed_screen_without_the_flip_is_wrong(self) -> None:
         before = snap([TOGGLE_OFF])

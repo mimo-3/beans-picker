@@ -143,7 +143,7 @@ def _value_of(n: UINode | None) -> str:
 
 
 def _shown(v: str | None) -> str:
-    return v if v is not None else "undefined"
+    return v if v is not None else "(none)"
 
 
 def clip(s: str) -> str:
