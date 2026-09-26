@@ -1,0 +1,61 @@
+{
+  "note": "New tasks, none of them in the legacy agent's benchmark. `expected` is the exact final state: the fixture's state file (every key compared for exact equality), or Calculator's display text (bidi control marks removed, nothing else).",
+  "tasks": [
+    {
+      "id": "fx-name-spaces",
+      "app": "fixture",
+      "setup": {},
+      "prompt": "In the form, set the Name field to exactly this JSON string: \"  Grace Hopper \" (two leading spaces, one trailing space). Change nothing else.",
+      "expected": { "name": "  Grace Hopper ", "email": "", "search": "", "body": "", "size": "Small", "newsletter": 0, "saves": 0, "deletes": 0 }
+    },
+    {
+      "id": "fx-body-not-search",
+      "app": "fixture",
+      "setup": { "body": "todo:\n" },
+      "prompt": "The note body currently reads \"todo:\" followed by a line break. Add the text \"buy milk\" to the end of the note body, so that it reads exactly the JSON string \"todo:\\nbuy milk\". Do not type anything into the search field.",
+      "expected": { "body": "todo:\nbuy milk", "search": "", "name": "", "email": "", "size": "Small", "newsletter": 0, "saves": 0, "deletes": 0 }
+    },
+    {
+      "id": "fx-size-save",
+      "app": "fixture",
+      "setup": {},
+      "prompt": "Choose \"Large\" in the Size pop-up, then press the Save button exactly once.",
+      "expected": { "size": "Large", "saves": 1, "name": "", "email": "", "search": "", "body": "", "newsletter": 0, "deletes": 0 }
+    },
+    {
+      "id": "fx-clear-search-keep-note",
+      "app": "fixture",
+      "setup": { "search": "draft", "body": "Meeting at 3pm" },
+      "prompt": "Clear the search field so that it is empty. The note must stay as it is.",
+      "expected": { "search": "", "body": "Meeting at 3pm", "deletes": 0, "name": "", "email": "", "size": "Small", "newsletter": 0, "saves": 0 }
+    },
+    {
+      "id": "fx-email-fix-newsletter",
+      "app": "fixture",
+      "setup": { "email": "ada@exmaple.com" },
+      "prompt": "The Email field has a typo. Change it to exactly \"ada@example.com\", then turn on \"Send newsletter\".",
+      "expected": { "email": "ada@example.com", "newsletter": 1, "name": "", "search": "", "body": "", "size": "Small", "saves": 0, "deletes": 0 }
+    },
+    {
+      "id": "calc-chain",
+      "app": "calculator",
+      "setup": {},
+      "prompt": "Using the calculator, compute (48 + 16) / 8 and leave the result on the display.",
+      "expected": { "display": "8" }
+    },
+    {
+      "id": "calc-percent",
+      "app": "calculator",
+      "setup": {},
+      "prompt": "Using the calculator's percent key, compute 15% of 80 and leave the result on the display.",
+      "expected": { "display": "12" }
+    },
+    {
+      "id": "calc-negate",
+      "app": "calculator",
+      "setup": {},
+      "prompt": "Using the calculator, compute 7 - 19, then change the sign of the result, and leave it on the display.",
+      "expected": { "display": "12" }
+    }
+  ]
+}
