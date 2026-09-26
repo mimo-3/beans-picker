@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Awaitable, Callable
 
 import pytest
-from mcp import Client
+from mcp import Client, MCPError
+from mcp.types import INVALID_PARAMS
 
+from cua_jev import server as server_module
 from cua_jev._json import JsonObject
-from cua_jev.errors import DriverError, JevBadResponse, JevUnavailable, ToolError
+from cua_jev.errors import DriverError, DriverUnavailable, JevBadResponse, JevUnavailable, ToolError
 from cua_jev.server import INSTRUCTIONS, create_server, error, run
 from cua_jev.tools.session import Session
 from tests.fakes import FakeDriver
@@ -95,8 +98,9 @@ async def test_run_refuses_while_the_screen_is_locked(acts: bool, verb: str) -> 
     [
         (ToolError("window_not_found", "pid 3 has no usable window"), "window_not_found", "pid 3 has no usable window"),
         (JevUnavailable("no key"), "jev_unavailable", "no key"),
-        (JevBadResponse('"pick" has no noul'), "internal", '"pick" has no noul'),
-        (DriverError("click", "stale", "gone"), "internal", "click refused (stale): gone"),
+        (JevBadResponse('"pick" has no noul'), "jev_bad_response", '"pick" has no noul'),
+        (DriverError("click", "stale", "gone"), "driver_error", "click refused (stale): gone"),
+        (DriverUnavailable("cannot start cua-driver"), "driver_unavailable", "cannot start cua-driver"),
         (RuntimeError("boom"), "internal", "boom"),
     ],
 )
@@ -146,3 +150,55 @@ async def test_tool_calls_never_interleave() -> None:
 
     await asyncio.gather(*(run(session, body(n), acts=True, screen_locked=_unlocked) for n in "abc"))
     assert events == ["start a", "end a", "start b", "end b", "start c", "end c"]
+
+
+async def test_unexpected_failures_are_logged_with_their_traceback(caplog: pytest.LogCaptureFixture) -> None:
+    async def fn() -> object:
+        raise RuntimeError("boom")
+
+    async def refused() -> object:
+        raise ToolError("bad_target", "give app, pid or windowId")
+
+    with caplog.at_level(logging.WARNING, logger="cua_jev.server"):
+        await run(Session(_driver), fn, acts=False, screen_locked=_unlocked)
+        await run(Session(_driver), refused, acts=False, screen_locked=_unlocked)
+    [record] = caplog.records
+    assert record.levelno == logging.WARNING
+    assert record.getMessage() == "tool call failed (internal)"
+    assert record.exc_info is not None
+
+
+async def test_an_unknown_tool_is_a_protocol_error() -> None:
+    server = create_server(Session(_driver), screen_locked=_unlocked)
+    async with Client(server, mode="legacy") as client:
+        with pytest.raises(MCPError) as info:
+            await client.call_tool("nope", {})
+    assert info.value.code == INVALID_PARAMS
+    assert info.value.message == "Tool nope not found"
+
+
+async def test_a_session_the_server_made_is_closed_when_it_stops(monkeypatch: pytest.MonkeyPatch) -> None:
+    closed: list[Session] = []
+
+    class Recording(Session):
+        async def close(self) -> None:
+            closed.append(self)
+            await super().close()
+
+    monkeypatch.setattr(server_module, "Session", lambda: Recording(_driver))
+    async with Client(create_server(screen_locked=_unlocked), mode="legacy") as client:
+        await client.list_tools()
+    assert len(closed) == 1
+
+
+async def test_a_given_session_is_left_open() -> None:
+    session = Session(_driver)
+    async with Client(create_server(session, screen_locked=_unlocked), mode="legacy") as client:
+        await client.list_tools()
+
+    async def fn() -> object:
+        return {}
+
+    r = await run(session, fn, acts=False, screen_locked=_unlocked)
+    assert r.is_error is False
+    await session.close()
