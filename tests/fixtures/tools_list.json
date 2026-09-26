@@ -1,0 +1,180 @@
+{
+  "tools": [
+    {
+      "name": "observe",
+      "description": "List the candidate actions on a window (id, kind, what it does). With `instruction`, Jev ranks them and the most likely come first with their probability `p`.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "description": "App name (\"Calculator\") or bundle id. Launched in the background if not running.",
+            "type": "string"
+          },
+          "pid": {
+            "description": "Process id, instead of app.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "description": "Window id. Default: the app's front-most titled window.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "limit": {
+            "description": "Candidates to return (default 80, or 10 with an instruction).",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "act",
+      "description": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "description": "App name (\"Calculator\") or bundle id. Launched in the background if not running.",
+            "type": "string"
+          },
+          "pid": {
+            "description": "Process id, instead of app.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "description": "Window id. Default: the app's front-most titled window.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "instruction": {
+            "type": "string",
+            "description": "What this one action should do, e.g. 'press the 7 key' or 'type into the search field'."
+          },
+          "text": {
+            "description": "Exact text to enter (fields, pop-ups, on-screen keypads). Never trimmed.",
+            "type": "string"
+          },
+          "candidateId": {
+            "description": "Run this candidate instead of asking Jev.",
+            "type": "string"
+          },
+          "allowDestructive": {
+            "description": "Permit an action that may not be undoable (delete, close, send …).",
+            "type": "boolean"
+          },
+          "modifiers": {
+            "description": "Keys held during a click or toggle: shift-click extends a selection, cmd-click adds one item to it. The control must be visible on the window.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "shift",
+                "cmd",
+                "option",
+                "ctrl"
+              ]
+            }
+          },
+          "then": {
+            "description": "More steps on the same window, run in order after this one. The run stops at the first step that is not done or unverified; each step's result is in `steps`.",
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "instruction": {
+                  "type": "string",
+                  "description": "What this one action should do, e.g. 'press the 7 key' or 'type into the search field'."
+                },
+                "text": {
+                  "description": "Exact text to enter (fields, pop-ups, on-screen keypads). Never trimmed.",
+                  "type": "string"
+                },
+                "candidateId": {
+                  "description": "Run this candidate instead of asking Jev.",
+                  "type": "string"
+                },
+                "allowDestructive": {
+                  "description": "Permit an action that may not be undoable (delete, close, send …).",
+                  "type": "boolean"
+                },
+                "modifiers": {
+                  "description": "Keys held during a click or toggle: shift-click extends a selection, cmd-click adds one item to it. The control must be visible on the window.",
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "shift",
+                      "cmd",
+                      "option",
+                      "ctrl"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "instruction"
+              ]
+            }
+          }
+        },
+        "required": [
+          "instruction"
+        ]
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "extract",
+      "description": "Return the text or value of the element Jev picks for `instruction` (e.g. 'the result shown on the display'), exactly as read from accessibility. A table or list is returned as `rows`.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "app": {
+            "description": "App name (\"Calculator\") or bundle id. Launched in the background if not running.",
+            "type": "string"
+          },
+          "pid": {
+            "description": "Process id, instead of app.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "description": "Window id. Default: the app's front-most titled window.",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "instruction": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction"
+        ]
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}

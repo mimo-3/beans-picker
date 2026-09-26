@@ -1,0 +1,2563 @@
+{
+ "app_name": "テキストエディット",
+ "background_input": {
+  "exact_window": {
+   "pid": 1002,
+   "status": "matched",
+   "window_id": 569
+  },
+  "observation": {
+   "frame_freshness": "unknown",
+   "one_shot_capture": "unavailable"
+  },
+  "routes": [
+   {
+    "route": "accessibility",
+    "status": "available"
+   },
+   {
+    "route": "window_pointer",
+    "status": "available"
+   },
+   {
+    "route": "pid_keyboard",
+    "status": "available"
+   }
+  ]
+ },
+ "element_count": 169,
+ "elements": [
+  {
+   "actions": [
+    "AXRaise"
+   ],
+   "depth": 0,
+   "element_index": 0,
+   "element_token": "s00000018:0",
+   "frame": {
+    "h": 422,
+    "w": 656,
+    "x": 152,
+    "y": 73
+   },
+   "label": "te-fixture.txt",
+   "role": "AXWindow"
+  },
+  {
+   "actions": [
+    "AXShowMenu"
+   ],
+   "depth": 1,
+   "element_index": 1,
+   "element_token": "s00000018:1",
+   "frame": {
+    "h": 384,
+    "w": 656,
+    "x": 152,
+    "y": 105
+   },
+   "label": "alpha beta gamma",
+   "parent_index": 0,
+   "role": "AXTextArea",
+   "value": "alpha beta gamma"
+  },
+  {
+   "actions": [
+    "AXPress"
+   ],
+   "depth": 1,
+   "element_index": 2,
+   "element_token": "s00000018:2",
+   "enabled": true,
+   "frame": {
+    "h": 16,
+    "w": 16,
+    "x": 160,
+    "y": 81
+   },
+   "parent_index": 0,
+   "role": "AXButton"
+  },
+  {
+   "actions": [
+    "AXPress",
+    "AXZoomWindow",
+    "AXShowMenu"
+   ],
+   "depth": 1,
+   "element_index": 3,
+   "element_token": "s00000018:3",
+   "enabled": true,
+   "frame": {
+    "h": 16,
+    "w": 16,
+    "x": 206,
+    "y": 81
+   },
+   "parent_index": 0,
+   "role": "AXButton"
+  },
+  {
+   "actions": [
+    "AXPress"
+   ],
+   "depth": 1,
+   "element_index": 4,
+   "element_token": "s00000018:4",
+   "enabled": true,
+   "frame": {
+    "h": 16,
+    "w": 16,
+    "x": 183,
+    "y": 81
+   },
+   "parent_index": 0,
+   "role": "AXButton"
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 0,
+   "element_index": 5,
+   "element_token": "s00000018:5",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 1512,
+    "x": 0,
+    "y": 0
+   },
+   "label": "_NS:833",
+   "role": "AXMenuBar",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 1,
+   "element_index": 6,
+   "element_token": "s00000018:6",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 34,
+    "x": 10,
+    "y": 0
+   },
+   "label": "Apple",
+   "parent_index": 5,
+   "role": "AXMenuBarItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 2,
+   "element_index": 7,
+   "element_token": "s00000018:7",
+   "enabled": true,
+   "parent_index": 6,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 8,
+   "element_token": "s00000018:8",
+   "enabled": true,
+   "label": "このMacについて",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 9,
+   "element_token": "s00000018:9",
+   "enabled": true,
+   "label": "システム情報",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 10,
+   "element_token": "s00000018:10",
+   "enabled": true,
+   "label": "システム設定…、1個のアップデート",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 11,
+   "element_token": "s00000018:11",
+   "enabled": true,
+   "label": "App Store",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 12,
+   "element_token": "s00000018:12",
+   "enabled": true,
+   "label": "最近使った項目",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 13,
+   "element_token": "s00000018:13",
+   "enabled": true,
+   "parent_index": 12,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 14,
+   "element_token": "s00000018:14",
+   "enabled": true,
+   "label": "Recent Item 1",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 15,
+   "element_token": "s00000018:15",
+   "enabled": true,
+   "label": "“Recent Item 1”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 16,
+   "element_token": "s00000018:16",
+   "enabled": true,
+   "label": "Recent Item 2",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 17,
+   "element_token": "s00000018:17",
+   "enabled": true,
+   "label": "“Recent Item 2”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 18,
+   "element_token": "s00000018:18",
+   "enabled": true,
+   "label": "Recent Item 3",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 19,
+   "element_token": "s00000018:19",
+   "enabled": true,
+   "label": "“Recent Item 3”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 20,
+   "element_token": "s00000018:20",
+   "enabled": true,
+   "label": "Recent Item 4",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 21,
+   "element_token": "s00000018:21",
+   "enabled": true,
+   "label": "“Recent Item 4”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 22,
+   "element_token": "s00000018:22",
+   "enabled": true,
+   "label": "Recent Item 5",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 23,
+   "element_token": "s00000018:23",
+   "enabled": true,
+   "label": "“Recent Item 5”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 24,
+   "element_token": "s00000018:24",
+   "enabled": true,
+   "label": "Recent Item 6",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 25,
+   "element_token": "s00000018:25",
+   "enabled": true,
+   "label": "“Recent Item 6”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 26,
+   "element_token": "s00000018:26",
+   "enabled": true,
+   "label": "Recent Item 7",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 27,
+   "element_token": "s00000018:27",
+   "enabled": true,
+   "label": "“Recent Item 7”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 28,
+   "element_token": "s00000018:28",
+   "enabled": true,
+   "label": "Recent Item 8",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 29,
+   "element_token": "s00000018:29",
+   "enabled": true,
+   "label": "“Recent Item 8”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 30,
+   "element_token": "s00000018:30",
+   "enabled": true,
+   "label": "Recent Item 9",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 31,
+   "element_token": "s00000018:31",
+   "enabled": true,
+   "label": "“Recent Item 9”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 32,
+   "element_token": "s00000018:32",
+   "enabled": true,
+   "label": "Recent Item 10",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 33,
+   "element_token": "s00000018:33",
+   "enabled": true,
+   "label": "“Recent Item 10”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 34,
+   "element_token": "s00000018:34",
+   "enabled": true,
+   "label": "Recent Item 11",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 35,
+   "element_token": "s00000018:35",
+   "enabled": true,
+   "label": "“Recent Item 11”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 36,
+   "element_token": "s00000018:36",
+   "enabled": true,
+   "label": "Recent Item 12",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 37,
+   "element_token": "s00000018:37",
+   "enabled": true,
+   "label": "“Recent Item 12”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 38,
+   "element_token": "s00000018:38",
+   "enabled": true,
+   "label": "Recent Item 13",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 39,
+   "element_token": "s00000018:39",
+   "enabled": true,
+   "label": "“Recent Item 13”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 40,
+   "element_token": "s00000018:40",
+   "enabled": true,
+   "label": "Recent Item 14",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 41,
+   "element_token": "s00000018:41",
+   "enabled": true,
+   "label": "“Recent Item 14”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 42,
+   "element_token": "s00000018:42",
+   "enabled": true,
+   "label": "te-fixture.txt",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 43,
+   "element_token": "s00000018:43",
+   "enabled": true,
+   "label": "“te-fixture.txt”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 44,
+   "element_token": "s00000018:44",
+   "enabled": true,
+   "label": "Recent Item 15",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 45,
+   "element_token": "s00000018:45",
+   "enabled": true,
+   "label": "“Recent Item 15”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 46,
+   "element_token": "s00000018:46",
+   "enabled": true,
+   "label": "Recent Item 16",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 47,
+   "element_token": "s00000018:47",
+   "enabled": true,
+   "label": "“Recent Item 16”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 48,
+   "element_token": "s00000018:48",
+   "enabled": true,
+   "label": "Recent Item 17",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 49,
+   "element_token": "s00000018:49",
+   "enabled": true,
+   "label": "“Recent Item 17”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 50,
+   "element_token": "s00000018:50",
+   "enabled": true,
+   "label": "Recent Item 18",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 51,
+   "element_token": "s00000018:51",
+   "enabled": true,
+   "label": "“Recent Item 18”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 52,
+   "element_token": "s00000018:52",
+   "enabled": true,
+   "label": "Recent Item 19",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 53,
+   "element_token": "s00000018:53",
+   "enabled": true,
+   "label": "“Recent Item 19”をFinderに表示",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 54,
+   "element_token": "s00000018:54",
+   "enabled": true,
+   "label": "Macintosh HD",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 55,
+   "element_token": "s00000018:55",
+   "enabled": true,
+   "label": "Macintosh HD",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 56,
+   "element_token": "s00000018:56",
+   "enabled": true,
+   "label": "Macintosh HD",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 57,
+   "element_token": "s00000018:57",
+   "enabled": true,
+   "label": "Recent Item 20",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 58,
+   "element_token": "s00000018:58",
+   "enabled": true,
+   "label": "メニューを消去",
+   "parent_index": 13,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 59,
+   "element_token": "s00000018:59",
+   "enabled": true,
+   "label": "強制終了…",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 60,
+   "element_token": "s00000018:60",
+   "enabled": true,
+   "label": "テキストエディットを強制終了",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 61,
+   "element_token": "s00000018:61",
+   "enabled": true,
+   "label": "再起動…",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 62,
+   "element_token": "s00000018:62",
+   "enabled": true,
+   "label": "再起動",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 63,
+   "element_token": "s00000018:63",
+   "enabled": true,
+   "label": "システム終了…",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 64,
+   "element_token": "s00000018:64",
+   "enabled": true,
+   "label": "システム終了",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 65,
+   "element_token": "s00000018:65",
+   "enabled": true,
+   "label": "ロック画面",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 66,
+   "element_token": "s00000018:66",
+   "enabled": true,
+   "label": "Test Userをログアウト…",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 67,
+   "element_token": "s00000018:67",
+   "enabled": true,
+   "label": "Test Userをログアウト",
+   "parent_index": 7,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 1,
+   "element_index": 68,
+   "element_token": "s00000018:68",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 129,
+    "x": 44,
+    "y": 0
+   },
+   "label": "テキストエディット",
+   "parent_index": 5,
+   "role": "AXMenuBarItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 2,
+   "element_index": 69,
+   "element_token": "s00000018:69",
+   "enabled": true,
+   "label": "_NS:842",
+   "parent_index": 68,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 70,
+   "element_token": "s00000018:70",
+   "enabled": true,
+   "label": "テキストエディットについて",
+   "parent_index": 69,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 71,
+   "element_token": "s00000018:71",
+   "enabled": true,
+   "label": "設定…",
+   "parent_index": 69,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 72,
+   "element_token": "s00000018:72",
+   "enabled": true,
+   "label": "サービス",
+   "parent_index": 69,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 73,
+   "element_token": "s00000018:73",
+   "enabled": true,
+   "label": "_NS:852",
+   "parent_index": 72,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 74,
+   "element_token": "s00000018:74",
+   "enabled": true,
+   "label": "Service Item 1",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 75,
+   "element_token": "s00000018:75",
+   "enabled": true,
+   "label": "Service Item 2",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 76,
+   "element_token": "s00000018:76",
+   "enabled": true,
+   "label": "Service Item 3",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 77,
+   "element_token": "s00000018:77",
+   "enabled": true,
+   "label": "Service Item 4",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 78,
+   "element_token": "s00000018:78",
+   "enabled": true,
+   "label": "Service Item 5",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 79,
+   "element_token": "s00000018:79",
+   "enabled": true,
+   "label": "Service Item 6",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 80,
+   "element_token": "s00000018:80",
+   "enabled": true,
+   "label": "Service Item 7",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 81,
+   "element_token": "s00000018:81",
+   "enabled": true,
+   "label": "Service Item 8",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 82,
+   "element_token": "s00000018:82",
+   "enabled": true,
+   "label": "Service Item 9",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 83,
+   "element_token": "s00000018:83",
+   "enabled": true,
+   "label": "Service Item 10",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 84,
+   "element_token": "s00000018:84",
+   "enabled": true,
+   "label": "Service Item 11",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 85,
+   "element_token": "s00000018:85",
+   "enabled": true,
+   "label": "サービス設定…",
+   "parent_index": 73,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 86,
+   "element_token": "s00000018:86",
+   "enabled": true,
+   "label": "テキストエディットを非表示",
+   "parent_index": 69,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 87,
+   "element_token": "s00000018:87",
+   "enabled": true,
+   "label": "ほかを非表示",
+   "parent_index": 69,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 88,
+   "element_token": "s00000018:88",
+   "enabled": true,
+   "label": "テキストエディットを終了",
+   "parent_index": 69,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 89,
+   "element_token": "s00000018:89",
+   "enabled": true,
+   "label": "終了（ほかのウインドウは保持）",
+   "parent_index": 69,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 1,
+   "element_index": 90,
+   "element_token": "s00000018:90",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 69,
+    "x": 173,
+    "y": 0
+   },
+   "label": "ファイル",
+   "parent_index": 5,
+   "role": "AXMenuBarItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 2,
+   "element_index": 91,
+   "element_token": "s00000018:91",
+   "enabled": true,
+   "label": "_NS:864",
+   "parent_index": 90,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 92,
+   "element_token": "s00000018:92",
+   "enabled": true,
+   "label": "新規",
+   "parent_index": 91,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 93,
+   "element_token": "s00000018:93",
+   "enabled": true,
+   "label": "開く…",
+   "parent_index": 91,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 94,
+   "element_token": "s00000018:94",
+   "enabled": true,
+   "label": "最近使った項目を開く",
+   "parent_index": 91,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 95,
+   "element_token": "s00000018:95",
+   "enabled": true,
+   "label": "_NS:872",
+   "parent_index": 94,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 96,
+   "element_token": "s00000018:96",
+   "enabled": true,
+   "label": "te-fixture.txt",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 97,
+   "element_token": "s00000018:97",
+   "enabled": true,
+   "label": "Recent Document 1",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 98,
+   "element_token": "s00000018:98",
+   "enabled": true,
+   "label": "Recent Document 2",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 99,
+   "element_token": "s00000018:99",
+   "enabled": true,
+   "label": "Recent Document 3",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 100,
+   "element_token": "s00000018:100",
+   "enabled": true,
+   "label": "Recent Document 4",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 101,
+   "element_token": "s00000018:101",
+   "enabled": true,
+   "label": "Recent Document 5",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 102,
+   "element_token": "s00000018:102",
+   "enabled": true,
+   "label": "Recent Document 3",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 103,
+   "element_token": "s00000018:103",
+   "enabled": true,
+   "label": "Recent Document 6",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 104,
+   "element_token": "s00000018:104",
+   "enabled": true,
+   "label": "Recent Document 7",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 105,
+   "element_token": "s00000018:105",
+   "enabled": true,
+   "label": "メニューを消去",
+   "parent_index": 95,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 106,
+   "element_token": "s00000018:106",
+   "enabled": true,
+   "label": "すべてを閉じる",
+   "parent_index": 91,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 107,
+   "element_token": "s00000018:107",
+   "enabled": true,
+   "label": "バージョンを戻す",
+   "parent_index": 91,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 108,
+   "element_token": "s00000018:108",
+   "enabled": true,
+   "parent_index": 107,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 109,
+   "element_token": "s00000018:109",
+   "enabled": true,
+   "label": "<<Import From Device - unlocalized>>",
+   "parent_index": 91,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 110,
+   "element_token": "s00000018:110",
+   "enabled": true,
+   "parent_index": 109,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 111,
+   "element_token": "s00000018:111",
+   "enabled": true,
+   "label": "共有",
+   "parent_index": 91,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 112,
+   "element_token": "s00000018:112",
+   "enabled": true,
+   "parent_index": 111,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 113,
+   "element_token": "s00000018:113",
+   "enabled": true,
+   "label": "プロパティを表示",
+   "parent_index": 91,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 1,
+   "element_index": 114,
+   "element_token": "s00000018:114",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 45,
+    "x": 242,
+    "y": 0
+   },
+   "label": "編集",
+   "parent_index": 5,
+   "role": "AXMenuBarItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 2,
+   "element_index": 115,
+   "element_token": "s00000018:115",
+   "enabled": true,
+   "label": "_NS:889",
+   "parent_index": 114,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 116,
+   "element_token": "s00000018:116",
+   "enabled": true,
+   "label": "挿入",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 117,
+   "element_token": "s00000018:117",
+   "enabled": true,
+   "label": "_NS:898",
+   "parent_index": 116,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 118,
+   "element_token": "s00000018:118",
+   "enabled": true,
+   "label": "検索",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 119,
+   "element_token": "s00000018:119",
+   "enabled": true,
+   "label": "_NS:907",
+   "parent_index": 118,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 120,
+   "element_token": "s00000018:120",
+   "enabled": true,
+   "label": "行を選択…",
+   "parent_index": 119,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 121,
+   "element_token": "s00000018:121",
+   "enabled": true,
+   "label": "作文ツール",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 122,
+   "element_token": "s00000018:122",
+   "enabled": true,
+   "parent_index": 121,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 123,
+   "element_token": "s00000018:123",
+   "enabled": true,
+   "label": "スペルと文法",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 124,
+   "element_token": "s00000018:124",
+   "enabled": true,
+   "label": "_NS:915",
+   "parent_index": 123,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 125,
+   "element_token": "s00000018:125",
+   "enabled": true,
+   "label": "スペルと文法を表示",
+   "parent_index": 124,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 126,
+   "element_token": "s00000018:126",
+   "enabled": true,
+   "label": "自動置換",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 127,
+   "element_token": "s00000018:127",
+   "enabled": true,
+   "label": "_NS:924",
+   "parent_index": 126,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 128,
+   "element_token": "s00000018:128",
+   "enabled": true,
+   "label": "変換",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 129,
+   "element_token": "s00000018:129",
+   "enabled": true,
+   "label": "_NS:933",
+   "parent_index": 128,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 130,
+   "element_token": "s00000018:130",
+   "enabled": true,
+   "label": "スピーチ",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 131,
+   "element_token": "s00000018:131",
+   "enabled": true,
+   "label": "_NS:941",
+   "parent_index": 130,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 132,
+   "element_token": "s00000018:132",
+   "enabled": true,
+   "label": "自動入力",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 133,
+   "element_token": "s00000018:133",
+   "enabled": true,
+   "parent_index": 132,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 134,
+   "element_token": "s00000018:134",
+   "enabled": true,
+   "label": "絵文字と記号",
+   "parent_index": 115,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 1,
+   "element_index": 135,
+   "element_token": "s00000018:135",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 93,
+    "x": 287,
+    "y": 0
+   },
+   "label": "フォーマット",
+   "parent_index": 5,
+   "role": "AXMenuBarItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 2,
+   "element_index": 136,
+   "element_token": "s00000018:136",
+   "enabled": true,
+   "label": "_NS:949",
+   "parent_index": 135,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 137,
+   "element_token": "s00000018:137",
+   "enabled": true,
+   "label": "フォント",
+   "parent_index": 136,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 138,
+   "element_token": "s00000018:138",
+   "enabled": true,
+   "label": "_NS:31",
+   "parent_index": 137,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 139,
+   "element_token": "s00000018:139",
+   "enabled": true,
+   "label": "フォントパネルを表示",
+   "parent_index": 138,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 6,
+   "element_index": 140,
+   "element_token": "s00000018:140",
+   "enabled": true,
+   "parent_index": 138,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 141,
+   "element_token": "s00000018:141",
+   "enabled": true,
+   "label": "カーニング",
+   "parent_index": 138,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 6,
+   "element_index": 142,
+   "element_token": "s00000018:142",
+   "enabled": true,
+   "label": "_NS:85",
+   "parent_index": 141,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 143,
+   "element_token": "s00000018:143",
+   "enabled": true,
+   "label": "リガチャ",
+   "parent_index": 138,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 6,
+   "element_index": 144,
+   "element_token": "s00000018:144",
+   "enabled": true,
+   "label": "_NS:111",
+   "parent_index": 143,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 145,
+   "element_token": "s00000018:145",
+   "enabled": true,
+   "label": "ベースライン",
+   "parent_index": 138,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 6,
+   "element_index": 146,
+   "element_token": "s00000018:146",
+   "enabled": true,
+   "label": "_NS:129",
+   "parent_index": 145,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 147,
+   "element_token": "s00000018:147",
+   "enabled": true,
+   "label": "文字の形状",
+   "parent_index": 138,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 6,
+   "element_index": 148,
+   "element_token": "s00000018:148",
+   "enabled": true,
+   "label": "_NS:156",
+   "parent_index": 147,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 149,
+   "element_token": "s00000018:149",
+   "enabled": true,
+   "label": "カラーパネルを表示",
+   "parent_index": 138,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 150,
+   "element_token": "s00000018:150",
+   "enabled": true,
+   "label": "テキスト",
+   "parent_index": 136,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 151,
+   "element_token": "s00000018:151",
+   "enabled": true,
+   "label": "_NS:960",
+   "parent_index": 150,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 5,
+   "element_index": 152,
+   "element_token": "s00000018:152",
+   "enabled": true,
+   "label": "文章の方向",
+   "parent_index": 151,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 6,
+   "element_index": 153,
+   "element_token": "s00000018:153",
+   "enabled": true,
+   "label": "_NS:969",
+   "parent_index": 152,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 1,
+   "element_index": 154,
+   "element_token": "s00000018:154",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 45,
+    "x": 380,
+    "y": 0
+   },
+   "label": "表示",
+   "parent_index": 5,
+   "role": "AXMenuBarItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 2,
+   "element_index": 155,
+   "element_token": "s00000018:155",
+   "enabled": true,
+   "label": "_NS:982",
+   "parent_index": 154,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 1,
+   "element_index": 156,
+   "element_token": "s00000018:156",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 81,
+    "x": 425,
+    "y": 0
+   },
+   "label": "ウインドウ",
+   "parent_index": 5,
+   "role": "AXMenuBarItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 2,
+   "element_index": 157,
+   "element_token": "s00000018:157",
+   "enabled": true,
+   "label": "_NS:992",
+   "parent_index": 156,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 158,
+   "element_token": "s00000018:158",
+   "enabled": true,
+   "label": "すべてをしまう",
+   "parent_index": 157,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 159,
+   "element_token": "s00000018:159",
+   "enabled": true,
+   "label": "すべてを拡大/縮小",
+   "parent_index": 157,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 160,
+   "element_token": "s00000018:160",
+   "enabled": true,
+   "label": "移動とサイズ変更",
+   "parent_index": 157,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 161,
+   "element_token": "s00000018:161",
+   "enabled": true,
+   "parent_index": 160,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 4,
+   "element_index": 162,
+   "element_token": "s00000018:162",
+   "enabled": true,
+   "parent_index": 157,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 163,
+   "element_token": "s00000018:163",
+   "enabled": true,
+   "label": "すべてを手前に移動",
+   "parent_index": 157,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 164,
+   "element_token": "s00000018:164",
+   "enabled": true,
+   "label": "ウインドウを整理",
+   "parent_index": 157,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 165,
+   "element_token": "s00000018:165",
+   "enabled": true,
+   "label": "te-fixture.txt",
+   "parent_index": 157,
+   "role": "AXMenuItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 1,
+   "element_index": 166,
+   "element_token": "s00000018:166",
+   "enabled": true,
+   "frame": {
+    "h": 33,
+    "w": 57,
+    "x": 506,
+    "y": 0
+   },
+   "label": "ヘルプ",
+   "parent_index": 5,
+   "role": "AXMenuBarItem",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel"
+   ],
+   "depth": 2,
+   "element_index": 167,
+   "element_token": "s00000018:167",
+   "enabled": true,
+   "label": "_NS:1002",
+   "parent_index": 166,
+   "role": "AXMenu",
+   "selected": false
+  },
+  {
+   "actions": [
+    "AXCancel",
+    "AXPress",
+    "AXPick"
+   ],
+   "depth": 3,
+   "element_index": 168,
+   "element_token": "s00000018:168",
+   "enabled": true,
+   "label": "テキストエディットヘルプ",
+   "parent_index": 167,
+   "role": "AXMenuItem",
+   "selected": false
+  }
+ ],
+ "elements_complete": false,
+ "pid": 1002,
+ "returned_element_count": 169,
+ "snapshot_id": "s00000018",
+ "total_element_count": 169,
+ "tree_markdown": "- [0] AXWindow \"te-fixture.txt\" [id=_NS:34 actions=[raise]]\n  - [1] AXTextArea = \"alpha beta gamma\" [id=First Text View actions=[showmenu]]\n  - [2] AXButton [actions=[press]]\n  - [3] AXButton [help=\"このボタンにはウインドウを拡大する操作もあります\" actions=[press,zoomwindow,showmenu]]\n  - [4] AXButton [actions=[press]]\n  - AXMenuButton (書類アクション)\n  - AXImage \"te-fixture.txt\"\n  - AXStaticText = \"te-fixture.txt\"\n- [5] AXMenuBar [id=_NS:833 actions=[cancel]]\n  - [6] AXMenuBarItem \"Apple\" [actions=[cancel,press,pick]]\n    - [7] AXMenu [actions=[cancel]]\n      - [8] AXMenuItem \"このMacについて\" [id=_aboutThisMacRequested: actions=[cancel,press,pick]]\n      - [9] AXMenuItem \"システム情報\" [id=_systemInformationRequested: actions=[cancel,press,pick]]\n      - [10] AXMenuItem \"システム設定…、1個のアップデート\" [id=_systemSettingsRequested: actions=[cancel,press,pick]]\n      - [11] AXMenuItem \"App Store\" [id=_appStoreRequested: actions=[cancel,press,pick]]\n      - [12] AXMenuItem \"最近使った項目\" [id=_recentsRequested: actions=[cancel,press,pick]]\n        - [13] AXMenu [actions=[cancel]]\n          - AXMenuItem \"アプリケーション\"\n          - [14] AXMenuItem \"Recent Item 1\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [15] AXMenuItem \"“Recent Item 1”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [16] AXMenuItem \"Recent Item 2\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [17] AXMenuItem \"“Recent Item 2”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [18] AXMenuItem \"Recent Item 3\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [19] AXMenuItem \"“Recent Item 3”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [20] AXMenuItem \"Recent Item 4\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [21] AXMenuItem \"“Recent Item 4”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [22] AXMenuItem \"Recent Item 5\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [23] AXMenuItem \"“Recent Item 5”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [24] AXMenuItem \"Recent Item 6\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [25] AXMenuItem \"“Recent Item 6”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [26] AXMenuItem \"Recent Item 7\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [27] AXMenuItem \"“Recent Item 7”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [28] AXMenuItem \"Recent Item 8\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [29] AXMenuItem \"“Recent Item 8”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [30] AXMenuItem \"Recent Item 9\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [31] AXMenuItem \"“Recent Item 9”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [32] AXMenuItem \"Recent Item 10\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [33] AXMenuItem \"“Recent Item 10”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - AXMenuItem \"書類\"\n          - [34] AXMenuItem \"Recent Item 11\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [35] AXMenuItem \"“Recent Item 11”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [36] AXMenuItem \"Recent Item 12\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [37] AXMenuItem \"“Recent Item 12”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [38] AXMenuItem \"Recent Item 13\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [39] AXMenuItem \"“Recent Item 13”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [40] AXMenuItem \"Recent Item 14\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [41] AXMenuItem \"“Recent Item 14”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [42] AXMenuItem \"te-fixture.txt\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [43] AXMenuItem \"“te-fixture.txt”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [44] AXMenuItem \"Recent Item 15\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [45] AXMenuItem \"“Recent Item 15”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [46] AXMenuItem \"Recent Item 16\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [47] AXMenuItem \"“Recent Item 16”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [48] AXMenuItem \"Recent Item 17\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [49] AXMenuItem \"“Recent Item 17”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [50] AXMenuItem \"Recent Item 18\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [51] AXMenuItem \"“Recent Item 18”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [52] AXMenuItem \"Recent Item 19\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [53] AXMenuItem \"“Recent Item 19”をFinderに表示\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - AXMenuItem \"サーバ\"\n          - [54] AXMenuItem \"Macintosh HD\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [55] AXMenuItem \"Macintosh HD\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [56] AXMenuItem \"Macintosh HD\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [57] AXMenuItem \"Recent Item 20\" [id=_recentItemRequested: actions=[cancel,press,pick]]\n          - [58] AXMenuItem \"メニューを消去\" [id=_clearRecentItemsRequested: actions=[cancel,press,pick]]\n      - [59] AXMenuItem \"強制終了…\" [id=_forceQuitPanelRequested: actions=[cancel,press,pick]]\n      - [60] AXMenuItem \"テキストエディットを強制終了\" [id=_forceQuitRequested: actions=[cancel,press,pick]]\n      - AXMenuItem \"スリープ\"\n      - [61] AXMenuItem \"再起動…\" [id=_restartRequested: actions=[cancel,press,pick]]\n      - [62] AXMenuItem \"再起動\" [id=_restartNowRequested: actions=[cancel,press,pick]]\n      - [63] AXMenuItem \"システム終了…\" [id=_shutDownRequested: actions=[cancel,press,pick]]\n      - [64] AXMenuItem \"システム終了\" [id=_shutDownNowRequested: actions=[cancel,press,pick]]\n      - [65] AXMenuItem \"ロック画面\" [id=_lockScreenRequested: actions=[cancel,press,pick]]\n      - [66] AXMenuItem \"Test Userをログアウト…\" [id=_logOutRequested: actions=[cancel,press,pick]]\n      - [67] AXMenuItem \"Test Userをログアウト\" [id=_logOutNowRequested: actions=[cancel,press,pick]]\n  - [68] AXMenuBarItem \"テキストエディット\" [id=_NS:838 actions=[cancel,press,pick]]\n    - [69] AXMenu [id=_NS:842 actions=[cancel]]\n      - [70] AXMenuItem \"テキストエディットについて\" [id=_NS:211 actions=[cancel,press,pick]]\n      - [71] AXMenuItem \"設定…\" [id=_NS:508 actions=[cancel,press,pick]]\n      - [72] AXMenuItem \"サービス\" [id=_NS:848 actions=[cancel,press,pick]]\n        - [73] AXMenu [id=_NS:852 actions=[cancel]]\n          - [74] AXMenuItem \"Service Item 1\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [75] AXMenuItem \"Service Item 2\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [76] AXMenuItem \"Service Item 3\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [77] AXMenuItem \"Service Item 4\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [78] AXMenuItem \"Service Item 5\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [79] AXMenuItem \"Service Item 6\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [80] AXMenuItem \"Service Item 7\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [81] AXMenuItem \"Service Item 8\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [82] AXMenuItem \"Service Item 9\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [83] AXMenuItem \"Service Item 10\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [84] AXMenuItem \"Service Item 11\" [id=_processRequest: actions=[cancel,press,pick]]\n          - [85] AXMenuItem \"サービス設定…\" [id=_configureServicesMenu: actions=[cancel,press,pick]]\n      - [86] AXMenuItem \"テキストエディットを非表示\" [id=_NS:515 actions=[cancel,press,pick]]\n      - [87] AXMenuItem \"ほかを非表示\" [id=_NS:529 actions=[cancel,press,pick]]\n      - AXMenuItem \"すべてを表示\"\n      - [88] AXMenuItem \"テキストエディットを終了\" [id=_NS:522 actions=[cancel,press,pick]]\n      - [89] AXMenuItem \"終了（ほかのウインドウは保持）\" [id=NSAlternateQuitMenuItem actions=[cancel,press,pick]]\n  - [90] AXMenuBarItem \"ファイル\" [id=_NS:860 actions=[cancel,press,pick]]\n    - [91] AXMenu [id=_NS:864 actions=[cancel]]\n      - [92] AXMenuItem \"新規\" [id=_NS:344 actions=[cancel,press,pick]]\n      - [93] AXMenuItem \"開く…\" [id=_NS:331 actions=[cancel,press,pick]]\n      - [94] AXMenuItem \"最近使った項目を開く\" [id=_NS:868 actions=[cancel,press,pick]]\n        - [95] AXMenu [id=_NS:872 actions=[cancel]]\n          - [96] AXMenuItem \"te-fixture.txt\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [97] AXMenuItem \"Recent Document 1\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [98] AXMenuItem \"Recent Document 2\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [99] AXMenuItem \"Recent Document 3\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [100] AXMenuItem \"Recent Document 4\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [101] AXMenuItem \"Recent Document 5\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [102] AXMenuItem \"Recent Document 3\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [103] AXMenuItem \"Recent Document 6\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [104] AXMenuItem \"Recent Document 7\" [id=_openRecentDocument: actions=[cancel,press,pick]]\n          - [105] AXMenuItem \"メニューを消去\" [id=clearRecentDocuments: actions=[cancel,press,pick]]\n      - AXMenuItem \"閉じる\"\n      - [106] AXMenuItem \"すべてを閉じる\" [id=closeAll: actions=[cancel,press,pick]]\n      - AXMenuItem \"保存\"\n      - AXMenuItem \"別名で保存…\"\n      - AXMenuItem \"複製\"\n      - AXMenuItem \"名称変更…\"\n      - AXMenuItem \"移動…\"\n      - [107] AXMenuItem \"バージョンを戻す\" [actions=[cancel,press,pick]]\n        - [108] AXMenu [actions=[cancel]]\n          - AXMenuItem \"書類なし\"\n      - [109] AXMenuItem \"<<Import From Device - unlocalized>>\" [id=NSMenuItemImportFromDeviceIdentifier actions=[cancel,press,pick]]\n        - [110] AXMenu [actions=[cancel]]\n      - AXMenuItem \"PDFとして書き出す…\"\n      - [111] AXMenuItem \"共有\" [actions=[cancel,press,pick]]\n        - [112] AXMenu [actions=[cancel]]\n          - AXMenuItem \"書類なし\"\n      - [113] AXMenuItem \"プロパティを表示\" [id=_NS:588 actions=[cancel,press,pick]]\n      - AXMenuItem \"ページ設定…\"\n      - AXMenuItem \"プリント…\"\n  - [114] AXMenuBarItem \"編集\" [id=_NS:886 actions=[cancel,press,pick]]\n    - [115] AXMenu [id=_NS:889 actions=[cancel]]\n      - AXMenuItem \"取り消す\"\n      - AXMenuItem \"やり直す\"\n      - AXMenuItem \"カット\"\n      - AXMenuItem \"コピー\"\n      - AXMenuItem \"ペースト\"\n      - AXMenuItem \"ペーストしてスタイルを合わせる\"\n      - AXMenuItem \"削除\"\n      - AXMenuItem \"単語入力補完\"\n      - AXMenuItem \"すべてを選択\"\n      - [116] AXMenuItem \"挿入\" [id=_NS:895 actions=[cancel,press,pick]]\n        - [117] AXMenu [id=_NS:898 actions=[cancel]]\n          - AXMenuItem \"改行\"\n          - AXMenuItem \"段落区切り\"\n          - AXMenuItem \"改ページ\"\n      - AXMenuItem \"ファイルを添付…\"\n      - AXMenuItem \"リンクを追加…\"\n      - [118] AXMenuItem \"検索\" [id=_NS:903 actions=[cancel,press,pick]]\n        - [119] AXMenu [id=_NS:907 actions=[cancel]]\n          - AXMenuItem \"検索…\"\n          - AXMenuItem \"検索と置換…\"\n          - AXMenuItem \"次を検索\"\n          - AXMenuItem \"前を検索\"\n          - AXMenuItem \"選択部分を検索に使用\"\n          - AXMenuItem \"選択部分へジャンプ\"\n          - [120] AXMenuItem \"行を選択…\" [id=_NS:654 actions=[cancel,press,pick]]\n      - [121] AXMenuItem \"作文ツール\" [id=__NSTextViewContextSubmenuIdentifierWritingTools actions=[cancel,press,pick]]\n        - [122] AXMenu [actions=[cancel]]\n          - AXMenuItem \"作文ツールを表示\"\n          - AXMenuItem \"校正\"\n          - AXMenuItem \"書き直し\"\n          - AXMenuItem \"フレンドリーにする\"\n          - AXMenuItem \"プロフェッショナルにする\"\n          - AXMenuItem \"簡潔にする\"\n          - AXMenuItem \"要約する\"\n          - AXMenuItem \"要点を作成する\"\n          - AXMenuItem \"リストにする\"\n          - AXMenuItem \"表にする\"\n          - AXMenuItem \"作文…\"\n      - [123] AXMenuItem \"スペルと文法\" [id=_NS:911 actions=[cancel,press,pick]]\n        - [124] AXMenu [id=_NS:915 actions=[cancel]]\n          - [125] AXMenuItem \"スペルと文法を表示\" [id=_NS:488 actions=[cancel,press,pick]]\n          - AXMenuItem \"書類を今すぐチェック\"\n          - AXMenuItem \"入力中にスペルチェック\"\n          - AXMenuItem \"スペルと一緒に文法をチェック\"\n          - AXMenuItem \"スペルを自動的に修正\"\n      - [126] AXMenuItem \"自動置換\" [id=_NS:920 actions=[cancel,press,pick]]\n        - [127] AXMenu [id=_NS:924 actions=[cancel]]\n          - AXMenuItem \"自動置換を表示\"\n          - AXMenuItem \"スマートコピー/ペースト\"\n          - AXMenuItem \"スマート引用符\"\n          - AXMenuItem \"スマートダッシュ記号\"\n          - AXMenuItem \"スマートリンク\"\n          - AXMenuItem \"データ検出\"\n          - AXMenuItem \"テキストの置換\"\n      - [128] AXMenuItem \"変換\" [id=_NS:929 actions=[cancel,press,pick]]\n        - [129] AXMenu [id=_NS:933 actions=[cancel]]\n          - AXMenuItem \"大文字にする\"\n          - AXMenuItem \"小文字にする\"\n          - AXMenuItem \"語頭を大文字にする\"\n      - [130] AXMenuItem \"スピーチ\" [id=_NS:937 actions=[cancel,press,pick]]\n        - [131] AXMenu [id=_NS:941 actions=[cancel]]\n          - AXMenuItem \"読み上げを開始\"\n          - AXMenuItem \"読み上げを停止\"\n      - [132] AXMenuItem \"自動入力\" [id=_NSMenuItemAutoFillIdentifier actions=[cancel,press,pick]]\n        - [133] AXMenu [actions=[cancel]]\n          - AXMenuItem \"連絡先…\"\n          - AXMenuItem \"パスワード…\"\n          - AXMenuItem \"クレジットカード…\"\n      - AXMenuItem \"音声入力を開始\"\n      - [134] AXMenuItem \"絵文字と記号\" [id=orderFrontCharacterPalette: actions=[cancel,press,pick]]\n  - [135] AXMenuBarItem \"フォーマット\" [id=_NS:945 actions=[cancel,press,pick]]\n    - [136] AXMenu [id=_NS:949 actions=[cancel]]\n      - [137] AXMenuItem \"フォント\" [id=_NS:953 actions=[cancel,press,pick]]\n        - [138] AXMenu [id=_NS:31 actions=[cancel]]\n          - [139] AXMenuItem \"フォントパネルを表示\" [id=_NS:36 actions=[cancel,press,pick]]\n          - AXMenuItem \"ボールド\"\n          - AXMenuItem \"イタリック\"\n          - AXMenuItem \"アンダーライン\"\n          - AXMenuItem \"アウトライン\"\n          - AXMenuItem \"強調表示\"\n            - [140] AXMenu [actions=[cancel]]\n              - AXMenuItem \"アクセント\"\n              - AXMenuItem \"パープル\"\n              - AXMenuItem \"ピンク\"\n              - AXMenuItem \"オレンジ\"\n              - AXMenuItem \"ミント\"\n              - AXMenuItem \"ブルー\"\n          - AXMenuItem \"スタイル…\"\n          - AXMenuItem \"大きく\"\n          - AXMenuItem \"小さく\"\n          - [141] AXMenuItem \"カーニング\" [id=_NS:80 actions=[cancel,press,pick]]\n            - [142] AXMenu [id=_NS:85 actions=[cancel]]\n              - AXMenuItem \"デフォルト\"\n              - AXMenuItem \"使用しない\"\n              - AXMenuItem \"きつく\"\n              - AXMenuItem \"ゆるく\"\n          - [143] AXMenuItem \"リガチャ\" [id=_NS:107 actions=[cancel,press,pick]]\n            - [144] AXMenu [id=_NS:111 actions=[cancel]]\n              - AXMenuItem \"デフォルト\"\n              - AXMenuItem \"使用しない\"\n              - AXMenuItem \"すべて使用\"\n          - [145] AXMenuItem \"ベースライン\" [id=_NS:125 actions=[cancel,press,pick]]\n            - [146] AXMenu [id=_NS:129 actions=[cancel]]\n              - AXMenuItem \"デフォルト\"\n              - AXMenuItem \"上付き\"\n              - AXMenuItem \"下付き\"\n              - AXMenuItem \"上げる\"\n              - AXMenuItem \"下げる\"\n          - [147] AXMenuItem \"文字の形状\" [id=_NS:152 actions=[cancel,press,pick]]\n            - [148] AXMenu [id=_NS:156 actions=[cancel]]\n              - AXMenuItem \"旧字体\"\n          - [149] AXMenuItem \"カラーパネルを表示\" [id=_NS:165 actions=[cancel,press,pick]]\n          - AXMenuItem \"スタイルをコピー\"\n          - AXMenuItem \"スタイルをペースト\"\n      - [150] AXMenuItem \"テキスト\" [id=_NS:956 actions=[cancel,press,pick]]\n        - [151] AXMenu [id=_NS:960 actions=[cancel]]\n          - AXMenuItem \"左揃え\"\n          - AXMenuItem \"中央揃え\"\n          - AXMenuItem \"両端揃え\"\n          - AXMenuItem \"右揃え\"\n          - [152] AXMenuItem \"文章の方向\" [id=_NS:965 actions=[cancel,press,pick]]\n            - [153] AXMenu [id=_NS:969 actions=[cancel]]\n              - AXMenuItem \"段落\"\n              - AXMenuItem \"デフォルト\"\n              - AXMenuItem \"左から右\"\n              - AXMenuItem \"右から左\"\n              - AXMenuItem \"選択部分\"\n              - AXMenuItem \"デフォルト\"\n              - AXMenuItem \"左から右\"\n              - AXMenuItem \"右から左\"\n          - AXMenuItem \"ルーラを表示\"\n          - AXMenuItem \"ルーラをコピー\"\n          - AXMenuItem \"ルーラをペースト\"\n          - AXMenuItem \"間隔…\"\n      - AXMenuItem \"リッチテキストにする\"\n      - AXMenuItem \"編集不可にする\"\n      - AXMenuItem \"ページサイズで表示\"\n      - AXMenuItem \"行末ハイフン処理をする\"\n      - AXMenuItem \"レイアウトを縦向きにする\"\n      - AXMenuItem \"リスト…\"\n      - AXMenuItem \"表…\"\n  - [154] AXMenuBarItem \"表示\" [id=_NS:978 actions=[cancel,press,pick]]\n    - [155] AXMenu [id=_NS:982 actions=[cancel]]\n      - AXMenuItem \"タブバーを表示\"\n      - AXMenuItem \"すべてのタブを表示\"\n      - AXMenuItem \"実際のサイズ\"\n      - AXMenuItem \"拡大\"\n      - AXMenuItem \"縮小\"\n      - AXMenuItem \"フルスクリーンにする\"\n  - [156] AXMenuBarItem \"ウインドウ\" [id=_NS:988 actions=[cancel,press,pick]]\n    - [157] AXMenu [id=_NS:992 actions=[cancel]]\n      - AXMenuItem \"しまう\"\n      - [158] AXMenuItem \"すべてをしまう\" [id=miniaturizeAll: actions=[cancel,press,pick]]\n      - AXMenuItem \"拡大/縮小\"\n      - [159] AXMenuItem \"すべてを拡大/縮小\" [id=zoomAll: actions=[cancel,press,pick]]\n      - AXMenuItem \"画面全体に表示\"\n      - AXMenuItem \"中央に配置\"\n      - [160] AXMenuItem \"移動とサイズ変更\" [actions=[cancel,press,pick]]\n        - [161] AXMenu [actions=[cancel]]\n          - AXMenuItem \"2分割\"\n          - AXMenuItem \"左\"\n          - AXMenuItem \"右\"\n          - AXMenuItem \"上\"\n          - AXMenuItem \"下\"\n          - AXMenuItem \"4分割\"\n          - AXMenuItem \"左上\"\n          - AXMenuItem \"右上\"\n          - AXMenuItem \"左下\"\n          - AXMenuItem \"右下\"\n          - AXMenuItem \"配置\"\n          - AXMenuItem \"左と右\"\n          - AXMenuItem \"左と4分割\"\n          - AXMenuItem \"右と左\"\n          - AXMenuItem \"右と4分割\"\n          - AXMenuItem \"上と下\"\n          - AXMenuItem \"上と4分割\"\n          - AXMenuItem \"下と上\"\n          - AXMenuItem \"下と4分割\"\n          - AXMenuItem \"4分割\"\n          - AXMenuItem \"前のサイズに戻す\"\n      - AXMenuItem \"フルスクリーンのタイル表示\"\n        - [162] AXMenu [actions=[cancel]]\n          - AXMenuItem \"画面左側\"\n          - AXMenuItem \"画面右側\"\n      - AXMenuItem \"ウインドウをセットから削除\"\n      - [163] AXMenuItem \"すべてを手前に移動\" [id=_NS:469 actions=[cancel,press,pick]]\n      - [164] AXMenuItem \"ウインドウを整理\" [id=alternateArrangeInFront: actions=[cancel,press,pick]]\n      - AXMenuItem \"前のタブを表示\"\n      - AXMenuItem \"次のタブを表示\"\n      - AXMenuItem \"タブを新しいウインドウに移動\"\n      - AXMenuItem \"すべてのウインドウを結合\"\n      - [165] AXMenuItem \"te-fixture.txt\" [id=makeKeyAndOrderFront: actions=[cancel,press,pick]]\n  - [166] AXMenuBarItem \"ヘルプ\" [id=_NS:998 actions=[cancel,press,pick]]\n    - [167] AXMenu [id=_NS:1002 actions=[cancel]]\n      - [168] AXMenuItem \"テキストエディットヘルプ\" [id=_NS:541 actions=[cancel,press,pick]]\n",
+ "window_id": 569,
+ "window_title": "te-fixture.txt"
+}
