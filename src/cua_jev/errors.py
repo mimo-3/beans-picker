@@ -31,6 +31,14 @@ class DriverError(CuaJevError):
         self.message = message
 
 
+class DriverUnavailable(CuaJevError):
+    """cua-driver could not be started; reported with the code `driver_unavailable`."""
+
+
+class DriverTimeout(CuaJevError):
+    """cua-driver did not answer within the configured time; reported with the code `driver_timeout`."""
+
+
 class AppLaunchError(CuaJevError):
     """The target app could not be launched, or showed no window."""
 
@@ -65,3 +73,24 @@ class ProcessError(CuaJevError):
         super().__init__(message)
         self.returncode = returncode
         self.stdout = stdout
+
+
+def failure(err: Exception) -> tuple[str, str]:
+    """The `code` and `message` a tool reports for an exception it did not handle itself."""
+    match err:
+        case ToolError():
+            return err.code, err.message
+        case JevUnavailable():
+            return "jev_unavailable", str(err)
+        case JevBadResponse():
+            return "jev_bad_response", str(err)
+        case DriverUnavailable():
+            return "driver_unavailable", str(err)
+        case DriverTimeout():
+            return "driver_timeout", str(err)
+        case DriverError():
+            return "driver_error", str(err)
+        case ForegroundViolation():
+            return "foreground_violation", str(err)
+        case _:
+            return "internal", str(err)

@@ -1,16 +1,21 @@
 from __future__ import annotations
 
+import pytest
+
 from cua_jev.driver.types import Activation
 from cua_jev.errors import (
     AppLaunchError,
     CuaJevError,
     DriverError,
+    DriverTimeout,
+    DriverUnavailable,
     ForegroundViolation,
     JevBadResponse,
     JevError,
     JevUnavailable,
     ProcessError,
     ToolError,
+    failure,
 )
 
 
@@ -42,7 +47,33 @@ def test_process_error_fields() -> None:
 
 
 def test_hierarchy() -> None:
-    for cls in (ToolError, DriverError, AppLaunchError, ForegroundViolation, JevError, ProcessError):
+    for cls in (
+        ToolError,
+        DriverError,
+        DriverUnavailable,
+        DriverTimeout,
+        AppLaunchError,
+        ForegroundViolation,
+        JevError,
+        ProcessError,
+    ):
         assert issubclass(cls, CuaJevError)
     assert issubclass(JevUnavailable, JevError)
     assert issubclass(JevBadResponse, JevError)
+
+
+@pytest.mark.parametrize(
+    ("err", "code", "message"),
+    [
+        (ToolError("bad_target", "give app"), "bad_target", "give app"),
+        (JevUnavailable("no key"), "jev_unavailable", "no key"),
+        (JevBadResponse("bad"), "jev_bad_response", "bad"),
+        (DriverUnavailable("missing"), "driver_unavailable", "missing"),
+        (DriverTimeout("slow"), "driver_timeout", "slow"),
+        (DriverError("click", "stale", "gone"), "driver_error", "click refused (stale): gone"),
+        (ForegroundViolation(Activation(pid=1, during="click", at="t")), "foreground_violation", None),
+        (RuntimeError("boom"), "internal", "boom"),
+    ],
+)
+def test_failure_codes(err: Exception, code: str, message: str | None) -> None:
+    assert failure(err) == (code, message if message is not None else str(err))
