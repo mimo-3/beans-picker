@@ -8,13 +8,14 @@ from cua_jev._json import JsonValue
 from cua_jev.candidates.build import BuildOptions, build_candidates
 from cua_jev.candidates.types import ActionCandidate
 from cua_jev.driver.types import ToolOk, ToolResult
+from cua_jev.errors import JevUnavailable
 from cua_jev.observe.snapshot import build_snapshot
 from cua_jev.observe.types import Snapshot
 from cua_jev.tools.act import act_tool
 from tests.fakes import FakeDriver
 from tests.helpers import snap_fixture
 from tests.test_state import el
-from tests.tool_fakes import FakeSession, jev_picking, shown
+from tests.tool_fakes import FakeSession, JevPicking, jev_picking, shown
 
 
 def _confirmed() -> ToolOk:
@@ -282,6 +283,44 @@ async def test_runs_the_steps_in_then_on_the_window_each_step_left_and_stops_at_
     )
     assert (stopped["status"], stopped.get("skipped")) == ("not_found", 1)
     assert value == "4"
+
+
+async def test_a_step_that_raises_keeps_the_steps_before_it(tmp_path: Path) -> None:
+    value = "1"
+
+    def on_call(tool: str, args: dict[str, object]) -> ToolResult:
+        nonlocal value
+        v = args.get("value")
+        if isinstance(v, str):
+            value = v
+        return _confirmed()
+
+    class NoJev(FakeSession):
+        def jev(self) -> JevPicking:
+            raise JevUnavailable("JEV_API_KEY is not set")
+
+    session = NoJev(lambda: text_window(value), driver=FakeDriver(on_call), cache=tmp_path)
+    cid = first(build_candidates(text_window("1"), BuildOptions(list_text_kinds=True, text="x")), "set_value").id
+    out = await act_tool(
+        session,
+        {
+            "pid": 1,
+            "instruction": "seats 2",
+            "candidateId": cid,
+            "text": "2",
+            "then": [
+                {"instruction": "seats 3", "text": "3"},
+                {"instruction": "seats 4", "candidateId": cid, "text": "4"},
+            ],
+        },
+    )
+    assert out["status"] == "failed"
+    assert out["message"] == "stopped at step 2 of 3 (failed); the rest were not run"
+    assert out.get("skipped") == 1
+    steps = out["steps"]
+    assert [s["status"] for s in steps] == ["done", "failed"]
+    assert steps[1] == {"status": "failed", "code": "jev_unavailable", "message": "JEV_API_KEY is not set"}
+    assert value == "2"
 
 
 async def test_holds_modifier_keys_only_for_clicks_and_only_on_a_control_it_can_see(tmp_path: Path) -> None:

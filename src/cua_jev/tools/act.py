@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Final, Literal, NotRequired, TypedDict, cast
 
@@ -13,7 +14,7 @@ from cua_jev.candidates.describe import describe
 from cua_jev.candidates.prune import in_shard_order
 from cua_jev.candidates.types import TEXT_KINDS, ActionCandidate
 from cua_jev.driver.mcp import Driver
-from cua_jev.errors import ForegroundViolation
+from cua_jev.errors import ForegroundViolation, ToolError, failure
 from cua_jev.jev.client import JevUsageOut
 from cua_jev.jev.questions import action_question, action_question_forced
 from cua_jev.jev.rank import Ambiguous, NotFound, Pick, RankSpec, gate, rank
@@ -25,6 +26,8 @@ from cua_jev.tools.args import ActArgs, Modifier, Step
 from cua_jev.tools.present import ShownCandidate, ShownWindow, show_candidate, show_window
 from cua_jev.tools.session import Target, ToolSession
 from cua_jev.verify.effect import EffectVerdict, VerifyEffect, verify_effect
+
+_log = logging.getLogger(__name__)
 
 type ActStatus = Literal[
     "done", "unverified", "no_effect", "mismatch", "ambiguous", "needs_confirmation", "not_found", "failed"
@@ -85,7 +88,14 @@ async def act_tool(session: ToolSession, args: ActArgs) -> ActOutput:
         if outs[-1]["status"] not in CARRY_ON:
             break
         # The previous step's last snapshot already shows its effect: it is this step's "before".
-        out, after = await _act_once(session, t, step, after)
+        try:
+            out, after = await _act_once(session, t, step, after)
+        except Exception as err:
+            # Earlier steps already changed the window: their results must reach the caller.
+            code, message = failure(err)
+            if not isinstance(err, ToolError):
+                _log.warning("act step %d failed (%s)", len(outs) + 1, code, exc_info=True)
+            out = {"status": "failed", "code": code, "message": message}
         outs.append(out)
     last = outs[-1]
     total = len(then) + 1
