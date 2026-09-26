@@ -34,8 +34,8 @@ INSTRUCTIONS: Final = "\n".join(
         "- observe: lists a window's candidate actions with stable ids; with an instruction, Jev ranks them.",
         "- act: performs one action, picked by Jev from the instruction or given as candidateId, then checks the "
         "effect on fresh snapshots. Steps you already know (fill these fields, tick these boxes, then press Save) go "
-        "in one call with `then`: they run in order and stop at the first that is not done. Text is entered exactly "
-        "as given in `text` and verified by exact equality.",
+        "in one call with `then`: they run in order and stop at the first that is neither done nor unverified. "
+        "Text is entered exactly as given in `text` and verified by exact equality.",
         "  status: done | unverified (the field changed but its exact text could not be read) | no_effect | mismatch "
         "(something changed, not what was asked) | ambiguous (choose a candidateId) | needs_confirmation "
         "(irreversible: repeat with allowDestructive) | not_found | failed.",
