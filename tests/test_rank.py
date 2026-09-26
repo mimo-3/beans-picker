@@ -7,6 +7,7 @@ import pytest
 
 from cua_jev._json import JsonObject, JsonValue
 from cua_jev.candidates.prune import MAX_OPTIONS
+from cua_jev.errors import JevBadResponse
 from cua_jev.jev.client import AskResult, Question
 from cua_jev.jev.questions import action_question, action_question_forced
 from cua_jev.jev.rank import Ambiguous, NotFound, Pick, Ranked, Ranking, RankSpec, gate, rank
@@ -110,6 +111,15 @@ async def test_rank_keeps_shard_order_whatever_order_the_answers_come_in() -> No
     r = await rank(jev, {}, items, _spec())
     assert jev.finished[:2] == [1, 0]
     assert [x.item for x in r.ranked] == ["i0", f"i{MAX_OPTIONS}"]
+
+
+async def test_a_ranking_answer_without_probabilities_is_a_bad_response() -> None:
+    class NoProbabilities:
+        async def ask(self, state: JevState, questions: Mapping[str, Question]) -> AskResult:
+            return AskResult(answers={"pick": {"type": "choice", "choice": "o0"}}, ms=1, input_tokens=1)
+
+    with pytest.raises(JevBadResponse, match="no probabilities"):
+        await rank(NoProbabilities(), {}, ["a", "b"], _spec())
 
 
 async def test_rank_reports_a_failing_shard_only_after_every_shard_has_finished() -> None:

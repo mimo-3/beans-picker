@@ -10,6 +10,7 @@ from cua_jev._aio import gather_settled
 from cua_jev._json import JsonObject, JsonValue
 from cua_jev.candidates.prune import MAX_OPTIONS
 from cua_jev.config import THRESHOLDS
+from cua_jev.errors import JevBadResponse
 from cua_jev.jev.client import AskResult, Question
 from cua_jev.jev.questions import Options
 
@@ -99,7 +100,7 @@ def _number(v: JsonValue | None) -> float:
 def _probabilities(answer: JsonValue | None) -> Mapping[str, JsonValue]:
     probs = answer.get("probabilities") if isinstance(answer, dict) else None
     if not isinstance(probs, dict):
-        raise TypeError("the ranking answer has no probabilities")
+        raise JevBadResponse("the ranking answer has no probabilities")
     return probs
 
 
