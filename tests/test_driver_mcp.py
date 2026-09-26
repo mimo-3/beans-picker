@@ -27,7 +27,7 @@ from cua_jev.driver.mcp import (
 )
 from cua_jev.driver.sentinel import ActivationSentinel
 from cua_jev.driver.types import ToolOk, ToolRefused
-from cua_jev.errors import DriverError, ForegroundViolation
+from cua_jev.errors import DriverError, DriverTimeout, DriverUnavailable, ForegroundViolation
 
 FAKE_DRIVER = Path(__file__).with_name("fake_driver.py")
 
@@ -372,9 +372,30 @@ async def test_a_cancelled_close_still_stops_the_child(fake_bin: FakeBin) -> Non
 
 async def test_a_missing_binary_fails_to_connect(tmp_path: Path) -> None:
     before = asyncio.all_tasks()
-    with pytest.raises(OSError, match="No such file") as info:
+    with pytest.raises(DriverUnavailable, match=r"No such file.*CUA_DRIVER_BIN") as info:
         await CuaDriver.connect(CuaDriverOptions(bin=str(tmp_path / "missing")))
+    assert isinstance(info.value.__cause__, FileNotFoundError)
     assert not is_transport_error(info.value)
+    assert asyncio.all_tasks() == before
+
+
+async def test_a_call_with_no_answer_times_out(fake_bin: FakeBin) -> None:
+    d = await CuaDriver.connect(CuaDriverOptions(bin=str(fake_bin.path), timeout=3))
+    try:
+        with pytest.raises(DriverTimeout, match="did not answer click within 3 s"):
+            await d.call("click", {"hold": 30})
+        assert (await d.must("whoami"))["pid"]
+    finally:
+        await d.close()
+
+
+async def test_a_driver_that_never_starts_times_out(tmp_path: Path) -> None:
+    stuck = tmp_path / "cua-driver"
+    stuck.write_text("#!/bin/sh\nexec sleep 30\n", encoding="utf-8")
+    stuck.chmod(0o755)
+    before = asyncio.all_tasks()
+    with pytest.raises(DriverTimeout, match=r"did not start within 0\.3 s"):
+        await CuaDriver.connect(CuaDriverOptions(bin=str(stuck), timeout=0.3))
     assert asyncio.all_tasks() == before
 
 

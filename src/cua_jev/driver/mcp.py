@@ -22,7 +22,7 @@ from cua_jev._json import JsonObject
 from cua_jev._numbers import round_half_up, scalar_text
 from cua_jev.driver.sentinel import ActivationSentinel
 from cua_jev.driver.types import ToolOk, ToolRefused, ToolResult, as_obj, get_obj, get_str
-from cua_jev.errors import DriverError, ForegroundViolation
+from cua_jev.errors import DriverError, DriverTimeout, DriverUnavailable, ForegroundViolation
 
 _log = logging.getLogger(__name__)
 
@@ -203,14 +203,17 @@ class CuaDriverOptions:
     """The cua-driver binary; default `config.driver_bin()`."""
     session: str | None = None
     """The session label's prefix; default `cua-jev`."""
+    timeout: float | None = None
+    """Seconds to wait for startup and for each call's answer; default `config.driver_timeout()`."""
 
 
 class CuaDriver:
     """A cua-driver connection that labels sessions, reconnects, and refuses foreground calls."""
 
-    def __init__(self, conn: _Connection, bin_path: str, session: str) -> None:
+    def __init__(self, conn: _Connection, bin_path: str, session: str, *, timeout: float | None = None) -> None:
         self._conn = conn
         self._bin = bin_path
+        self._timeout = timeout if timeout is not None else config.driver_timeout()
         self._reconnecting: asyncio.Task[None] | None = None
         # Session names are single-use in the daemon once ended, so each connection's is unique.
         self.session = f"{session}-{os.getpid()}-{_base36(time.time_ns() // 1_000_000)}"
@@ -224,13 +227,25 @@ class CuaDriver:
         """Start `cua-driver mcp` and read which tools take a session label."""
         opts = opts if opts is not None else CuaDriverOptions()
         bin_path = opts.bin if opts.bin is not None else config.driver_bin()
-        conn = await _Connection.open(bin_path)
-        driver = cls(conn, bin_path, opts.session if opts.session is not None else DEFAULT_SESSION)
+        timeout = opts.timeout if opts.timeout is not None else config.driver_timeout()
         try:
-            await driver.load_schemas()
-        except BaseException:
-            await conn.close()
-            raise
+            async with asyncio.timeout(timeout):
+                conn = await _Connection.open(bin_path)
+                driver = cls(
+                    conn, bin_path, opts.session if opts.session is not None else DEFAULT_SESSION, timeout=timeout
+                )
+                try:
+                    await driver.load_schemas()
+                except BaseException:
+                    await conn.close()
+                    raise
+        except TimeoutError as err:
+            raise DriverTimeout(f"cua-driver ({bin_path}) did not start within {timeout:g} s") from err
+        except OSError as err:
+            reason = err.strerror or str(err)
+            raise DriverUnavailable(
+                f"cannot start cua-driver at {bin_path}: {reason}. Install it, or set CUA_DRIVER_BIN to its path"
+            ) from err
         return driver
 
     async def load_schemas(self) -> None:
@@ -328,7 +343,13 @@ class CuaDriver:
         arguments = {"session": self.session, **args} if tool in self.session_tools else dict(args)
         session = conn.session()
         t0 = time.perf_counter()
-        res = await session.call_tool(tool, arguments)
+        try:
+            async with asyncio.timeout(self._timeout):
+                res = await session.call_tool(tool, arguments)
+        except TimeoutError as err:
+            raise DriverTimeout(
+                f"cua-driver did not answer {tool} within {self._timeout:g} s; it may or may not have acted"
+            ) from err
         ms = round_half_up((time.perf_counter() - t0) * 1000)
         text = "\n".join(c.text if isinstance(c, TextContent) else "" for c in res.content)
         data: JsonObject = res.structured_content if res.structured_content is not None else {}
