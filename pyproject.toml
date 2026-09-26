@@ -64,11 +64,14 @@ include = [
   "tests",
   "bench",
   "skills",
+  "scripts",
   "README.md",
   "CHANGELOG.md",
+  "CONTRIBUTING.md",
   "SECURITY.md",
   "LICENSE",
   ".env.example",
+  "uv.lock",
 ]
 exclude = ["bench/.work", "bench/fixture-app/*.app"]
 
