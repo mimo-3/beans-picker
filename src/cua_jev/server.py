@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
@@ -9,13 +10,14 @@ from types import MappingProxyType
 from typing import Any, Final
 
 import mcp.types as types
+from mcp import MCPError
 from mcp.server import NotificationOptions, Server, ServerRequestContext
 from mcp.server.models import InitializationOptions
 
 from cua_jev import __version__, _json
 from cua_jev._json import JsonObject
 from cua_jev.driver import lock
-from cua_jev.errors import CuaJevError, JevUnavailable, ToolError
+from cua_jev.errors import CuaJevError, ToolError, failure
 from cua_jev.tools.act import act_tool
 from cua_jev.tools.args import INPUT_SCHEMAS, act_args, check_arguments, extract_args, observe_args, validation_text
 from cua_jev.tools.extract import extract_tool
@@ -89,13 +91,11 @@ async def run(
                 verb = "done" if acts else "read"
                 return error("screen_locked", f"the screen is locked; nothing was {verb}. Unlock it and call again")
             return types.CallToolResult(content=[types.TextContent(type="text", text=_json.dumps(await fn()))])
-        except ToolError as err:
-            return error(err.code, err.message)
-        except JevUnavailable as err:
-            return error("jev_unavailable", str(err))
         except Exception as err:
-            _log.debug("tool call failed", exc_info=True)
-            return error("internal", str(err))
+            code, message = failure(err)
+            if not isinstance(err, ToolError):
+                _log.warning("tool call failed (%s)", code, exc_info=True)
+            return error(code, message)
 
     try:
         return await session.exclusive(body)
@@ -134,12 +134,18 @@ def _tools() -> list[types.Tool]:
 def create_server(
     session: Session | None = None, *, screen_locked: ScreenLocked = lock.screen_locked
 ) -> Server[Session]:
-    """The configured server (not connected); `Session()` when no session is given."""
+    """The configured server (not connected). A given session stays the caller's to close; without one,
+    the server makes a `Session()` and closes it when a run ends."""
+    owned = session is None
     the_session = session if session is not None else Session()
 
     @asynccontextmanager
     async def lifespan(_: Server[Session]) -> AsyncIterator[Session]:
-        yield the_session
+        try:
+            yield the_session
+        finally:
+            if owned:
+                await asyncio.shield(the_session.close())
 
     async def on_list_tools(
         ctx: ServerRequestContext[Session], params: types.PaginatedRequestParams | None
@@ -151,7 +157,7 @@ def create_server(
     ) -> types.CallToolResult:
         name = params.name
         if name not in INPUT_SCHEMAS:
-            return _protocol_error(f"MCP error -32602: Tool {name} not found")
+            raise MCPError(types.INVALID_PARAMS, f"Tool {name} not found")
         checked, issues = check_arguments(name, params.arguments)
         if issues:
             return _protocol_error(validation_text(name, issues))

@@ -1,4 +1,3 @@
-{"tool": "nope", "arguments": {}, "isError": true, "text": "MCP error -32602: Tool nope not found"}
 {"tool": "extract", "arguments": {}, "isError": true, "text": "MCP error -32602: Input validation error: Invalid arguments for tool extract: Invalid input: expected string, received undefined at instruction"}
 {"tool": "observe", "arguments": {"limit": -1, "pid": "x"}, "isError": true, "text": "MCP error -32602: Input validation error: Invalid arguments for tool observe: Invalid input: expected number, received string at pid\nToo small: expected number to be >0 at limit"}
 {"tool": "act", "arguments": {"instruction": "x", "modifiers": ["x"]}, "isError": true, "text": "MCP error -32602: Input validation error: Invalid arguments for tool act: Invalid option: expected one of \"shift\"|\"cmd\"|\"option\"|\"ctrl\" at modifiers[0]"}
