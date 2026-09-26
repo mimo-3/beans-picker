@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import os
 import plistlib
+import re
 import shutil
 import subprocess
 from importlib import resources
 from pathlib import Path
 
 import pytest
+
+from cua_jev.observe.exacttext import EDITABLE_ROLES, TOGGLE_ROLES
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD_SH = ROOT / "bench/fixture-app/build.sh"
@@ -24,6 +27,18 @@ def test_helper_sources_are_package_data(name: str, usage: str) -> None:
     assert "int main(int argc, const char *argv[])" in text
     with resources.as_file(source) as path:
         assert path.is_file()
+
+
+def _roles_in(text: str, function: str) -> set[str]:
+    body = text[text.index(f"static BOOL {function}(") :]
+    body = body[: body.index("\n}")]
+    return set(re.findall(r'@"(AX\w+)"', body)) | {f"AX{m}" for m in re.findall(r"kAX(\w+)Role", body)}
+
+
+def test_the_helper_reports_the_roles_exact_text_expects() -> None:
+    text = resources.files("cua_jev.native").joinpath("axtext.m").read_text(encoding="utf-8")
+    assert _roles_in(text, "toggle") == TOGGLE_ROLES
+    assert _roles_in(text, "editable") == EDITABLE_ROLES
 
 
 def test_fixture_build_script_is_executable() -> None:

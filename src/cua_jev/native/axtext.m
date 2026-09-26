@@ -17,7 +17,8 @@ static BOOL editable(NSString *role) {
 }
 
 static BOOL toggle(NSString *role) {
-  return [role isEqualToString:(NSString *)kAXCheckBoxRole] || [role isEqualToString:(NSString *)kAXRadioButtonRole];
+  return [role isEqualToString:(NSString *)kAXCheckBoxRole] || [role isEqualToString:(NSString *)kAXRadioButtonRole] ||
+         [role isEqualToString:@"AXSwitch"];
 }
 
 static NSString *str(id v) { return [v isKindOfClass:[NSString class]] ? v : nil; }
