@@ -9,6 +9,7 @@ import httpx2
 import pytest
 from typesafe_sdk import Choice, Noul, Score
 
+from cua_jev import config
 from cua_jev._json import JsonValue
 from cua_jev.errors import JevBadResponse, JevUnavailable
 from cua_jev.jev.client import MISSING_KEY, JevClient, JevUsage, Question, validate
@@ -90,9 +91,16 @@ def test_refuses_to_start_without_a_key() -> None:
 
 def test_an_empty_key_is_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("JEV_API_KEY", "")
-    monkeypatch.setenv("TYPESAFE_API_KEY", "sk-test-123456789")
     with pytest.raises(JevUnavailable, match="JEV_API_KEY is not set"):
         JevClient()
+
+
+async def test_an_empty_jev_key_does_not_hide_the_typesafe_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JEV_API_KEY", "")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "sk-fallback-2")
+    rec = Recorder(200, OK)
+    await JevClient(transport=httpx2.MockTransport(rec)).ask({"instruction": "x"}, QUESTIONS)
+    assert rec.requests[0].headers["authorization"] == "Bearer sk-fallback-2"
 
 
 async def test_the_typesafe_key_is_the_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -147,6 +155,47 @@ async def test_other_failures_are_named_by_their_type() -> None:
         await client(boom).ask({"instruction": "x"}, QUESTIONS)
 
 
+async def test_requests_have_the_configured_time_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    rec = Recorder(200, OK)
+    await client(rec).ask({"instruction": "x"}, QUESTIONS)
+    assert rec.requests[0].extensions["timeout"] == {"connect": 10.0, "read": 120.0, "write": 120.0, "pool": 120.0}
+    monkeypatch.setenv("JEV_CONNECT_TIMEOUT", "2")
+    monkeypatch.setenv("JEV_READ_TIMEOUT", "30")
+    rec = Recorder(200, OK)
+    await client(rec).ask({"instruction": "x"}, QUESTIONS)
+    assert rec.requests[0].extensions["timeout"] == {"connect": 2.0, "read": 30.0, "write": 30.0, "pool": 30.0}
+
+
+async def test_a_timeout_is_reported_as_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "JEV_RETRIES", 0)
+
+    def stall(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ReadTimeout("read timed out", request=request)
+
+    with pytest.raises(JevUnavailable, match="timed out"):
+        await client(stall).ask({"instruction": "x"}, QUESTIONS)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"type": "choice", "choice": "a1", "probabilities": {"a1": 2, "a0": -1}},
+        {"type": "choice", "choice": "a1", "probabilities": {"a1": float("nan")}},
+        {"type": "choice", "choice": "a1", "probabilities": {"a1": True}},
+        {"type": "choice", "choice": "a1", "probabilities": [0.8]},
+    ],
+)
+def test_probabilities_outside_zero_to_one_are_a_bad_response(answer: dict[str, JsonValue]) -> None:
+    with pytest.raises(JevBadResponse, match=r'^"next" has probabilities outside \[0, 1\]$'):
+        validate({"next": QUESTIONS["next"]}, {"next": answer})
+
+
+def test_a_confidence_outside_zero_to_one_is_a_bad_response() -> None:
+    answer: dict[str, JsonValue] = {"type": "choice", "choice": "a1", "confidence": 1.5}
+    with pytest.raises(JevBadResponse, match=r'^"next" has a confidence outside \[0, 1\]$'):
+        validate({"next": QUESTIONS["next"]}, {"next": answer})
+
+
 async def test_usage_adds_up_over_calls_and_ignores_missing_counts() -> None:
     no_usage = {"answers": OK["answers"]}
     jev = client(Recorder(200, no_usage))
@@ -181,7 +230,7 @@ def test_validate_names_the_first_bad_answer() -> None:
         validate({"pick": choice}, {"pick": {"type": "noul", "noul": 1}})
     with pytest.raises(JevBadResponse, match=r"^missing or mistyped answer for"):
         validate({"pick": choice}, {"pick": "o0"})
-    with pytest.raises(JevBadResponse, match=r'^"pick" chose unknown option undefined$'):
+    with pytest.raises(JevBadResponse, match=r'^"pick" chose unknown option \(missing\)$'):
         validate({"pick": choice}, {"pick": {"type": "choice"}})
     with pytest.raises(JevBadResponse, match=r'^"pick" chose unknown option null$'):
         validate({"pick": choice}, {"pick": {"type": "choice", "choice": None}})

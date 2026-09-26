@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from collections.abc import Mapping
 from contextvars import ContextVar
@@ -123,7 +124,7 @@ class JevClient:
             self._client = AsyncTypeSafeClient(
                 api_key=key,
                 model=self.model,
-                timeout=httpx2.Timeout(None),
+                timeout=httpx2.Timeout(config.jev_read_timeout(), connect=config.jev_connect_timeout()),
                 retry=RetryPolicy(max_retries=config.JEV_RETRIES, timeout=None),
                 transport=_RequestIdTransport(transport if transport is not None else httpx2.AsyncHTTPTransport()),
             )
@@ -183,8 +184,13 @@ def _is_number(v: JsonValue | None) -> bool:
     return isinstance(v, int | float) and not isinstance(v, bool)
 
 
+def _is_probability(v: JsonValue | None) -> bool:
+    return isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v) and 0 <= v <= 1
+
+
 def validate(questions: Mapping[str, Question], answers: Mapping[str, JsonValue]) -> None:
-    """Every question must be answered with its own type; a choice must be one of its criteria keys."""
+    """Every question must be answered with its own type; a choice must be one of its criteria keys, and its
+    confidence and probabilities (when given) must lie in [0, 1]."""
     for qid, q in questions.items():
         a = answers.get(qid)
         if not isinstance(a, dict) or a.get("type") != q.type:
@@ -192,8 +198,13 @@ def validate(questions: Mapping[str, Question], answers: Mapping[str, JsonValue]
         if isinstance(q, Choice):
             choice = a.get("choice")
             if not isinstance(choice, str) or not choice or choice not in q.criteria:
-                shown = "undefined" if "choice" not in a else scalar_text(choice)
+                shown = "(missing)" if "choice" not in a else scalar_text(choice)
                 raise JevBadResponse(f'"{qid}" chose unknown option {shown}')
+            if "confidence" in a and not _is_probability(a["confidence"]):
+                raise JevBadResponse(f'"{qid}" has a confidence outside [0, 1]')
+            probs = a.get("probabilities")
+            if "probabilities" in a and (not isinstance(probs, dict) or not all(map(_is_probability, probs.values()))):
+                raise JevBadResponse(f'"{qid}" has probabilities outside [0, 1]')
         elif isinstance(q, Noul):
             if not _is_number(a.get("noul")):
                 raise JevBadResponse(f'"{qid}" has no noul')
