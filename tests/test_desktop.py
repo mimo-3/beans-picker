@@ -170,6 +170,7 @@ async def test_the_signature_includes_the_apps_other_windows() -> None:
 
 async def test_exact_text_rekeys_the_nodes() -> None:
     state: JsonObject = {
+        "window_title": "Doc",
         "tree_markdown": '- [0] AXWindow "Doc"\n  - [1] AXTextField = "Search"',
         "elements": [
             {"element_index": 0, "role": "AXWindow", "label": "Doc"},
@@ -177,9 +178,9 @@ async def test_exact_text_rekeys_the_nodes() -> None:
         ],
     }
     without = await _observe(_driver(state, _windows()), _Exact(None))
-    assert without.nodes[1].key == "AXTextField|||AXWindow: Doc"
+    assert without.nodes[1].key == '["AXTextField",null,"",["AXWindow: Doc"]]'
     typed = await _observe(_driver(state, _windows()), _Exact([{"window": "Doc", "role": "AXTextField", "value": ""}]))
-    assert typed.nodes[1].key == "AXTextField||Search|AXWindow: Doc"
+    assert typed.nodes[1].key == '["AXTextField",null,"Search",["AXWindow: Doc"]]'
 
 
 async def test_observe_fails_when_the_window_state_cannot_be_read() -> None:

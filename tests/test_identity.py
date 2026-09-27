@@ -15,16 +15,16 @@ class _Parts:
 
 def test_stable_key_joins_role_identifier_label_and_containers() -> None:
     ok = _Parts("AXButton", "OK", within=["AXSheet: Save", "AXWindow: Doc"])
-    assert stable_key(ok) == "AXButton||OK|AXSheet: Save>AXWindow: Doc"
-    assert stable_key(_Parts("AXButton", "", identifier="")) == "AXButton|||"
-    assert stable_key(_Parts("AXButton", "7", identifier="Seven")) == "AXButton|Seven|7|"
+    assert stable_key(ok) == '["AXButton",null,"OK",["AXSheet: Save","AXWindow: Doc"]]'
+    assert stable_key(_Parts("AXButton", "", identifier="")) == '["AXButton","","",[]]'
+    assert stable_key(_Parts("AXButton", "7", identifier="Seven")) == '["AXButton","Seven","7",[]]'
 
 
 def test_stable_key_uses_three_containers_at_most() -> None:
     n = _Parts("AXButton", "Go", within=["a", "b", "c", "d"])
-    assert stable_key(n) == "AXButton||Go|a>b>c"
+    assert stable_key(n) == '["AXButton",null,"Go",["a","b","c"]]'
 
 
 def test_menu_key() -> None:
-    assert menu_key(["File", "Save"]) == "AXMenuItem|menu|File > Save"
-    assert menu_key([]) == "AXMenuItem|menu|"
+    assert menu_key(["File", "Save"]) == '["menu",["File","Save"]]'
+    assert menu_key([]) == '["menu",[]]'

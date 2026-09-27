@@ -94,7 +94,7 @@ async def act_tool(session: ToolSession, args: ActArgs) -> ActOutput:
             # Earlier steps already changed the window: their results must reach the caller.
             code, message = failure(err)
             if not isinstance(err, ToolError):
-                _log.warning("act step %d failed (%s)", len(outs) + 1, code, exc_info=True)
+                _log.warning("act step %d failed (%s, %s)", len(outs) + 1, code, type(err).__name__)
             out = {"status": "failed", "code": code, "message": message}
         outs.append(out)
     last = outs[-1]
@@ -237,7 +237,20 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
     await driver.sentinel.watch(t.pid)
     try:
         return with_usage(
-            with_pick(await _execute(session, t, driver, executor, chosen, modifiers, before, window, seen))
+            with_pick(
+                await _execute(
+                    session,
+                    t,
+                    driver,
+                    executor,
+                    chosen,
+                    modifiers,
+                    before,
+                    window,
+                    seen,
+                    allow_destructive=bool(args.get("allowDestructive")),
+                )
+            )
         )
     except ForegroundViolation as err:
         return with_usage(_failed("foreground_violation", window, str(err), _shown_action(chosen)))
@@ -255,6 +268,8 @@ async def _execute(
     before: Snapshot,
     window: ShownWindow,
     seen: _Seen,
+    *,
+    allow_destructive: bool = False,
 ) -> ActOutput:
     target = chosen.target
     # A toggle whose state cua-driver does not report is judged by its pixels as well.
@@ -267,11 +282,20 @@ async def _execute(
     retype = _retypeable(chosen, before)
     type_first = retype and t.pid in session.types_into_web_fields
     res = (
-        await executor.retype_field(chosen, before) if type_first else await executor.execute(chosen, before, modifiers)
+        await executor.retype_field(chosen, before)
+        if type_first
+        else await executor.execute(chosen, before, modifiers, allow_destructive=allow_destructive)
     )
     action = _shown_action(chosen)
     action["route"] = list(res.route)
     if not res.ok:
+        if res.code == "needs_confirmation":
+            return {
+                "status": "needs_confirmation",
+                "window": window,
+                "action": action,
+                "message": "the selected option may be destructive; repeat with allowDestructive: true if intended",
+            }
         code = res.code if res.code is not None else "failed"
         return _failed(code, window, res.detail if res.detail is not None else _REFUSED, action)
 

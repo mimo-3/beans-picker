@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -26,7 +27,7 @@ from beans_picker.driver.types import (
     windows_of,
 )
 from beans_picker.observe.exacttext import EDITABLE_ROLES, TOGGLE_ROLES, apply_exact_text
-from beans_picker.observe.identity import key_of, menu_key
+from beans_picker.observe.identity import ambiguous_key, key_of, menu_key
 from beans_picker.observe.normalize import humanize_identifier, normalize_text, truncate
 from beans_picker.observe.signature import state_signature
 from beans_picker.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
@@ -239,13 +240,11 @@ def assign_keys(nodes: Sequence[UINode]) -> None:
             or (n.label != truncate(n.value, 40) and n.raw_label != n.value and n.raw_label != n.placeholder)
         )
         n.key = key_of(n.role, n.identifier, n.label if named else "", n.within)
-    # Controls sharing a key are told apart by tree order.
-    seen: dict[str, int] = {}
+    # No duplicate gets the unique key: losing or reordering a twin must not transfer an action.
+    counts = Counter(n.key for n in nodes)
     for n in nodes:
-        k = seen.get(n.key, 0)
-        seen[n.key] = k + 1
-        if k:
-            n.key = f"{n.key}#{k + 1}"
+        if counts[n.key] > 1:
+            n.key = ambiguous_key(n.key, n.token, n.index)
 
 
 def _to_node(e: Element, m: MdNode | None, in_menu: bool) -> UINode:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from beans_picker.act.execute import ActResult, Executor, in_popup_menu, is_stale, path_state, to_act
@@ -101,6 +103,38 @@ async def test_a_stale_token_is_rebound_by_stable_key_once() -> None:
     assert again.count == 1
 
 
+async def test_an_authorized_destructive_toggle_retries_with_the_rebound_token() -> None:
+    target = node(1, "AXCheckBox", "Delete")
+    fresh_target = node(1, "AXCheckBox", "Delete", tok="t:9")
+    candidate = replace(cand("toggle", target), destructive=True)
+    driver = CallDriver({"click": [STALE, ok()]})
+    ex, again = executor(driver, snap([fresh_target]))
+
+    result = await ex.execute(candidate, snap([target]), allow_destructive=True)
+
+    assert outcome(result) == (True, None, "confirmed", None)
+    assert result.route == ["click", "rebind"]
+    assert driver.calls == [
+        ("click", {"pid": 1, "element_token": "t:1"}),
+        ("click", {"pid": 1, "element_token": "t:9"}),
+    ]
+    assert again.count == 1
+
+
+async def test_an_unauthorized_destructive_toggle_is_refused_before_clicking() -> None:
+    target = node(1, "AXCheckBox", "Delete")
+    candidate = replace(cand("toggle", target), destructive=True)
+    driver = CallDriver()
+    ex, again = executor(driver)
+
+    result = await ex.execute(candidate, snap([target]))
+
+    assert not result.ok
+    assert result.code == "needs_confirmation"
+    assert driver.calls == []
+    assert again.count == 0
+
+
 async def test_a_second_stale_answer_is_reported_not_retried() -> None:
     driver = CallDriver({"click": [STALE]})
     ex, again = executor(driver, snap([node(1, "AXButton", "OK", tok="t:9")]))
@@ -176,7 +210,7 @@ async def test_keys_go_to_the_window_or_to_the_focused_control() -> None:
     row = node(2, "AXRow", "Draft")
     driver = CallDriver()
     ex, _ = executor(driver)
-    r = await ex.execute(cand("key", keys=["return"]), WIN)
+    r = await ex.execute(cand("key", keys=["return"]), WIN, allow_destructive=True)
     assert r.route == ["press_key"]
     r = await ex.execute(cand("key", row, keys=["shift", "f10"]), snap([row]))
     assert r.route == ["press_key"]
