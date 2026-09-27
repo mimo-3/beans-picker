@@ -9,13 +9,13 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Final
 
-from cua_jev._json import JsonObject
-from cua_jev._numbers import fixed, number_text
+from beans_picker._json import JsonObject
+from beans_picker._numbers import fixed, number_text
 
 HERE: Final = Path(__file__).resolve().parent
 RUNS_FILE: Final = HERE / "results/runs.jsonl"
 CONDITIONS: Final = ("a", "b")
-LABEL: Final = {"a": "(a) cua-driver only", "b": "(b) cua-jev"}
+LABEL: Final = {"a": "(a) cua-driver only", "b": "(b) beans-picker"}
 HEAD: Final = (
     "| | success | false success / success claims | tool calls (median) | time s (median) "
     "| Claude tokens (median, incl. cache) | output tokens (median) | USD (median) | Jev calls (total) "
