@@ -4,7 +4,7 @@ Handpicks the right control. ~2× faster, ~1/6 the cost.
 
 Not affiliated with Cua / trycua or TypeSafe; cua-driver and Jev are separate projects this server talks to.
 
-An MCP server that lets Claude Code or Codex operate macOS apps **in the background**. It does for native apps what Stagehand does for the browser:
+An MCP server that lets Claude Code or Codex pick the right control in a macOS app, act on it without bringing the app to the front, and check that it worked. It does for native apps what Stagehand does for the browser:
 
 - **The caller thinks.** Claude Code or Codex breaks the task down, picks the next step and decides what to do when something goes wrong.
 - **Jev picks the element.** [TypeSafe Jev](https://typesafe.ai) chooses among candidate actions built from the accessibility tree. It never writes text, so it cannot invent a target.

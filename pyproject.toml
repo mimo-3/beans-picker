@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "beans-picker"
 dynamic = ["version"]
-description = "An MCP server for macOS app control in the background: cua-driver observes and acts, TypeSafe Jev picks the element."
+description = "An MCP server that handpicks the right control for agents driving macOS apps, acts without stealing focus, and checks the effect."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
