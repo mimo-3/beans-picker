@@ -1,11 +1,11 @@
 ---
-name: cua-jev
-description: Operate a macOS app window (native apps or pages in Chrome) in the background through the cua-jev MCP server (observe / act / extract). Use when a task asks to fill in forms, click through a flow, or read values in a Mac window and the cua-jev tools are available. Covers which steps need Jev and which run faster without it (candidateId and batched `then` steps), when cua-driver fits better, how to read act's status, and recipes for combo boxes, number fields, pop-ups, long tables and checking the result before reporting success.
+name: beans-picker
+description: Operate a macOS app window (native apps or pages in Chrome) in the background through the beans-picker MCP server (observe / act / extract). Use when a task asks to fill in forms, click through a flow, or read values in a Mac window and the beans-picker tools are available. Covers which steps need Jev and which run faster without it (candidateId and batched `then` steps), when cua-driver fits better, how to read act's status, and recipes for combo boxes, number fields, pop-ups, long tables and checking the result before reporting success.
 ---
 
-# Driving a Mac window with cua-jev
+# Driving a Mac window with beans-picker
 
-cua-jev works on the accessibility tree, never on pixels you choose, and never brings the app to
+beans-picker works on the accessibility tree, never on pixels you choose, and never brings the app to
 the front. Every `act` step is checked on fresh snapshots: did the effect asked for happen? Text is
 entered as given and checked by exact equality.
 
@@ -34,7 +34,7 @@ value out of a busy page.
 
 **Use cua-driver instead** (screenshots and pixel clicks) when the UI has no accessibility tree to
 speak of: a canvas, a game, custom-drawn widgets. Also for mouse drags, for anything you must *see*
-(an image, a layout), and for a menu-bar command that has no keyboard shortcut (cua-jev reports it
+(an image, a layout), and for a menu-bar command that has no keyboard shortcut (beans-picker reports it
 as `failed` with `foreground_required`).
 
 ## The fast loop
@@ -53,7 +53,7 @@ as `failed` with `foreground_required`).
 | status | what to do |
 |---|---|
 | `done` | The effect is seen. Go on. |
-| `unverified` | The field changed but its exact text could not be read. `extract` proves the exact text only when the element it returns has `exact: true`; otherwise it may be trimmed, so treat the text as unconfirmed (running `cua-jev grant-ax` lets it be read). |
+| `unverified` | The field changed but its exact text could not be read. `extract` proves the exact text only when the element it returns has `exact: true`; otherwise it may be trimmed, so treat the text as unconfirmed (running `beans-picker grant-ax` lets it be read). |
 | `no_effect` | Nothing changed. Do not repeat the same call blindly. Observe again: the control may be disabled, hidden or off-screen. Focusing a drag handle also reads as `no_effect`; the next key press still goes to it. |
 | `mismatch` | Something changed, but not what was asked. Read `change` and fix it before going on. |
 | `ambiguous` | Pick the right `candidateId` from the list returned and call again. Do not guess by rewording. |
