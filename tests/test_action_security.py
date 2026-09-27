@@ -6,8 +6,9 @@ from beans_picker.act.execute import Executor
 from beans_picker.candidates.build import BuildOptions, build_candidates
 from beans_picker.candidates.safety import is_destructive_label
 from beans_picker.candidates.types import ActionKind
+from beans_picker.jev.state import build_state
 from beans_picker.observe.identity import key_of, menu_key
-from beans_picker.observe.snapshot import assign_keys
+from beans_picker.observe.snapshot import assign_keys, build_snapshot
 from tests.act_support import CallDriver, FakeMenuKeys, Reobserve, cand, node, ok, refused, snap
 
 
@@ -61,6 +62,27 @@ async def test_newly_dangerous_popup_item_is_not_pressed() -> None:
     assert not result.ok
     assert result.code == "needs_confirmation"
     assert driver.calls == [("click", {"pid": 1, "element_token": popup.token})]
+
+
+@pytest.mark.parametrize(
+    "secure", [{"role": "AXSecureTextField"}, {"role": "AXTextField", "subrole": "AXSecureTextField"}]
+)
+def test_secure_fields_and_all_markdown_descendants_are_removed(secure: dict[str, str]) -> None:
+    raw: dict[str, object] = {
+        "elements": [
+            {"element_index": 0, "role": "AXWindow"},
+            {"element_index": 1, "parent_index": 0, "value": "secret", **secure},
+            {"element_index": 2, "parent_index": 1, "role": "AXStaticText", "value": "nested-secret"},
+        ],
+        "tree_markdown": (
+            '- [0] AXWindow\n  - [1] AXTextField = "secret"\n    - AXGroup\n'
+            '      - AXStaticText = "unindexed-secret"\n    - [2] AXStaticText = "nested-secret"\n'
+            '  - AXStaticText = "visible"'
+        ),
+    }
+    observed = build_snapshot(raw, 1, 1)
+    assert [n.index for n in observed.nodes] == [0]
+    assert [t.value for t in observed.texts] == ["visible"]
 
 
 @pytest.mark.parametrize("keys", [["return"], ["space"]])
@@ -119,3 +141,70 @@ async def test_other_rebind_paths_refuse_a_disappeared_duplicate(kind: ActionKin
     result = await executor.execute(cand(kind, twins[0], text="private", presses=[twins[0]]), snap(twins))
     assert not result.ok
     assert all(args.get("element_token") != "new-b" for _, args in driver.calls)
+
+
+def test_markdown_only_secure_subtree_is_excluded() -> None:
+    raw: dict[str, object] = {
+        "elements": [{"element_index": 0, "role": "AXWindow"}],
+        "tree_markdown": (
+            '- [0] AXWindow\n  - AXSecureTextField\n    - AXStaticText = "secret"\n  - AXStaticText = "public"'
+        ),
+    }
+    assert [t.value for t in build_snapshot(raw, 1, 1).texts] == ["public"]
+
+
+def test_markdown_only_secure_parent_excludes_structured_children_and_grandchildren() -> None:
+    raw: dict[str, object] = {
+        "elements": [
+            {"element_index": 0, "role": "AXWindow"},
+            {"element_index": 2, "parent_index": 1, "role": "AXStaticText", "value": "SENTINEL-child-secret"},
+            {"element_index": 3, "parent_index": 2, "role": "AXStaticText", "value": "SENTINEL-grandchild-secret"},
+            {"element_index": 4, "parent_index": 0, "role": "AXStaticText", "value": "public"},
+        ],
+        "tree_markdown": '- [0] AXWindow\n  - [1] AXSecureTextField\n  - [4] AXStaticText = "public"',
+    }
+
+    observed = build_snapshot(raw, 1, 1)
+
+    assert [n.index for n in observed.nodes] == [0, 4]
+    assert observed.nodes[1].raw_value == "public"
+    assert [t.value for t in observed.texts] == ["public"]
+
+
+@pytest.mark.parametrize(("hops", "unindexed_root", "cycle"), [(1, False, False), (4, True, False), (16, False, True)])
+def test_secure_exclusion_follows_alternating_tree_edges_into_jev_state(
+    hops: int, unindexed_root: bool, cycle: bool
+) -> None:
+    elements: list[dict[str, object]] = [
+        {"element_index": 0, "role": "AXWindow"},
+        {"element_index": 2, "role": "AXGroup", **({"parent_index": 2 + 2 * hops} if cycle else {})},
+    ]
+    secure = "AXSecureTextField" if unindexed_root else "[1] AXSecureTextField"
+    lines = ["- [0] AXWindow", f"  - {secure}", "    - [2] AXGroup"]
+    for step in range(hops):
+        parent = 2 + 2 * step
+        structured, rendered = parent + 1, parent + 2
+        role = "AXTextField" if step == hops - 1 else "AXGroup"
+        elements.extend(
+            [
+                {"element_index": structured, "parent_index": parent, "role": "AXGroup"},
+                {"element_index": rendered, "role": role, "value": "SENTINEL-secret"},
+            ]
+        )
+        lines.extend(
+            [
+                f"- [{structured}] AXGroup",
+                "  - AXGroup",
+                f'    - [{rendered}] {role} = "SENTINEL-secret"',
+                '    - AXStaticText = "SENTINEL-unindexed-secret"',
+            ]
+        )
+    elements.append({"element_index": 1000, "parent_index": 0, "role": "AXTextField", "value": "public"})
+    lines.extend(['- [1000] AXTextField = "public"', '- AXStaticText = "visible"'])
+
+    observed = build_snapshot({"elements": elements, "tree_markdown": "\n".join(lines)}, 1, 1)
+    state = build_state("inspect the window", observed)
+
+    assert state["fields"] == [{"role": "AXTextField", "label": "", "value": "public"}]
+    assert state["screen_text"] == ["visible"]
+    assert [n.index for n in observed.nodes] == [0, 1000]
