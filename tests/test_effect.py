@@ -3,12 +3,12 @@ from __future__ import annotations
 import copy
 from dataclasses import replace
 
-from cua_jev._json import quote
-from cua_jev._text import trim
-from cua_jev.candidates.build import BuildOptions, build_candidates
-from cua_jev.candidates.types import ActionCandidate
-from cua_jev.observe.types import Snapshot, TextNode
-from cua_jev.verify.effect import expected_text, verify_effect
+from beans_picker._json import quote
+from beans_picker._text import trim
+from beans_picker.candidates.build import BuildOptions, build_candidates
+from beans_picker.candidates.types import ActionCandidate
+from beans_picker.observe.types import Snapshot, TextNode
+from beans_picker.verify.effect import expected_text, verify_effect
 from tests.helpers import snap_fixture
 
 

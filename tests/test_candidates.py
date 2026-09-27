@@ -5,13 +5,13 @@ from dataclasses import replace
 
 import pytest
 
-from cua_jev._json import JsonObject
-from cua_jev.candidates.build import BuildOptions, build_candidates, candidate_id, describe_short
-from cua_jev.candidates.describe import describe, may_only_open_popup
-from cua_jev.candidates.keypad import compile_keypad, keypad_keys, keypad_parents
-from cua_jev.candidates.menu import offerable_menu_items
-from cua_jev.candidates.prune import MAX_OPTIONS, lexical_score, quoted_spans, shards
-from cua_jev.candidates.safety import (
+from beans_picker._json import JsonObject
+from beans_picker.candidates.build import BuildOptions, build_candidates, candidate_id, describe_short
+from beans_picker.candidates.describe import describe, may_only_open_popup
+from beans_picker.candidates.keypad import compile_keypad, keypad_keys, keypad_parents
+from beans_picker.candidates.menu import offerable_menu_items
+from beans_picker.candidates.prune import MAX_OPTIONS, lexical_score, quoted_spans, shards
+from beans_picker.candidates.safety import (
     ControlContext,
     clipboard_withheld,
     control_context,
@@ -22,12 +22,12 @@ from cua_jev.candidates.safety import (
     is_destructive_menu,
     writes_clipboard,
 )
-from cua_jev.candidates.types import TEXT_KINDS, ActionCandidate, ActionKind, ScrollDirection
-from cua_jev.driver.types import Frame
-from cua_jev.menus.keyequiv import KeyEquivalent
-from cua_jev.menus.menukeys import RawMenuKey, table_from
-from cua_jev.observe.snapshot import build_snapshot
-from cua_jev.observe.types import MenuItem, Modal, Snapshot, UINode
+from beans_picker.candidates.types import TEXT_KINDS, ActionCandidate, ActionKind, ScrollDirection
+from beans_picker.driver.types import Frame
+from beans_picker.menus.keyequiv import KeyEquivalent
+from beans_picker.menus.menukeys import RawMenuKey, table_from
+from beans_picker.observe.snapshot import build_snapshot
+from beans_picker.observe.types import MenuItem, Modal, Snapshot, UINode
 from tests.helpers import snap_fixture
 
 ELLIPSIS = "\N{HORIZONTAL ELLIPSIS}"

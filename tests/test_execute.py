@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from cua_jev.act.execute import ActResult, Executor, in_popup_menu, is_stale, path_state, to_act
-from cua_jev.driver.types import ToolResult
-from cua_jev.observe.types import Modal, Snapshot
+from beans_picker.act.execute import ActResult, Executor, in_popup_menu, is_stale, path_state, to_act
+from beans_picker.driver.types import ToolResult
+from beans_picker.observe.types import Modal, Snapshot
 from tests.act_support import (
     CallDriver,
     FakeMenuKeys,

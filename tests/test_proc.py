@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev._proc import Completed, Runner, run
-from cua_jev.errors import ProcessError
+from beans_picker._proc import Completed, Runner, run
+from beans_picker.errors import ProcessError
 from tests.fakes import fake_runner
 
 PY = sys.executable

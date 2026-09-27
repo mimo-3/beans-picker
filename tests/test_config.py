@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev import config
+from beans_picker import config
 
 
 def _write(path: Path, text: str) -> None:
@@ -86,7 +86,7 @@ def test_missing_files_are_skipped(tmp_path: Path) -> None:
 )
 def test_effect_retakes(monkeypatch: pytest.MonkeyPatch, raw: str | None, want: int) -> None:
     if raw is not None:
-        monkeypatch.setenv("CUA_JEV_EFFECT_RETAKES", raw)
+        monkeypatch.setenv("BEANS_PICKER_EFFECT_RETAKES", raw)
     assert config.effect_retakes() == want
 
 
@@ -104,7 +104,7 @@ def test_model_and_driver_bin(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     monkeypatch.setenv("HOME", str(tmp_path))
     assert config.model() == "jev-latest"
     assert config.driver_bin() == str(tmp_path / ".local" / "bin" / "cua-driver")
-    monkeypatch.setenv("CUA_JEV_MODEL", "")
+    monkeypatch.setenv("BEANS_PICKER_MODEL", "")
     monkeypatch.setenv("CUA_DRIVER_BIN", "/opt/cua-driver")
     assert config.model() == ""
     assert config.driver_bin() == "/opt/cua-driver"
@@ -130,50 +130,50 @@ def test_timeouts(monkeypatch: pytest.MonkeyPatch, raw: str | None, want: float)
 
 def test_values_loaded_later_apply(tmp_path: Path) -> None:
     assert config.model() == "jev-latest"
-    _write(tmp_path / ".env.local", "CUA_JEV_MODEL=jev-1.13.0\n")
+    _write(tmp_path / ".env.local", "BEANS_PICKER_MODEL=jev-1.13.0\n")
     config.load_env(tmp_path)
     assert config.model() == "jev-1.13.0"
 
 
 def test_log_level(monkeypatch: pytest.MonkeyPatch) -> None:
     assert config.log_level() == "WARNING"
-    monkeypatch.setenv("CUA_JEV_LOG_LEVEL", "")
+    monkeypatch.setenv("BEANS_PICKER_LOG_LEVEL", "")
     assert config.log_level() == "WARNING"
-    monkeypatch.setenv("CUA_JEV_LOG_LEVEL", "debug")
+    monkeypatch.setenv("BEANS_PICKER_LOG_LEVEL", "debug")
     assert config.log_level() == "debug"
 
 
 def _checkout(root: Path, name: str) -> Path:
-    pkg = root / "src" / "cua_jev"
+    pkg = root / "src" / "beans_picker"
     pkg.mkdir(parents=True)
     _write(root / "pyproject.toml", f'[project]\nname = "{name}"\n')
     return pkg
 
 
-def test_env_dirs_include_a_cua_jev_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_env_dirs_include_a_beans_picker_checkout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    pkg = _checkout(tmp_path / "repo", "cua-jev")
-    assert config.env_dirs(pkg) == [tmp_path / "repo", tmp_path / "xdg" / "cua-jev"]
+    pkg = _checkout(tmp_path / "repo", "beans-picker")
+    assert config.env_dirs(pkg) == [tmp_path / "repo", tmp_path / "xdg" / "beans-picker"]
 
 
 def test_env_dirs_skip_another_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     pkg = _checkout(tmp_path / "other", "someone-else")
     _write(tmp_path / "other" / ".env.local", "JEV_API_KEY=leak\n")
-    assert config.env_dirs(pkg) == [tmp_path / "home" / ".config" / "cua-jev"]
+    assert config.env_dirs(pkg) == [tmp_path / "home" / ".config" / "beans-picker"]
 
 
 def test_env_dirs_skip_an_installed_package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", "")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    site = tmp_path / "proj" / ".venv" / "lib" / "python3.12" / "site-packages" / "cua_jev"
+    site = tmp_path / "proj" / ".venv" / "lib" / "python3.12" / "site-packages" / "beans_picker"
     site.mkdir(parents=True)
-    _write(tmp_path / "proj" / "pyproject.toml", '[project]\nname = "cua-jev"\n')
-    assert config.env_dirs(site) == [tmp_path / "home" / ".config" / "cua-jev"]
+    _write(tmp_path / "proj" / "pyproject.toml", '[project]\nname = "beans-picker"\n')
+    assert config.env_dirs(site) == [tmp_path / "home" / ".config" / "beans-picker"]
 
 
 def test_checkout_root_rejects_bad_pyproject(tmp_path: Path) -> None:
-    pkg = tmp_path / "src" / "cua_jev"
+    pkg = tmp_path / "src" / "beans_picker"
     pkg.mkdir(parents=True)
     assert config.checkout_root(pkg) is None
     _write(tmp_path / "pyproject.toml", "not toml [")
@@ -185,7 +185,7 @@ def test_checkout_root_rejects_bad_pyproject(tmp_path: Path) -> None:
 def test_this_checkout_qualifies() -> None:
     root = config.checkout_root()
     assert root is not None
-    assert (root / "src" / "cua_jev" / "config.py").is_file()
+    assert (root / "src" / "beans_picker" / "config.py").is_file()
 
 
 def test_constants() -> None:

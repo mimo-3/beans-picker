@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from cua_jev.candidates.types import ActionKind
-from cua_jev.jev.state import Change
-from cua_jev.verify.effect import EffectVerdict, clip, expected_text, summarize, verify_effect
+from beans_picker.candidates.types import ActionKind
+from beans_picker.jev.state import Change
+from beans_picker.verify.effect import EffectVerdict, clip, expected_text, summarize, verify_effect
 from tests.act_support import cand, menu_item, node, snap, with_signature
 
 ASTRAL = "\U0001f600"  # two UTF-16 units

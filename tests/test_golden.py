@@ -6,9 +6,9 @@ from typing import Any
 
 import pytest
 
-from cua_jev import __version__
-from cua_jev.server import create_server
-from cua_jev.tools.session import Session
+from beans_picker import __version__
+from beans_picker.server import create_server
+from beans_picker.tools.session import Session
 from tests.fakes import FakeDriver
 from tests.raw_mcp import raw_client
 
@@ -67,7 +67,7 @@ async def test_initialize_matches_the_capture_but_for_the_version() -> None:
     expected = _load("initialize.json")
     async with raw_client(_server()) as client:
         got = await client.initialize("2025-06-18")
-    assert got["serverInfo"] == {"name": "cua-jev", "version": __version__}
+    assert got["serverInfo"] == {"name": "beans-picker", "version": __version__}
     got["serverInfo"]["version"] = expected["serverInfo"]["version"]
     assert got == expected
 

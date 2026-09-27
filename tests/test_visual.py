@@ -6,10 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev.driver.types import Frame, ToolOk, ToolRefused, ToolResult, WindowBounds
-from cua_jev.observe import visual
-from cua_jev.observe.png import Rgba, crop, decode_png
-from cua_jev.observe.visual import (
+from beans_picker.driver.types import Frame, ToolOk, ToolRefused, ToolResult, WindowBounds
+from beans_picker.observe import visual
+from beans_picker.observe.png import Rgba, crop, decode_png
+from beans_picker.observe.visual import (
     Shot,
     capture_window,
     pixel_change,
@@ -18,7 +18,7 @@ from cua_jev.observe.visual import (
     region_of,
     window_bounds,
 )
-from cua_jev.paths import Paths
+from beans_picker.paths import Paths
 from tests.fakes import FakeDriver
 from tests.helpers import blank, encode_png, paint
 

@@ -3,12 +3,12 @@ from __future__ import annotations
 import copy
 import re
 
-from cua_jev._json import JsonObject, JsonValue
-from cua_jev.driver.markdown import parse_tree_markdown
-from cua_jev.observe.exacttext import apply_exact_text
-from cua_jev.observe.snapshot import assign_keys, build_snapshot, in_web_area, is_descendant
-from cua_jev.observe.types import UINode
-from cua_jev.verify.effect import verify_effect
+from beans_picker._json import JsonObject, JsonValue
+from beans_picker.driver.markdown import parse_tree_markdown
+from beans_picker.observe.exacttext import apply_exact_text
+from beans_picker.observe.snapshot import assign_keys, build_snapshot, in_web_area, is_descendant
+from beans_picker.observe.types import UINode
+from beans_picker.verify.effect import verify_effect
 from tests.act_support import cand, snap
 from tests.helpers import fixture_ids, raw_fixture, snap_fixture
 

@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from cua_jev._numbers import fixed, number_text, parse_number, round3, round_half_up, scalar_text
+from beans_picker._numbers import fixed, number_text, parse_number, round3, round_half_up, scalar_text
 
 
 @pytest.mark.parametrize(

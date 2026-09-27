@@ -5,13 +5,13 @@ from collections.abc import Mapping
 
 import pytest
 
-from cua_jev._json import JsonObject, JsonValue
-from cua_jev.candidates.prune import MAX_OPTIONS
-from cua_jev.errors import JevBadResponse
-from cua_jev.jev.client import AskResult, Question
-from cua_jev.jev.questions import action_question, action_question_forced
-from cua_jev.jev.rank import Ambiguous, NotFound, Pick, Ranked, Ranking, RankSpec, gate, rank
-from cua_jev.jev.state import JevState
+from beans_picker._json import JsonObject, JsonValue
+from beans_picker.candidates.prune import MAX_OPTIONS
+from beans_picker.errors import JevBadResponse
+from beans_picker.jev.client import AskResult, Question
+from beans_picker.jev.questions import action_question, action_question_forced
+from beans_picker.jev.rank import Ambiguous, NotFound, Pick, Ranked, Ranking, RankSpec, gate, rank
+from beans_picker.jev.state import JevState
 from tests.tool_fakes import fake_jev
 
 

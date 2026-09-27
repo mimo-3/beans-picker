@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev._json import JsonValue
-from cua_jev.candidates.build import BuildOptions, build_candidates
-from cua_jev.candidates.types import ActionCandidate
-from cua_jev.driver.types import ToolOk, ToolResult
-from cua_jev.errors import JevUnavailable
-from cua_jev.observe.snapshot import build_snapshot
-from cua_jev.observe.types import Snapshot
-from cua_jev.tools.act import act_tool
+from beans_picker._json import JsonValue
+from beans_picker.candidates.build import BuildOptions, build_candidates
+from beans_picker.candidates.types import ActionCandidate
+from beans_picker.driver.types import ToolOk, ToolResult
+from beans_picker.errors import JevUnavailable
+from beans_picker.observe.snapshot import build_snapshot
+from beans_picker.observe.types import Snapshot
+from beans_picker.tools.act import act_tool
 from tests.fakes import FakeDriver
 from tests.helpers import snap_fixture
 from tests.test_state import el

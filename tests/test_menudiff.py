@@ -3,13 +3,13 @@ from __future__ import annotations
 import copy
 import dataclasses
 
-from cua_jev._json import JsonValue
-from cua_jev.candidates.types import ActionCandidate
-from cua_jev.jev.state import change_of
-from cua_jev.observe.menudiff import MenuRelabel, enabled_changes, relabel_of, relabeled_menu_items
-from cua_jev.observe.snapshot import build_snapshot
-from cua_jev.observe.types import MenuItem, Snapshot
-from cua_jev.verify.effect import EffectVerdict, verify_effect
+from beans_picker._json import JsonValue
+from beans_picker.candidates.types import ActionCandidate
+from beans_picker.jev.state import change_of
+from beans_picker.observe.menudiff import MenuRelabel, enabled_changes, relabel_of, relabeled_menu_items
+from beans_picker.observe.snapshot import build_snapshot
+from beans_picker.observe.types import MenuItem, Snapshot
+from beans_picker.verify.effect import EffectVerdict, verify_effect
 from tests.helpers import fixture_ids, raw_fixture, snap_fixture
 
 

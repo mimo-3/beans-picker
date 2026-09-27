@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from cua_jev._aio import gather_settled
+from beans_picker._aio import gather_settled
 
 
 async def _value(v: int, delay: float = 0.0) -> int:

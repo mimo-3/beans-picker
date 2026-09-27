@@ -9,11 +9,11 @@ import pytest
 from mcp import Client, MCPError
 from mcp.types import INVALID_PARAMS
 
-from cua_jev import server as server_module
-from cua_jev._json import JsonObject
-from cua_jev.errors import DriverError, DriverUnavailable, JevBadResponse, JevUnavailable, ToolError
-from cua_jev.server import INSTRUCTIONS, create_server, error, run
-from cua_jev.tools.session import Session
+from beans_picker import server as server_module
+from beans_picker._json import JsonObject
+from beans_picker.errors import DriverError, DriverUnavailable, JevBadResponse, JevUnavailable, ToolError
+from beans_picker.server import INSTRUCTIONS, create_server, error, run
+from beans_picker.tools.session import Session
 from tests.fakes import FakeDriver
 
 
@@ -159,7 +159,7 @@ async def test_unexpected_failures_are_logged_with_their_traceback(caplog: pytes
     async def refused() -> object:
         raise ToolError("bad_target", "give app, pid or windowId")
 
-    with caplog.at_level(logging.WARNING, logger="cua_jev.server"):
+    with caplog.at_level(logging.WARNING, logger="beans_picker.server"):
         await run(Session(_driver), fn, acts=False, screen_locked=_unlocked)
         await run(Session(_driver), refused, acts=False, screen_locked=_unlocked)
     [record] = caplog.records

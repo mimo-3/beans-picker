@@ -3,9 +3,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from cua_jev._proc import DEFAULT_MAX_BYTES, Completed
-from cua_jev.driver.lock import screen_locked
-from cua_jev.errors import ProcessError
+from beans_picker._proc import DEFAULT_MAX_BYTES, Completed
+from beans_picker.driver.lock import screen_locked
+from beans_picker.errors import ProcessError
 
 IOREG = ("ioreg", "-n", "Root", "-d1", "-a")
 

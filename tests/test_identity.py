@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from cua_jev.observe.identity import menu_key, stable_key
+from beans_picker.observe.identity import menu_key, stable_key
 
 
 @dataclass

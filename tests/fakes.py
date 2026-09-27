@@ -4,11 +4,11 @@ import inspect
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 
-from cua_jev._json import JsonObject
-from cua_jev._proc import DEFAULT_MAX_BYTES, Completed
-from cua_jev.driver.sentinel import ActivationSentinel
-from cua_jev.driver.types import ToolOk, ToolRefused, ToolResult
-from cua_jev.errors import DriverError, ProcessError
+from beans_picker._json import JsonObject
+from beans_picker._proc import DEFAULT_MAX_BYTES, Completed
+from beans_picker.driver.sentinel import ActivationSentinel
+from beans_picker.driver.types import ToolOk, ToolRefused, ToolResult
+from beans_picker.errors import DriverError, ProcessError
 
 
 class FakeRunner:

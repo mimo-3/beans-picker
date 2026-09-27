@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cua_jev.driver.markdown import MdNode, parse_tree_markdown, unescape
+from beans_picker.driver.markdown import MdNode, parse_tree_markdown, unescape
 
 TREE = "\n".join(
     [

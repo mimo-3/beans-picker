@@ -9,8 +9,8 @@ import pytest
 from bench import judge as judge_mod
 from bench.judge import DRIVER, DRIVER_MAX_BYTES, calculator_display, compare, judge, load_tasks, main, read_calculator
 
-from cua_jev._json import JsonObject, dumps
-from cua_jev._proc import Completed
+from beans_picker._json import JsonObject, dumps
+from beans_picker._proc import Completed
 from tests.fakes import fake_runner
 
 ROOT = Path(__file__).resolve().parent.parent

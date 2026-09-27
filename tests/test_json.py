@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from cua_jev._json import dumps, quote
+from beans_picker._json import dumps, quote
 
 
 def test_compact_with_insertion_order() -> None:

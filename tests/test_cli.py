@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev import __version__, cli
+from beans_picker import __version__, cli
 
 
 @pytest.fixture
 def no_side_effects(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> list[str]:
     events: list[str] = []
-    monkeypatch.setattr("cua_jev.config.env_dirs", lambda: [tmp_path])
-    monkeypatch.setattr("cua_jev.log.configure", lambda: events.append("log"))
+    monkeypatch.setattr("beans_picker.config.env_dirs", lambda: [tmp_path])
+    monkeypatch.setattr("beans_picker.log.configure", lambda: events.append("log"))
 
     async def serve() -> None:
         events.append("serve")
@@ -46,7 +46,7 @@ def test_help_prints_the_usage_instead_of_serving(
 def test_refuses_to_serve_off_macos(capsys: pytest.CaptureFixture[str], no_side_effects: list[str]) -> None:
     assert cli.main([], platform="linux") == 1
     captured = capsys.readouterr()
-    assert captured.err == "cua-jev runs on macOS only\n"
+    assert captured.err == "beans-picker runs on macOS only\n"
     assert captured.out == ""
     assert no_side_effects == []
 

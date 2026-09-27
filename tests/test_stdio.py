@@ -32,7 +32,7 @@ async def test_serves_over_stdio_and_exits_on_end_of_input(tmp_path: Path) -> No
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
-        "cua_jev",
+        "beans_picker",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
@@ -61,7 +61,7 @@ async def test_serves_over_stdio_and_exits_on_end_of_input(tmp_path: Path) -> No
         params = {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}
         await send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": params})
         init = await answer(1)
-        assert init["result"]["serverInfo"]["name"] == "cua-jev"
+        assert init["result"]["serverInfo"]["name"] == "beans-picker"
         await send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         await send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
         tools = await answer(2)
@@ -88,7 +88,7 @@ async def test_a_signal_ends_serving_while_stdin_stays_open(tmp_path: Path, sig:
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-m",
-        "cua_jev",
+        "beans_picker",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
