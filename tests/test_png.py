@@ -94,13 +94,14 @@ def test_short_image_data_is_refused() -> None:
     assert decode_png(png) is None
 
 
-def test_bytes_after_the_zlib_stream_and_split_idat_chunks_are_read() -> None:
+@pytest.mark.parametrize("trailing", [b"", b"trailing"])
+def test_split_idat_chunks_are_read_but_trailing_compressed_bytes_are_refused(trailing: bytes) -> None:
     img = paint(blank(4, 3), 1, 1, 3, 2, 9)
     png = encode_png(img)
     idat_start = 33
     length = int.from_bytes(png[idat_start : idat_start + 4])
     stream = png[idat_start + 8 : idat_start + 8 + length]
-    head, tail = stream[:5], stream[5:] + b"trailing"
+    head, tail = stream[:5], stream[5:] + trailing
     split = (
         png[:idat_start]
         + len(head).to_bytes(4)
@@ -114,7 +115,7 @@ def test_bytes_after_the_zlib_stream_and_split_idat_chunks_are_read() -> None:
         + bytes(4)
         + png[idat_start + 12 + length :]
     )
-    assert decode_png(split) == img
+    assert decode_png(split) == (None if trailing else img)
 
 
 def test_chunks_after_iend_are_not_read() -> None:
