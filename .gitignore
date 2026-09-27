@@ -35,3 +35,6 @@ GEMINI.md
 .claude/
 .cursor/
 .cursorrules
+
+# Local audit reports and diagnostic bundles
+.harness-output/

@@ -33,11 +33,11 @@ The server itself never calls a generative model (no `claude -p`, no LLM API).
 | `not_found` | No candidate fits, or the `candidateId` is not on the window any more. |
 | `failed` | cua-driver refused, the command needs the foreground, or the app came to the front (`foreground_violation`). |
 
-A call that cannot run at all returns `isError` with `{"status": "failed", "code", "message"}`. Codes include `bad_target`, `window_not_found`, `screen_locked`, `jev_unavailable` (no key, Jev unreachable or too slow), `jev_bad_response`, `driver_unavailable` (cua-driver could not be started), `driver_timeout`, `driver_error` (cua-driver refused a call the tool needed) and `internal`. Anything but a tool's own refusal is also logged with its traceback at `WARNING`.
+A call that cannot run at all returns `isError` with `{"status": "failed", "code", "message"}`. Codes include `bad_target`, `window_not_found`, `screen_locked`, `jev_unavailable` (no key, Jev unreachable or too slow), `jev_bad_response`, `driver_unavailable` (cua-driver could not be started), `driver_timeout`, `driver_error` (cua-driver refused a call the tool needed) and `internal`. Failures other than a tool's own refusal are logged by code and exception type at `WARNING`, without exception contents or tracebacks.
 
 Each result also carries the action that ran (`action`, with the cua-driver route) and a summary of what changed on the window (`change`).
 
-Candidate ids are derived from a control's stable identity (role, identifier, label and ancestors), not from the snapshot's element index, so an id from `observe` still works after the window changes, as long as the control is there.
+Candidate ids are derived from a control's stable identity (role, identifier, label and ancestors), not from the snapshot's element index, so an id from `observe` still works after the window changes, as long as its identity is unique. Indistinguishable controls use token-bound ids; after their tokens change, observe again rather than retrying an old id.
 
 ## Install
 
@@ -45,7 +45,9 @@ Requirements: macOS, Python 3.12+, [cua-driver](https://github.com/trycua/cua) a
 
 ```sh
 uv tool install beans-picker
-mkdir -p ~/.config/beans-picker && echo 'JEV_API_KEY=...' > ~/.config/beans-picker/.env.local
+install -d -m 700 ~/.config/beans-picker
+(umask 077; printf '%s\n' 'JEV_API_KEY=...' > ~/.config/beans-picker/.env.local)
+chmod 600 ~/.config/beans-picker/.env.local
 claude mcp add beans-picker -- "$(command -v beans-picker)"   # absolute path: GUI-launched clients often lack ~/.local/bin on PATH
 beans-picker grant-ax                                    # exact text (optional, see below)
 ```
@@ -63,7 +65,8 @@ From a checkout:
 
 ```sh
 uv sync
-echo 'JEV_API_KEY=...' > .env.local   # read from the checkout, whatever the caller's cwd
+(umask 077; printf '%s\n' 'JEV_API_KEY=...' > .env.local)
+chmod 600 .env.local                # read from the checkout, whatever the caller's cwd
 claude mcp add beans-picker -- "$(command -v uv)" run --directory "$PWD" beans-picker
 uv run beans-picker grant-ax
 ```
@@ -84,7 +87,7 @@ The agent skill in `skills/beans-picker` tells a model how to use these tools we
 | `JEV_READ_TIMEOUT` | Seconds to wait for Jev's answer to one request (default 120). |
 | `BEANS_PICKER_EFFECT_RETAKES` | Fresh snapshots taken to see an effect (default 5). |
 | `BEANS_PICKER_LOG_LEVEL` | Level of the server's log on stderr (default `WARNING`). |
-| `TYPESAFE_BASE_URL` | The Jev endpoint (default `https://api.typesafe.ai`). |
+| `TYPESAFE_BASE_URL` | The Jev endpoint (default `https://api.typesafe.ai`); HTTPS only, without URL credentials, query or fragment. Redirects are refused. |
 
 Variables are read from the environment first, then from `.env.local` and `.env` in the checkout (only when the package runs from a beans-picker checkout), then from `.env.local` and `.env` in `~/.config/beans-picker` (`$XDG_CONFIG_HOME/beans-picker` when that is set). A value that is already set is never overridden. See `.env.example`.
 
@@ -92,9 +95,9 @@ Variables are read from the environment first, then from `.env.local` and `.env`
 
 - **Background only.** `bring_to_front`, `invoke_menu`, `move_cursor` and `delivery_mode: "foreground"` are refused before they reach cua-driver. Menu commands run as their keyboard shortcut sent to the app's pid; a command without a known shortcut returns `failed` / `foreground_required`. During `act`, the frontmost app is sampled continuously; if the target app comes to the front, the call stops with `foreground_violation`.
 - **Time limits.** Every request to cua-driver and to Jev has a generous limit (see Configuration), so one that stalls ends its call with `driver_timeout` or `jev_unavailable` instead of blocking the queue. An action whose answer timed out may still have happened: observe before repeating it. At shutdown, the final `end_session` gets 5 seconds.
-- **Screen lock.** While `CGSSessionScreenIsLocked` is set, every tool refuses with `screen_locked` and does nothing.
+- **Screen lock.** While `CGSSessionScreenIsLocked` is set, every tool refuses with `screen_locked` and does nothing. A failed or unreadable lock check refuses with `screen_lock_unavailable`.
 - **One call at a time.** Tool calls are queued, so two actions never interleave on the desktop.
-- **Destructive actions** are marked, not hidden: `act` returns `needs_confirmation` unless `allowDestructive` is set, whoever picked the action. A checkbox is never destructive, since it can be switched back.
+- **Destructive actions** are marked, not hidden: `act` returns `needs_confirmation` unless `allowDestructive` is set, whoever picked the action. Return and Space also require confirmation because they can activate a focused button. Pop-up options are checked again after opening. This label-based check is a precaution, not an authorization boundary: apps can mislabel controls, and a checkbox can have irreversible side effects.
 
 ## How `act` works
 
