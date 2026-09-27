@@ -101,13 +101,13 @@ async def run(
         except Exception as err:
             code, message = failure(err)
             if not isinstance(err, ToolError):
-                _log.warning("tool call failed (%s)", code, exc_info=True)
+                _log.warning("tool call failed (%s, %s)", code, type(err).__name__)
             return error(code, message)
 
     try:
         return await session.exclusive(body)
-    except BeansPickerError as err:
-        return error("internal", str(err))
+    except BeansPickerError:
+        return error("internal", "server is shutting down")
 
 
 class _Server(Server[Session]):

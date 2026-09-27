@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import os
+import stat
 import threading
 from pathlib import Path
 
@@ -180,10 +182,9 @@ async def test_capture_window_reads_the_screenshot_and_the_pointer(paths: Paths)
     out = args.pop("screenshot_out_file")
     assert args == {"pid": 7, "window_id": 9, "max_elements": 1}
     assert isinstance(out, str)
-    name = Path(out).name
-    assert name.startswith(f"7-9-{os.getpid()}-")
-    assert name.endswith(".png")
-    assert Path(out).parent == paths.shots
+    assert Path(out).suffix == ".png"
+    assert Path(out).parent.parent == paths.shots
+    assert not Path(out).parent.exists()
     assert _leftovers(paths) == []
 
 
@@ -205,7 +206,7 @@ async def test_capture_window_takes_the_bounds_from_the_window_list(paths: Paths
     assert driver.calls[3] == ("list_windows", {"pid": 7})
 
 
-async def test_capture_window_removes_a_file_written_elsewhere(paths: Paths, tmp_path: Path) -> None:
+async def test_capture_window_refuses_a_file_written_elsewhere(paths: Paths, tmp_path: Path) -> None:
     elsewhere = tmp_path / "elsewhere.png"
     state = ToolOk(
         data={"screenshot_file_path": str(elsewhere), "window_bounds": {"x": 0, "y": 0, "width": 20, "height": 10}},
@@ -213,8 +214,8 @@ async def test_capture_window_removes_a_file_written_elsewhere(paths: Paths, tmp
         ms=1,
     )
     shot = await capture_window(_capture_driver(state=state, write_to=elsewhere), 1, 2, paths=paths)
-    assert shot is not None
-    assert not elsewhere.exists()
+    assert shot is None
+    assert elsewhere.exists()
     assert _leftovers(paths) == []
 
 
@@ -223,7 +224,7 @@ async def test_capture_window_removes_a_file_written_elsewhere(paths: Paths, tmp
     [(ToolOk(data={}, text="", ms=1), None), (None, b"not a png")],
     ids=["no cursor", "unreadable"],
 )
-async def test_capture_window_removes_a_file_written_elsewhere_when_it_fails(
+async def test_capture_window_preserves_a_file_written_elsewhere_when_it_fails(
     paths: Paths, tmp_path: Path, cursor: ToolResult | None, content: bytes | None
 ) -> None:
     elsewhere = tmp_path / "elsewhere.png"
@@ -234,7 +235,7 @@ async def test_capture_window_removes_a_file_written_elsewhere_when_it_fails(
     )
     driver = _capture_driver(state=state, cursor=cursor, write_to=elsewhere, content=content)
     assert await capture_window(driver, 1, 2, paths=paths) is None
-    assert not elsewhere.exists()
+    assert elsewhere.exists()
     assert _leftovers(paths) == []
 
 
@@ -320,3 +321,90 @@ async def test_capture_window_decodes_off_the_event_loop(paths: Paths, monkeypat
     monkeypatch.setattr(visual, "decode_png", decode)
     assert await capture_window(_capture_driver(), 7, 9, paths=paths) is not None
     assert threads == [False]
+
+
+@pytest.mark.parametrize("escape", ["symlink", "hardlink", "subdir_symlink", "traversal", "refused"])
+async def test_capture_never_reads_or_removes_an_external_path(
+    paths: Paths, tmp_path: Path, escape: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    external = tmp_path / "external.png"
+    _png_file(external)
+    original = external.read_bytes()
+    decoded: list[bytes] = []
+    monkeypatch.setattr(visual, "decode_png", lambda data: decoded.append(data))
+
+    def respond(tool: str, args: dict[str, object]) -> ToolResult:
+        if tool != "get_window_state":
+            return ToolOk(data={"x": 0, "y": 0}, text="", ms=1)
+        out = Path(str(args["screenshot_out_file"]))
+        if escape == "symlink":
+            out.symlink_to(external)
+            returned = out
+        elif escape == "hardlink":
+            out.hardlink_to(external)
+            returned = out
+        elif escape == "subdir_symlink":
+            (out.parent / "redirect").symlink_to(tmp_path, target_is_directory=True)
+            returned = out.parent / "redirect" / external.name
+        elif escape == "traversal":
+            returned = out.parent / ".." / ".." / "external.png"
+        else:
+            return ToolRefused(code="no", message="no", data={"screenshot_file_path": str(external)}, text="", ms=1)
+        return ToolOk(
+            data={"screenshot_file_path": str(returned), "window_bounds": {"x": 0, "y": 0, "width": 20, "height": 10}},
+            text="",
+            ms=1,
+        )
+
+    assert await capture_window(FakeDriver(respond), 1, 2, paths=paths) is None
+    assert external.read_bytes() == original
+    assert decoded == []
+    assert _leftovers(paths) == []
+
+
+async def test_capture_accepts_driver_png_suffix_in_private_unique_directories(paths: Paths) -> None:
+    destinations: list[Path] = []
+
+    def respond(tool: str, args: dict[str, object]) -> ToolResult:
+        if tool != "get_window_state":
+            return ToolOk(data={"x": 0, "y": 0}, text="", ms=1)
+        out = Path(str(args["screenshot_out_file"]))
+        destinations.append(out)
+        assert stat.S_IMODE(out.parent.stat().st_mode) == 0o700
+        actual = Path(str(out) + ".png")
+        _png_file(actual)
+        return ToolOk(
+            data={"screenshot_file_path": str(actual), "window_bounds": {"x": 0, "y": 0, "width": 20, "height": 10}},
+            text="",
+            ms=1,
+        )
+
+    old_mask = os.umask(0o022)
+    try:
+        shots = await asyncio.gather(*(capture_window(FakeDriver(respond), 1, 2, paths=paths) for _ in range(2)))
+    finally:
+        os.umask(old_mask)
+    assert all(shot is not None for shot in shots)
+    assert len({out.parent for out in destinations}) == 2
+    assert all(not out.parent.exists() for out in destinations)
+    assert _leftovers(paths) == []
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_capture_cleans_owned_data_after_error_or_cancellation(paths: Paths, cancel: bool) -> None:
+    def respond(tool: str, args: dict[str, object]) -> ToolResult:
+        if tool != "get_window_state":
+            return ToolOk(data={"x": 0, "y": 0}, text="", ms=1)
+        out = Path(str(args["screenshot_out_file"]))
+        _png_file(out)
+        (out.parent / "extra.png").write_bytes(b"sensitive partial data")
+        if cancel:
+            raise asyncio.CancelledError
+        raise RuntimeError("capture failed")
+
+    if cancel:
+        with pytest.raises(asyncio.CancelledError):
+            await capture_window(FakeDriver(respond), 1, 2, paths=paths)
+    else:
+        assert await capture_window(FakeDriver(respond), 1, 2, paths=paths) is None
+    assert _leftovers(paths) == []

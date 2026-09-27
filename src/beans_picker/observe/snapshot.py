@@ -6,6 +6,7 @@ import asyncio
 import logging
 import re
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -26,7 +27,7 @@ from beans_picker.driver.types import (
     windows_of,
 )
 from beans_picker.observe.exacttext import EDITABLE_ROLES, TOGGLE_ROLES, apply_exact_text
-from beans_picker.observe.identity import key_of, menu_key
+from beans_picker.observe.identity import ambiguous_key, key_of, menu_key
 from beans_picker.observe.normalize import humanize_identifier, normalize_text, truncate
 from beans_picker.observe.signature import state_signature
 from beans_picker.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
@@ -94,7 +95,7 @@ async def observe(
         try:
             fields = await read_exact(pid)
         except Exception as err:  # exact text is optional: a failure to read it means "not read"
-            _log.debug("exact text for pid %d: %s", pid, err)
+            _log.debug("exact text for pid %d: %s", pid, type(err).__name__)
             fields = None
         if fields is not None:
             apply_exact_text(snap.nodes, fields, snap.window_title)
@@ -139,10 +140,12 @@ def build_snapshot(raw: Mapping[str, object], pid: int, window_id: int) -> Snaps
     """Joins a `get_window_state` result's elements with its markdown rendering."""
     state = window_state_of(raw)
     every = state.elements if state.elements is not None else []
-    copies = _repeated_windows(every) | _column_copies(every)
+    md_all = parse_tree_markdown(state.tree_markdown or "")
+    secure = {e.element_index for e in every if e.role == "AXSecureTextField" or e.subrole == "AXSecureTextField"}
+    roots = _repeated_windows(every) | _column_copies(every) | secure
+    copies, dropped_lines = _excluded_tree(every, md_all, roots)
     elements = [e for e in every if e.element_index not in copies]
-    # Unindexed rows belong to their nearest indexed ancestor, so a dropped copy takes them along.
-    md = [n for n in parse_tree_markdown(state.tree_markdown or "") if _owner(n) not in copies]
+    md = [n for n in md_all if n.line not in dropped_lines]
     md_by_index = {n.index: n for n in md if n.index is not None}
     by_index = {e.element_index: e for e in elements}
     menu_bar = next((e.element_index for e in elements if e.role == "AXMenuBar"), None)
@@ -176,6 +179,40 @@ def build_snapshot(raw: Mapping[str, object], pid: int, window_id: int) -> Snaps
     return snap
 
 
+def _excluded_tree(
+    elements: Sequence[Element], markdown: Sequence[MdNode], roots: set[int]
+) -> tuple[set[int], set[int]]:
+    # Keep element IDs and markdown line numbers in separate namespaces. The two representations
+    # of an indexed node are linked both ways; parent edges remain directed toward children.
+    children: dict[tuple[str, int], list[tuple[str, int]]] = {}
+    excluded = {("element", index) for index in roots}
+    for e in elements:
+        if e.parent_index is not None:
+            children.setdefault(("element", e.parent_index), []).append(("element", e.element_index))
+    for row in markdown:
+        line = ("line", row.line)
+        if row.parent_line is not None:
+            children.setdefault(("line", row.parent_line), []).append(line)
+        if row.index is not None:
+            element = ("element", row.index)
+            children.setdefault(element, []).append(line)
+            children.setdefault(line, []).append(element)
+        if row.role == "AXSecureTextField":
+            excluded.add(line)
+    # Each vertex and edge is visited at most once, including arbitrarily alternating paths and
+    # cycles. Unindexed markdown descendants travel through their line edges as well.
+    pending = list(excluded)
+    while pending:
+        for child in children.get(pending.pop(), []):
+            if child not in excluded:
+                excluded.add(child)
+                pending.append(child)
+    return (
+        {index for kind, index in excluded if kind == "element"},
+        {index for kind, index in excluded if kind == "line"},
+    )
+
+
 def _owner(n: MdNode) -> int:
     if n.index is not None:
         return n.index
@@ -184,14 +221,18 @@ def _owner(n: MdNode) -> int:
 
 def _element_chain(e: Element, by_index: Mapping[int, Element]) -> Iterator[Element]:
     cur: Element | None = e
-    while cur is not None:
+    seen: set[int] = set()
+    while cur is not None and cur.element_index not in seen:
+        seen.add(cur.element_index)
         yield cur
         cur = by_index.get(cur.parent_index if cur.parent_index is not None else -1)
 
 
 def _node_chain(start: UINode | None, by_index: Mapping[int, UINode]) -> Iterator[UINode]:
     cur = start
-    while cur is not None:
+    seen: set[int] = set()
+    while cur is not None and cur.index not in seen:
+        seen.add(cur.index)
         yield cur
         cur = by_index.get(cur.parent if cur.parent is not None else -1)
 
@@ -225,8 +266,19 @@ def _column_copies(elements: Sequence[Element]) -> set[int]:
 def _subtrees(elements: Sequence[Element], roots: set[int]) -> set[int]:
     if not roots:
         return set()
-    by_index = {e.element_index: e for e in elements}
-    return {e.element_index for e in elements if any(c.element_index in roots for c in _element_chain(e, by_index))}
+    children: dict[int, list[int]] = {}
+    for e in elements:
+        if e.parent_index is not None:
+            children.setdefault(e.parent_index, []).append(e.element_index)
+    # A secure root may exist only in markdown; its index still excludes structured descendants.
+    excluded = set(roots)
+    pending = list(roots)
+    while pending:
+        for child in children.get(pending.pop(), []):
+            if child not in excluded:
+                excluded.add(child)
+                pending.append(child)
+    return excluded
 
 
 def assign_keys(nodes: Sequence[UINode]) -> None:
@@ -239,13 +291,11 @@ def assign_keys(nodes: Sequence[UINode]) -> None:
             or (n.label != truncate(n.value, 40) and n.raw_label != n.value and n.raw_label != n.placeholder)
         )
         n.key = key_of(n.role, n.identifier, n.label if named else "", n.within)
-    # Controls sharing a key are told apart by tree order.
-    seen: dict[str, int] = {}
+    # No duplicate gets the unique key: losing or reordering a twin must not transfer an action.
+    counts = Counter(n.key for n in nodes)
     for n in nodes:
-        k = seen.get(n.key, 0)
-        seen[n.key] = k + 1
-        if k:
-            n.key = f"{n.key}#{k + 1}"
+        if counts[n.key] > 1:
+            n.key = ambiguous_key(n.key, n.token, n.index)
 
 
 def _to_node(e: Element, m: MdNode | None, in_menu: bool) -> UINode:

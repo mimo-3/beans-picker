@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
+from beans_picker._json import dumps
+
 
 class KeyParts(Protocol):
     @property
@@ -18,8 +20,8 @@ class KeyParts(Protocol):
 
 
 def key_of(role: str, identifier: str | None, label: str, within: Sequence[str]) -> str:
-    """`role|identifier|label|ancestors`, ancestors (at most three) joined by `>`."""
-    return "|".join((role, identifier if identifier is not None else "", label, ">".join(within[:3])))
+    """A structured identity; application labels cannot inject field delimiters."""
+    return dumps([role, identifier, label, list(within[:3])])
 
 
 def stable_key(n: KeyParts) -> str:
@@ -28,5 +30,15 @@ def stable_key(n: KeyParts) -> str:
 
 
 def menu_key(path: Sequence[str]) -> str:
-    """`AXMenuItem|menu|File > Save` for `["File", "Save"]`."""
-    return "AXMenuItem|menu|" + " > ".join(path)
+    """A menu path with unambiguous component boundaries."""
+    return dumps(["menu", list(path)])
+
+
+def ambiguous_key(key: str, token: str, index: int) -> str:
+    """Duplicate identities are scoped to their observed token, never an ordinal rank."""
+    return dumps(["ambiguous", key, token, index])
+
+
+def is_ambiguous_key(key: str) -> bool:
+    """Whether a key cannot safely be rebound after its token becomes stale."""
+    return key.startswith('["ambiguous",')

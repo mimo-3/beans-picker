@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -297,6 +298,24 @@ async def test_close_after_a_failed_connect_is_quiet(tmp_path: Path) -> None:
     with pytest.raises(OSError, match="no binary"):
         await s.driver()
     await s.close()
+
+
+async def test_close_diagnostics_do_not_log_exception_payloads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    jev = JevPicking(None)
+
+    async def fail_close() -> None:
+        raise RuntimeError("SENTINEL-private-request-body")
+
+    monkeypatch.setattr(jev, "aclose", fail_close)
+    s = Session(paths=Paths(cache=tmp_path), jev_factory=lambda: jev)
+    s.jev()
+    with caplog.at_level(logging.DEBUG, logger="beans_picker"):
+        await s.close()
+    assert "RuntimeError" in caplog.text
+    assert "SENTINEL" not in caplog.text
+    assert all(record.exc_info is None for record in caplog.records)
 
 
 async def test_close_cancels_menu_learning_in_progress(tmp_path: Path) -> None:

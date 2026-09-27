@@ -871,7 +871,7 @@ class TestBuild:
     def test_candidate_id_hashes_the_key(self) -> None:
         assert candidate_id("click|x") == candidate_id("click|x")
         assert candidate_id("click|x") != candidate_id("click|x#2")
-        assert candidate_id("k") == "c13fbd79c"
+        assert candidate_id("k") == "c8254c329a92850f6d539dd376f4816ee"
         assert candidate_id("\ud800") == candidate_id("\N{REPLACEMENT CHARACTER}")
 
     def test_controls_in_a_fixed_order_with_safe_keys_last(self) -> None:
@@ -912,7 +912,7 @@ class TestBuild:
         ]
         assert [c.key for c in cands[-9:]][::4] == ["key|return", "key|up", "key|shift+f10"]
         assert all(c.id == candidate_id(c.key) for c in cands)
-        assert all(c.destructive is False for c in cands)
+        assert [c.summary for c in cands if c.destructive] == ["press Return", "press Space"]
 
     def test_text_kinds_carry_the_text_and_quote_it_as_json(self) -> None:
         nodes = [WINDOW, node(1, "AXTextField", "Name"), node(2, "AXPopUpButton", "Size")]

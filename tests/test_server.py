@@ -5,6 +5,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 
+import httpx2
 import pytest
 from mcp import Client, MCPError
 from mcp.types import INVALID_PARAMS
@@ -12,9 +13,11 @@ from mcp.types import INVALID_PARAMS
 from beans_picker import server as server_module
 from beans_picker._json import JsonObject
 from beans_picker.errors import DriverError, DriverUnavailable, JevBadResponse, JevUnavailable, ToolError
+from beans_picker.jev.client import JevClient
 from beans_picker.server import INSTRUCTIONS, create_server, error, run
 from beans_picker.tools.session import Session
 from tests.fakes import FakeDriver
+from tests.test_client import QUESTIONS, Recorder
 
 
 async def _unlocked() -> bool:
@@ -101,7 +104,7 @@ async def test_run_refuses_while_the_screen_is_locked(acts: bool, verb: str) -> 
         (JevBadResponse('"pick" has no noul'), "jev_bad_response", '"pick" has no noul'),
         (DriverError("click", "stale", "gone"), "driver_error", "click refused (stale): gone"),
         (DriverUnavailable("cannot start cua-driver"), "driver_unavailable", "cannot start cua-driver"),
-        (RuntimeError("boom"), "internal", "boom"),
+        (RuntimeError("boom"), "internal", "an internal error occurred"),
     ],
 )
 async def test_run_maps_failures_to_codes(err: Exception, code: str, message: str) -> None:
@@ -152,20 +155,22 @@ async def test_tool_calls_never_interleave() -> None:
     assert events == ["start a", "end a", "start b", "end b", "start c", "end c"]
 
 
-async def test_unexpected_failures_are_logged_with_their_traceback(caplog: pytest.LogCaptureFixture) -> None:
+async def test_unexpected_failures_log_only_safe_metadata(caplog: pytest.LogCaptureFixture) -> None:
     async def fn() -> object:
-        raise RuntimeError("boom")
+        raise RuntimeError("SENTINEL-exception-private-text") from ValueError("SENTINEL-cause-private-text")
 
     async def refused() -> object:
         raise ToolError("bad_target", "give app, pid or windowId")
 
     with caplog.at_level(logging.WARNING, logger="beans_picker.server"):
-        await run(Session(_driver), fn, acts=False, screen_locked=_unlocked)
+        result = await run(Session(_driver), fn, acts=False, screen_locked=_unlocked)
         await run(Session(_driver), refused, acts=False, screen_locked=_unlocked)
     [record] = caplog.records
     assert record.levelno == logging.WARNING
-    assert record.getMessage() == "tool call failed (internal)"
-    assert record.exc_info is not None
+    assert "internal" in record.getMessage()
+    assert "SENTINEL" not in caplog.text
+    assert record.exc_info is None
+    assert _text(result)["message"] == "an internal error occurred"
 
 
 async def test_an_unknown_tool_is_a_protocol_error() -> None:
@@ -202,3 +207,51 @@ async def test_a_given_session_is_left_open() -> None:
     r = await run(session, fn, acts=False, screen_locked=_unlocked)
     assert r.is_error is False
     await session.close()
+
+
+@pytest.mark.parametrize("failure_kind", ["api", "validation", "choice", "transport", "timeout"])
+async def test_jev_failures_do_not_expose_private_text_in_results_or_logs(
+    failure_kind: str, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from beans_picker import config
+
+    monkeypatch.setattr(config, "JEV_RETRIES", 0)
+    private_text = "SENTINEL-private-screen-or-credential"
+    recorder = Recorder(401, {"detail": private_text}, {"x-typesafe-request-id": private_text})
+    if failure_kind == "validation":
+        recorder = Recorder(200, {"answers": private_text}, {"x-typesafe-request-id": private_text})
+    elif failure_kind == "choice":
+        recorder = Recorder(200, {"answers": {"next": {"type": "choice", "choice": private_text}}})
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if failure_kind == "transport":
+            raise RuntimeError(private_text)
+        if failure_kind == "timeout":
+            raise httpx2.ReadTimeout(private_text, request=request)
+        return recorder(request)
+
+    jev = JevClient(api_key="sk-test-123456789", transport=httpx2.MockTransport(handler))
+
+    async def fn() -> object:
+        return await jev.ask({"screen_text": [private_text]}, QUESTIONS)
+
+    try:
+        with caplog.at_level(logging.DEBUG):
+            result = await run(Session(_driver), fn, acts=False, screen_locked=_unlocked)
+    finally:
+        await jev.aclose()
+
+    assert result.is_error is True
+    assert private_text not in json.dumps(_text(result))
+    assert private_text not in caplog.text
+    records = [record for record in caplog.records if record.name == "beans_picker.server"]
+    assert records
+    assert all(record.exc_info is None for record in records)
+    message = _text(result)["message"]
+    assert isinstance(message, str)
+    if failure_kind == "api":
+        assert "401" in message
+    elif failure_kind == "timeout":
+        assert "timed out" in message
+    elif failure_kind == "transport":
+        assert "RuntimeError" in message

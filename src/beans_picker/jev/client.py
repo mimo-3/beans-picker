@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import time
 from collections.abc import Mapping
 from contextvars import ContextVar
@@ -20,13 +21,13 @@ from typesafe_sdk import (
     Score,
     TypeSafeAPIError,
     TypeSafeAPIResponseValidationError,
+    TypeSafeAPITimeoutError,
     TypeSafeError,
 )
 
-from beans_picker import _json, config, log
+from beans_picker import config, log
 from beans_picker._json import JsonValue
-from beans_picker._numbers import round_half_up, scalar_text
-from beans_picker._text import utf16_slice
+from beans_picker._numbers import round_half_up
 from beans_picker.errors import JevBadResponse, JevUnavailable
 
 if TYPE_CHECKING:
@@ -96,6 +97,9 @@ class _RequestIdTransport(httpx2.AsyncBaseTransport):
 
     async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
         response = await self._inner.handle_async_request(request)
+        if response.is_redirect:
+            await response.aclose()
+            raise JevUnavailable("Jev redirects are not allowed")
         box = _REQUEST_ID.get()
         if box is not None:
             box.value = response.headers.get(_REQUEST_ID_HEADER)
@@ -103,6 +107,19 @@ class _RequestIdTransport(httpx2.AsyncBaseTransport):
 
     async def aclose(self) -> None:
         await self._inner.aclose()
+
+
+def _endpoint() -> str:
+    """Only send credentials and window contents over authenticated TLS."""
+    raw = os.environ.get("TYPESAFE_BASE_URL", "").strip() or "https://api.typesafe.ai"
+    message = "TYPESAFE_BASE_URL must be an HTTPS URL without credentials, query or fragment"
+    try:
+        url = httpx2.URL(raw)
+    except (ValueError, httpx2.InvalidURL):
+        raise JevUnavailable(message) from None
+    if url.scheme != "https" or not url.host or url.userinfo or "?" in raw or "#" in raw:
+        raise JevUnavailable(message)
+    return str(url)
 
 
 class JevClient:
@@ -124,13 +141,14 @@ class JevClient:
         try:
             self._client = AsyncTypeSafeClient(
                 api_key=key,
+                base_url=_endpoint(),
                 model=self.model,
                 timeout=httpx2.Timeout(config.jev_read_timeout(), connect=config.jev_connect_timeout()),
                 retry=RetryPolicy(max_retries=config.JEV_RETRIES, timeout=None),
                 transport=_RequestIdTransport(transport if transport is not None else httpx2.AsyncHTTPTransport()),
             )
-        except TypeSafeError as err:
-            raise JevUnavailable(str(err)) from err
+        except TypeSafeError:
+            raise JevUnavailable("invalid Jev client configuration") from None
         self._usage = JevUsage()
 
     async def ask(self, state: JevState, questions: Mapping[str, Question]) -> AskResult:
@@ -140,16 +158,17 @@ class JevClient:
         token = _REQUEST_ID.set(box)
         try:
             reply = await self._client.system_one(state, questions, model=self.model, response_model=_Reply)
-        except TypeSafeAPIResponseValidationError as err:
-            _log.debug("jev reply not readable (request %s): %s", err.request_id, err)
-            raise JevBadResponse(str(err)) from err
+        except TypeSafeAPIResponseValidationError:
+            raise JevBadResponse("Jev returned an invalid response") from None
         except TypeSafeAPIError as err:
-            _log.debug("jev error %s (request %s)", err.status, err.request_id)
-            body = _json.dumps(err.body if err.body is not None else "")
-            raise JevUnavailable(f"Jev API {err.status}: {utf16_slice(body, 200)}") from err
+            raise JevUnavailable(f"Jev API {err.status}") from None
+        except JevUnavailable:
+            raise
+        except (httpx2.TimeoutException, TypeSafeAPITimeoutError):
+            raise JevUnavailable("Jev request timed out") from None
         except Exception as err:
-            _log.debug("jev call failed: %s: %s", type(err).__name__, err)
-            raise JevUnavailable(f"{type(err).__name__}: {err}") from err
+            # Exception strings may contain the request, screen text, or credentials.
+            raise JevUnavailable(f"Jev request failed ({type(err).__name__})") from None
         finally:
             _REQUEST_ID.reset(token)
         validate(questions, reply.answers)
@@ -199,8 +218,7 @@ def validate(questions: Mapping[str, Question], answers: Mapping[str, JsonValue]
         if isinstance(q, Choice):
             choice = a.get("choice")
             if not isinstance(choice, str) or not choice or choice not in q.criteria:
-                shown = "(missing)" if "choice" not in a else scalar_text(choice)
-                raise JevBadResponse(f'"{qid}" chose unknown option {shown}')
+                raise JevBadResponse(f'"{qid}" chose an unknown option')
             if "confidence" in a and not _is_probability(a["confidence"]):
                 raise JevBadResponse(f'"{qid}" has a confidence outside [0, 1]')
             probs = a.get("probabilities")

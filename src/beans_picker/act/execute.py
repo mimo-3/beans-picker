@@ -12,7 +12,9 @@ from beans_picker._aio import Clock
 from beans_picker._json import quote
 from beans_picker._numbers import round_half_up
 from beans_picker.act.pixel import PixelMapper, ToolCaller
+from beans_picker.candidates.safety import control_context, is_destructive_control, is_destructive_label
 from beans_picker.menus.keyequiv import key_equivalent
+from beans_picker.observe.identity import is_ambiguous_key
 from beans_picker.observe.normalize import normalize_text
 from beans_picker.observe.snapshot import in_web_area, is_descendant
 
@@ -130,14 +132,20 @@ class Executor:
         self._clock = clock
         self._pixels = PixelMapper(driver)
 
-    async def execute(self, c: ActionCandidate, snap: Snapshot, modifiers: Sequence[str] = ()) -> ActResult:
+    async def execute(
+        self, c: ActionCandidate, snap: Snapshot, modifiers: Sequence[str] = (), *, allow_destructive: bool = False
+    ) -> ActResult:
         """Carries out `c` on the window `snap` shows."""
         t0 = self._clock()
         route: list[str] = []
+        activation = c.kind == "key" and c.target is None and c.keys in (["return"], ["space"])
+        dangerous_option = c.kind == "choose_option" and is_destructive_label(c.text or "")
+        if not allow_destructive and (c.destructive or activation or dangerous_option):
+            return self._result(_confirmation(), route, t0)
         if modifiers:
             out = await self._modified_click(_target(c), snap, modifiers, route)
         else:
-            out = await self._dispatch(c, snap, route)
+            out = await self._dispatch(c, snap, route, allow_destructive=allow_destructive)
         return self._result(out, route, t0)
 
     async def retype_field(self, c: ActionCandidate, snap: Snapshot) -> ActResult:
@@ -151,16 +159,18 @@ class Executor:
         ms = round_half_up((self._clock() - t0) * 1000)
         return ActResult(ok=out.ok, route=route, ms=ms, code=out.code, effect=out.effect, detail=out.detail)
 
-    async def _dispatch(self, c: ActionCandidate, snap: Snapshot, route: list[str]) -> _Outcome:
+    async def _dispatch(
+        self, c: ActionCandidate, snap: Snapshot, route: list[str], *, allow_destructive: bool
+    ) -> _Outcome:
         pid, window_id = snap.pid, snap.window_id
         match c.kind:
             case "click":
                 target = _target(c)
                 if in_popup_menu(snap, target):
-                    return await self._press_item(target, snap, route)
-                return await self._press(target, snap, route)
+                    return await self._press_item(target, snap, route, allow_destructive=allow_destructive)
+                return await self._press(target, snap, route, allow_destructive=allow_destructive)
             case "toggle":
-                return await self._press(_target(c), snap, route)
+                return await self._press(_target(c), snap, route, allow_destructive=allow_destructive)
             case "context_menu":
                 # AXShowMenu delivers a contextmenu event without activating the window.
                 return await self._with_rebind(
@@ -172,7 +182,7 @@ class Executor:
             case "keypad":
                 return await self._keypad(c, snap, route)
             case "choose_option":
-                return await self._choose(c, snap, route)
+                return await self._choose(c, snap, route, allow_destructive=allow_destructive)
             case "set_value":
                 target = _target(c)
                 if target.role == "AXIncrementor" and in_web_area(snap, target):
@@ -232,8 +242,16 @@ class Executor:
         route.append("press_key")
         return to_act(await self._driver.call("press_key", payload(None)))
 
-    async def _press(self, node: UINode, snap: Snapshot, route: list[str]) -> _Outcome:
-        r = await self._with_rebind(node, route, "click", lambda token: _ElementArgs(pid=snap.pid, element_token=token))
+    async def _press(
+        self, node: UINode, snap: Snapshot, route: list[str], *, allow_destructive: bool = False
+    ) -> _Outcome:
+        r = await self._with_rebind(
+            node,
+            route,
+            "click",
+            lambda token: _ElementArgs(pid=snap.pid, element_token=token),
+            allow_destructive=allow_destructive,
+        )
         # Controls without AXPress (text fields, custom views) still respond to a click at their centre.
         if not r.ok and _AX_FAILED.search(r.detail if r.detail is not None else ""):
             # AXPress can report failure after the app did act on it; a second press would repeat it.
@@ -274,7 +292,9 @@ class Executor:
         while i < len(presses):
             # After a re-observe the key may have moved: its frame comes from the fresh snapshot too.
             want = presses[i]
-            node = next((n for n in current.nodes if n.key == want.key), want)
+            node = _resolve(current, want)
+            if node is None:
+                return _Outcome(ok=False, code="target_gone", detail="keypad target no longer has a unique identity")
             pt = await self._pixels.point(current, node)
             r: ToolResult
             if pt is not None:
@@ -285,7 +305,7 @@ class Executor:
                 r = await self._driver.call("click", _ElementArgs(pid=current.pid, element_token=node.token))
             route.append("pixel" if pt is not None else "ax")
             if not r.ok:
-                if not is_stale(r) or rebinds >= _KEYPAD_REBINDS:
+                if not is_stale(r) or is_ambiguous_key(node.key) or rebinds >= _KEYPAD_REBINDS:
                     return _Outcome(ok=False, code=r.code, detail=f"key {i + 1}/{len(presses)}: {r.message}")
                 current = await self._reobserve()
                 rebinds += 1
@@ -294,14 +314,16 @@ class Executor:
             i += 1
         return _Outcome(ok=True, effect="unverifiable")
 
-    async def _choose(self, c: ActionCandidate, snap: Snapshot, route: list[str]) -> _Outcome:
+    async def _choose(
+        self, c: ActionCandidate, snap: Snapshot, route: list[str], *, allow_destructive: bool
+    ) -> _Outcome:
         # A closed pop-up button has no AX children: press it open, then press the item titled `text`.
         target = _target(c)
-        opened = await self._press(target, snap, route)
+        opened = await self._press(target, snap, route, allow_destructive=allow_destructive)
         if not opened.ok:
             return opened
         fresh = await self._reobserve()
-        popup = next((n for n in fresh.nodes if n.key == target.key), None)
+        popup = _resolve(fresh, target)
         items = (
             [
                 n
@@ -312,9 +334,14 @@ class Executor:
             else []
         )
         want = normalize_text(c.text)
-        item = next((n for n in items if n.label == want), None)
-        if item is not None:
-            return await self._press_item(item, snap, route)
+        matches = [n for n in items if n.enabled and n.label == want]
+        if len(matches) == 1:
+            item = matches[0]
+            if not allow_destructive and is_destructive_control(item, control_context(fresh)):
+                return _confirmation()
+            return await self._press_item(item, fresh, route, allow_destructive=allow_destructive)
+        if len(matches) > 1:
+            return _Outcome(ok=False, code="ambiguous_option", detail="multiple menu items have that title")
         if not items:
             return _Outcome(ok=False, code="option_not_found", detail="pressing the pop-up opened no menu")
         route.append("press_key")
@@ -323,8 +350,16 @@ class Executor:
         titles = ", ".join(quote(n.label) for n in items)
         return _Outcome(ok=False, code="option_not_found", detail=f"the pop-up has no item {asked}; it lists {titles}")
 
-    async def _press_item(self, item: UINode, snap: Snapshot, route: list[str]) -> _Outcome:
-        r = await self._with_rebind(item, route, "click", lambda token: _ElementArgs(pid=snap.pid, element_token=token))
+    async def _press_item(
+        self, item: UINode, snap: Snapshot, route: list[str], *, allow_destructive: bool = False
+    ) -> _Outcome:
+        r = await self._with_rebind(
+            item,
+            route,
+            "click",
+            lambda token: _ElementArgs(pid=snap.pid, element_token=token),
+            allow_destructive=allow_destructive,
+        )
         # Some browsers leave the native menu open after the choice; Escape closes it and keeps the choice.
         if r.ok:
             after = await self._reobserve()
@@ -369,7 +404,7 @@ class Executor:
         # Insert at the end (cmd+down) so trimmed whitespace and rich-text formatting survive.
         fresh = await self._reobserve()
         key = c.target.key if c.target is not None else None
-        node = next((n for n in fresh.nodes if n.key == key), None)
+        node = _resolve(fresh, c.target) if c.target is not None else None
         if node is None:
             return _Outcome(
                 ok=False, code="target_gone", detail=f"could not rebind {key if key is not None else '(no key)'}"
@@ -426,17 +461,32 @@ class Executor:
             target, route, "type_text", lambda token: _TypeTextArgs(pid=snap.pid, element_token=token, text=text)
         )
 
-    async def _with_rebind(self, node: UINode, route: list[str], tool: str, args: _ArgsFor) -> _Outcome:
+    async def _with_rebind(
+        self, node: UINode, route: list[str], tool: str, args: _ArgsFor, *, allow_destructive: bool = False
+    ) -> _Outcome:
         route.append(tool)
         r = await self._driver.call(tool, args(node.token))
         if is_stale(r):
+            if is_ambiguous_key(node.key):
+                return _Outcome(ok=False, code="target_gone", detail="ambiguous target token expired; observe again")
             fresh = await self._reobserve()
-            again = next((n for n in fresh.nodes if n.key == node.key), None)
+            again = _resolve(fresh, node)
             if again is None:
                 return _Outcome(ok=False, code="target_gone", detail=f"could not rebind {node.key}")
+            if tool == "click" and not allow_destructive and is_destructive_control(again, control_context(fresh)):
+                return _confirmation()
             route.append("rebind")
             r = await self._driver.call(tool, args(again.token))
         return to_act(r)
+
+
+def _resolve(snap: Snapshot, target: UINode) -> UINode | None:
+    matches = [n for n in snap.nodes if n.key == target.key and n.enabled]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _confirmation() -> _Outcome:
+    return _Outcome(ok=False, code="needs_confirmation", detail="this action requires allowDestructive=true")
 
 
 def is_stale(r: ToolResult) -> bool:
@@ -463,9 +513,9 @@ def in_popup_menu(snap: Snapshot, node: UINode) -> bool:
 
 def path_state(snap: Snapshot, path: Sequence[str]) -> PathState:
     """Whether every level of a menu path below the menu bar title is present and enabled."""
-    by_path = {"\x01".join(m.path): m for m in reversed(snap.menu)}
+    by_path = {tuple(m.path): m for m in reversed(snap.menu)}
     for i in range(2, len(path) + 1):
-        item = by_path.get("\x01".join(path[:i]))
+        item = by_path.get(tuple(path[:i]))
         if item is None:
             return "gone"
         if not item.enabled:

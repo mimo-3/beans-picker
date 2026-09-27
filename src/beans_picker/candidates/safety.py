@@ -18,11 +18,11 @@ _ELLIPSIS: Final = "\N{HORIZONTAL ELLIPSIS}"
 
 _AVOID: Final = re.compile(
     "delete|erase|remove|quit|close|log ?out|sign ?out|empty trash|purchase|buy|send|share|restart"
-    "|shut ?down|force quit|lock screen|sleep|hide|clear menu|revert"
+    "|publish|pay(?:ment)?\\b|shut ?down|force quit|lock screen|sleep|hide|clear menu|revert"
     "|don['\N{RIGHT SINGLE QUOTATION MARK}]?t save|discard|trash"
     f"|\\breplace\\b(?!{_ELLIPSIS}|\\.\\.\\.)|overwrite|reset|uninstall"
     "|保存しない|ゴミ箱|置き換え|すべてを置換|破棄|初期化|上書き|削除|終了|閉じる|再起動|ログアウト|ロック|スリープ"
-    "|非表示|共有|メニューを消去|バージョンを戻す|しまう",
+    "|送信|購入|決済|支払|消去|公開|非表示|共有|メニューを消去|バージョンを戻す|しまう",
     _FLAGS,
 )
 

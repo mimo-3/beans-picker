@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import math
 import os
+import stat
 import time
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Final, Literal
 
 from beans_picker._aio import Clock
@@ -60,15 +63,14 @@ class ExactText:
             if direct is not None:
                 self._mode = _Mode("direct", self._clock())
                 return direct
-        out = self._paths.axtext / f"out-{os.getpid()}-{time.time_ns() // 1_000_000}.json"
         try:
-            await self._runner(("open", "-W", "-g", "-n", str(app), "--args", str(pid), str(out)))
-            via_app = _parse(_read_text(out))
+            with TemporaryDirectory(prefix="read-", dir=self._paths.axtext) as directory:
+                out = Path(directory) / "fields.json"
+                await self._runner(("open", "-W", "-g", "-n", str(app), "--args", str(pid), str(out)))
+                via_app = _parse(_read_text(out))
         except Exception:
             self._mode = _Mode("none", self._clock())
             return None
-        finally:
-            out.unlink(missing_ok=True)
         self._mode = _Mode("app" if via_app is not None else "none", self._clock())
         return via_app
 
@@ -81,7 +83,17 @@ class ExactText:
 
 
 def _read_text(path: Path) -> str | None:
-    return path.read_text(encoding="utf-8", errors="replace") if path.exists() else None
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        with os.fdopen(fd, "r", encoding="utf-8", errors="replace") as source:
+            info = os.fstat(source.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > _DIRECT_MAX_BYTES:
+                return None
+            content = source.read(_DIRECT_MAX_BYTES + 1)
+            return content if len(content) <= _DIRECT_MAX_BYTES else None
+    finally:
+        os.close(directory)
 
 
 def _parse(text: str | None) -> list[object] | None:
@@ -94,7 +106,15 @@ def _parse(text: str | None) -> list[object] | None:
     if not isinstance(doc, dict):
         return None
     fields: object = doc.get("fields")
-    return list(fields) if isinstance(fields, list) else None
+    windows: object = doc.get("windows")
+    if not isinstance(fields, list) or not isinstance(windows, list) or any(not isinstance(w, str) for w in windows):
+        return None
+    counts = Counter(normalize_text(w) for w in windows)
+    return [
+        {**f, "window": normalize_text(f["window"])}
+        for f in fields
+        if isinstance(f, dict) and isinstance(f.get("window"), str) and counts[normalize_text(f["window"])] == 1
+    ]
 
 
 async def prompt_for_access(helpers: AxtextBuild, *, runner: Runner = run) -> str:
@@ -137,8 +157,13 @@ def apply_exact_text(nodes: Sequence[UINode], fields: Sequence[object], window_t
     """Gives editable nodes and toggles their exact state (in place)."""
     entries = [_field(f) for f in fields]
     in_window = [f for f in entries if isinstance(f.window, str) and f.window == window_title]
-    pool = in_window or entries
-    _pair_text([n for n in nodes if n.role in EDITABLE_ROLES], [f for f in pool if _role_in(f, EDITABLE_ROLES)])
+    # Never use another window's values when this window is absent from the helper response.
+    pool = in_window
+    text_nodes = [n for n in nodes if n.role in EDITABLE_ROLES and n.subrole != "AXSecureTextField"]
+    text_fields = [f for f in pool if _role_in(f, EDITABLE_ROLES)]
+    # A missing control or multiple windows with the same title makes positional pairing unsafe.
+    if len(text_nodes) == len(text_fields):
+        _pair_text(text_nodes, text_fields)
     toggles = [n for n in nodes if n.role in TOGGLE_ROLES]
     states = [f for f in pool if _role_in(f, TOGGLE_ROLES)]
     if len(toggles) == len(states) and all(
@@ -154,8 +179,12 @@ def _pair_text(nodes: list[UINode], pool: list[_Field]) -> None:
     def agrees(n: UINode, f: _Field) -> bool:
         if not _same_family(f.role, n.role):
             return False
+        title = _normalized(f.title) if isinstance(f.title, str) else ""
+        label = n.raw_label or n.title or ""
+        if title and label and title != label:
+            return False
         if n.raw_value is None:
-            return f.role == n.role
+            return f.role == n.role and bool(title) and title == label
         return trim(f.text()) == trim(n.raw_value) or f.text() == ""
 
     if len(nodes) == len(pool) and all(agrees(n, f) for n, f in zip(nodes, pool, strict=True)):
@@ -167,7 +196,7 @@ def _pair_text(nodes: list[UINode], pool: list[_Field]) -> None:
         if n.raw_value is None:
             continue
         shown = trim(n.raw_value)
-        matches = [f for f in pool if _same_family(f.role, n.role) and trim(f.text()) == shown]
+        matches = [f for f in pool if agrees(n, f) and trim(f.text()) == shown]
         if len({f.text() for f in matches}) == 1:
             _set_exact(n, matches[0])
 

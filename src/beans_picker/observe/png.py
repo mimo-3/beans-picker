@@ -10,6 +10,10 @@ from typing import Final
 from beans_picker._numbers import round_half_up
 
 _SIGNATURE: Final = bytes((137, 80, 78, 71, 13, 10, 26, 10))
+MAX_PNG_BYTES: Final = 64 * 1024 * 1024
+_MAX_PIXELS: Final = 64 * 1024 * 1024
+_MAX_INFLATED: Final = 256 * 1024 * 1024
+
 _CHANNELS: Final = {6: 4, 2: 3, 0: 1, 4: 2}
 
 type _Row = bytes | bytearray
@@ -26,35 +30,46 @@ class Rgba:
 
 def decode_png(buf: bytes) -> Rgba | None:
     """The image as RGBA pixels, or `None` when it is not a PNG this decoder reads."""
-    if buf[:8] != _SIGNATURE:
+    if len(buf) > MAX_PNG_BYTES or buf[:8] != _SIGNATURE:
         return None
     width = height = depth = interlace = 0
     color_type = -1
     idat: list[bytes] = []
     pos = 8
+    ended = False
+    header = False
     while pos + 8 <= len(buf):
         length = int.from_bytes(buf[pos : pos + 4])
         kind = buf[pos + 4 : pos + 8]
+        if pos + 12 + length > len(buf):
+            return None
         if kind == b"IHDR":
-            if pos + 21 > len(buf):
+            if header or pos != 8 or length != 13:
                 return None
+            header = True
             width = int.from_bytes(buf[pos + 8 : pos + 12])
             height = int.from_bytes(buf[pos + 12 : pos + 16])
             depth, color_type = buf[pos + 16], buf[pos + 17]
             interlace = buf[pos + 20]
         elif kind == b"IDAT":
+            if not header:
+                return None
             idat.append(buf[pos + 8 : pos + 8 + length])
         elif kind == b"IEND":
+            if length != 0:
+                return None
+            ended = True
             break
         pos += 12 + length
     channels = _CHANNELS.get(color_type, 0)
-    if not width or not height or depth != 8 or not channels or interlace != 0:
-        return None
-    raw = _inflate(b"".join(idat))
-    if raw is None:
+    if not ended or not width or not height or depth != 8 or not channels or interlace != 0:
         return None
     stride = width * channels
-    if len(raw) < height * (stride + 1):
+    expected = height * (stride + 1)
+    if width * height > _MAX_PIXELS or expected > _MAX_INFLATED:
+        return None
+    raw = _inflate(b"".join(idat), expected)
+    if raw is None:
         return None
     px = _unfilter(raw, height, stride, channels)
     if px is None:
@@ -62,13 +77,13 @@ def decode_png(buf: bytes) -> Rgba | None:
     return Rgba(width, height, _to_rgba(px, width * height, channels))
 
 
-def _inflate(data: bytes) -> bytes | None:
+def _inflate(data: bytes, expected: int) -> bytes | None:
     inflater = zlib.decompressobj()
     try:
-        out = inflater.decompress(data)
+        out = inflater.decompress(data, expected + 1)
     except zlib.error:
         return None
-    return out if inflater.eof else None
+    return out if inflater.eof and len(out) == expected and not inflater.unused_data else None
 
 
 def _unfilter(raw: bytes, height: int, stride: int, channels: int) -> bytearray | None:

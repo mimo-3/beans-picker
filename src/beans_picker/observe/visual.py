@@ -5,16 +5,17 @@ from __future__ import annotations
 import asyncio
 import math
 import os
-import time
+import stat
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Final
 
 from beans_picker._numbers import round_half_up
 from beans_picker.driver.mcp import Driver
 from beans_picker.driver.types import Frame, GetWindowStateArgs, WindowBounds, bounds_of, get_num, windows_of
-from beans_picker.observe.png import Rgba, crop, decode_png
+from beans_picker.observe.png import MAX_PNG_BYTES, Rgba, crop, decode_png
 from beans_picker.paths import Paths
 
 type Box = tuple[int, int, int, int]
@@ -52,43 +53,37 @@ class PixelChange:
 async def capture_window(driver: Driver, pid: int, window_id: int, *, paths: Paths) -> Shot | None:
     """A screenshot of one window, taken without raising or activating it; `None` when unavailable."""
     try:
-        out = _shot_file(paths, pid, window_id)
-    except OSError:
-        return None
-    written: Path | None = None
-    try:
-        p1 = await _pointer_box(driver)
-        args: GetWindowStateArgs = {
-            "pid": pid,
-            "window_id": window_id,
-            "max_elements": 1,
-            "screenshot_out_file": str(out),
-        }
-        r = await driver.call("get_window_state", args)
-        written = _screenshot_path(r.data.get("screenshot_file_path"), out)
-        p2 = await _pointer_box(driver)
-        if not r.ok:
-            return None
-        given = r.data.get("window_bounds")
-        bounds = bounds_of(given) if given is not None else await window_bounds(driver, pid, window_id)
-        if bounds is None or not bounds.width or p1 is None or p2 is None:
-            return None
-        # Decoding a full window takes long enough to stall every other request, so it runs aside.
-        img = await asyncio.to_thread(_read_png, written)
-        if img is None:
-            return None
-        return Shot(img=img, bounds=bounds, scale=img.width / bounds.width, pointer=[p1, p2])
+        paths.shots.mkdir(parents=True, exist_ok=True)
+        # The driver may create its output with ordinary umask permissions. The operation directory
+        # is owner-only regardless, including while the image is being written.
+        with TemporaryDirectory(prefix="capture-", dir=paths.shots) as directory:
+            return await _capture_to(driver, pid, window_id, Path(directory) / "window.png")
     except Exception:
         return None
-    finally:
-        out.unlink(missing_ok=True)
-        if written is not None:
-            written.unlink(missing_ok=True)
 
 
-def _shot_file(paths: Paths, pid: int, window_id: int) -> Path:
-    paths.shots.mkdir(parents=True, exist_ok=True)
-    return paths.shots / f"{pid}-{window_id}-{os.getpid()}-{time.time_ns() // 1_000_000}.png"
+async def _capture_to(driver: Driver, pid: int, window_id: int, out: Path) -> Shot | None:
+    p1 = await _pointer_box(driver)
+    args: GetWindowStateArgs = {
+        "pid": pid,
+        "window_id": window_id,
+        "max_elements": 1,
+        "screenshot_out_file": str(out),
+    }
+    r = await driver.call("get_window_state", args)
+    if not r.ok:
+        return None
+    written = _screenshot_path(r.data.get("screenshot_file_path"), out)
+    p2 = await _pointer_box(driver)
+    given = r.data.get("window_bounds")
+    bounds = bounds_of(given) if given is not None else await window_bounds(driver, pid, window_id)
+    if bounds is None or not bounds.width or p1 is None or p2 is None:
+        return None
+    # Decoding a full window takes long enough to stall every other request, so it runs aside.
+    img = await asyncio.to_thread(_read_png, written)
+    if img is None:
+        return None
+    return Shot(img=img, bounds=bounds, scale=img.width / bounds.width, pointer=[p1, p2])
 
 
 def _screenshot_path(given: object, out: Path) -> Path:
@@ -96,11 +91,25 @@ def _screenshot_path(given: object, out: Path) -> Path:
         return out
     if not isinstance(given, str):
         raise TypeError("screenshot_file_path is not a string")
-    return Path(given)
+    path = Path(given)
+    # Keep the driver's same-directory filename changes (including an added .png suffix), but
+    # never read or clean a path nominated outside this operation's directory.
+    if path.parent != out.parent:
+        raise ValueError("screenshot_file_path is outside the capture directory")
+    return path
 
 
 def _read_png(path: Path) -> Rgba | None:
-    return decode_png(path.read_bytes())
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        with os.fdopen(fd, "rb") as source:
+            info = os.fstat(source.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                return None
+            return decode_png(source.read(MAX_PNG_BYTES + 1))
+    finally:
+        os.close(directory)
 
 
 async def window_bounds(driver: Driver, pid: int, window_id: int) -> WindowBounds | None:

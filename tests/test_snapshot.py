@@ -6,6 +6,7 @@ import re
 from beans_picker._json import JsonObject, JsonValue
 from beans_picker.driver.markdown import parse_tree_markdown
 from beans_picker.observe.exacttext import apply_exact_text
+from beans_picker.observe.identity import ambiguous_key, key_of
 from beans_picker.observe.snapshot import assign_keys, build_snapshot, in_web_area, is_descendant
 from beans_picker.observe.types import UINode
 from beans_picker.verify.effect import verify_effect
@@ -83,7 +84,7 @@ def test_fixture_menu_items_carry_their_element_and_identifier() -> None:
     assert item.token is not None
     assert item.token.endswith(":146")
     assert item.identifier == "closeAll:"
-    assert item.key == "AXMenuItem|menu|ウインドウ > すべてを閉じる"
+    assert item.key == '["menu",["ウインドウ","すべてを閉じる"]]'
 
 
 def test_fixture_nodes_have_keys_and_containers() -> None:
@@ -91,9 +92,9 @@ def test_fixture_nodes_have_keys_and_containers() -> None:
     seven = next(n for n in snap.nodes if n.identifier == "Seven")
     assert seven.label == "7"
     assert seven.within == ["AXWindow: 計算機"]
-    assert seven.key == "AXButton|Seven|7|AXWindow: 計算機"
+    assert seven.key == '["AXButton","Seven","7",["AXWindow: 計算機"]]'
     assert seven.actions == ["press"]
-    unnamed = [n.key for n in snap.nodes if n.key.startswith("AXButton|||AXToolbar")]
+    unnamed = [n.key for n in snap.nodes if n.key.startswith('["AXButton",null,"",["AXToolbar"]]')]
     assert len(unnamed) == len(set(unnamed))
 
 
@@ -187,7 +188,9 @@ def test_windows_with_other_frames_are_both_kept() -> None:
     }
     snap = build_snapshot(raw, 1, 1)
     assert [n.index for n in snap.nodes if n.label == "7"] == [1, 3]
-    assert [n.key for n in snap.nodes if n.label == "7"] == ["AXButton||7|AXWindow: A", "AXButton||7|AXWindow: A#2"]
+    assert [n.key for n in snap.nodes if n.label == "7"] == [
+        ambiguous_key(key_of("AXButton", None, "7", ["AXWindow: A"]), "", i) for i in (1, 3)
+    ]
 
 
 def test_keeps_the_cells_under_their_rows_only() -> None:
@@ -290,14 +293,14 @@ def test_a_placeholder_is_no_part_of_the_key() -> None:
     typed = _placeholder_field("Ada  L", "Ada  L", " Ada  L ", "")
     assert empty.label == "Full name"
     assert empty.placeholder == "Full name"
-    assert empty.key == typed.key == "AXTextField|||AXWindow: Form"
+    assert empty.key == typed.key == '["AXTextField",null,"",["AXWindow: Form"]]'
 
 
 def test_a_field_titled_like_its_placeholder_keeps_its_name() -> None:
     empty = _placeholder_field("Search", "Search", "", "Search")
     typed = _placeholder_field("Search", "Harbor", "Harbor", "Search")
     assert empty.placeholder is None
-    assert empty.key == typed.key == "AXTextField||Search|AXWindow: Form"
+    assert empty.key == typed.key == '["AXTextField",null,"Search",["AXWindow: Form"]]'
 
 
 def test_text_typed_into_a_placeholder_field_is_verified_in_that_field() -> None:
@@ -454,7 +457,7 @@ def test_a_node_takes_its_fields_from_the_element_and_the_markdown_row() -> None
     assert field.label == "hello"
     assert field.raw_label is None
     assert (field.value, field.raw_value) == ("hello", "hello")
-    assert field.key == "AXTextField|||AXWindow: Doc"
+    assert field.key == '["AXTextField",null,"",["AXWindow: Doc"]]'
 
 
 def test_the_markdown_depth_is_used_when_the_element_has_none() -> None:
@@ -496,10 +499,15 @@ def test_an_absent_element_value_falls_back_to_the_markdown_value() -> None:
     assert node.raw_value == "  from markdown "
 
 
-def test_unlabeled_fields_side_by_side_are_numbered_by_order() -> None:
+def test_unlabeled_fields_side_by_side_have_token_scoped_keys() -> None:
     nodes = [_node("AXTextField", None), _node("AXTextField", None), _node("AXTextField", None)]
+    for i, n in enumerate(nodes):
+        n.index = i
+        n.token = f"token:{i}"
     assign_keys(nodes)
-    assert [n.key for n in nodes] == ["AXTextField|||", "AXTextField|||#2", "AXTextField|||#3"]
+    assert [n.key for n in nodes] == [
+        ambiguous_key(key_of("AXTextField", None, "", []), f"token:{i}", i) for i in range(3)
+    ]
 
 
 def test_a_field_named_after_its_value_keys_with_an_empty_label() -> None:
@@ -508,10 +516,10 @@ def test_a_field_named_after_its_value_keys_with_an_empty_label() -> None:
     labeled = _node("AXTextField", "Harbor", "Marina")
     button = _node("AXButton", "Harbor")
     assign_keys([field, popup, labeled, button])
-    assert field.key == "AXTextField|||"
-    assert popup.key == "AXPopUpButton|||"
-    assert labeled.key == "AXTextField||Marina|"
-    assert button.key == "AXButton||Harbor|"
+    assert field.key == '["AXTextField",null,"",[]]'
+    assert popup.key == '["AXPopUpButton",null,"",[]]'
+    assert labeled.key == '["AXTextField",null,"Marina",[]]'
+    assert button.key == '["AXButton",null,"Harbor",[]]'
 
 
 def test_a_field_whose_raw_label_is_its_value_keys_with_an_empty_label() -> None:
@@ -519,7 +527,7 @@ def test_a_field_whose_raw_label_is_its_value_keys_with_an_empty_label() -> None
     field = _node("AXTextArea", text, text)
     field.label = "Notes"
     assign_keys([field])
-    assert field.key == "AXTextArea|||"
+    assert field.key == '["AXTextArea",null,"",[]]'
 
 
 def test_a_sheet_is_the_modal() -> None:
@@ -535,7 +543,7 @@ def test_a_sheet_is_the_modal() -> None:
     assert snap.modal is not None
     assert (snap.modal.role, snap.modal.label, snap.modal.index) == ("AXSheet", "Save", 1)
     ok = snap.nodes[2]
-    assert ok.key == "AXButton||OK|AXSheet: Save>AXWindow: W"
+    assert ok.key == '["AXButton",null,"OK",["AXSheet: Save","AXWindow: W"]]'
     assert is_descendant(snap, ok, 1)
     assert is_descendant(snap, ok, 2)
     assert not is_descendant(snap, snap.nodes[0], 1)

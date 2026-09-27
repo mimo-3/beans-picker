@@ -31,6 +31,18 @@ async def test_stdin_and_stderr_are_null() -> None:
     assert out.stdout == "''\n"
 
 
+async def test_local_helpers_do_not_inherit_jev_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("JEV_API_KEY", "SENTINEL-primary")
+    monkeypatch.setenv("TYPESAFE_API_KEY", "SENTINEL-alias")
+    monkeypatch.setenv("BEANS_PICKER_TEST_ENV", "preserved")
+    code = (
+        "import os; print(os.getenv('JEV_API_KEY'), os.getenv('TYPESAFE_API_KEY'), os.getenv('BEANS_PICKER_TEST_ENV'))"
+    )
+    out = await run([PY, "-c", code])
+    assert out.stdout == "None None preserved\n"
+    assert os.environ["JEV_API_KEY"] == "SENTINEL-primary"
+
+
 async def test_decodes_invalid_utf8_with_replacement() -> None:
     out = await run([PY, "-c", "import sys; sys.stdout.buffer.write(b'a\\xffb')"])
     assert out.stdout == "a\ufffdb"

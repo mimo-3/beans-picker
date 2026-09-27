@@ -69,7 +69,11 @@ async def test_serves_over_stdio_and_exits_on_end_of_input(tmp_path: Path) -> No
         await send({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "observe", "arguments": {}}})
         call = await answer(3)
         assert call["result"]["isError"] is True
-        assert json.loads(call["result"]["content"][0]["text"])["code"] in ("bad_target", "screen_locked")
+        assert json.loads(call["result"]["content"][0]["text"])["code"] in (
+            "bad_target",
+            "screen_locked",
+            "screen_lock_unavailable",
+        )
         proc.stdin.close()
         rest = await asyncio.wait_for(proc.stdout.read(), 20)
         assert await asyncio.wait_for(proc.wait(), 20) == 0

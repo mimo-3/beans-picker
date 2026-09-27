@@ -143,7 +143,7 @@ async def _or_none(name: str, build: Callable[[], Awaitable[Path | None]]) -> Pa
     try:
         return await build()
     except Exception as err:
-        _log.warning("building the %s helper failed: %s", name, err)
+        _log.warning("building the %s helper failed: %s", name, type(err).__name__)
         return None
 
 

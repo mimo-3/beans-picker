@@ -17,10 +17,11 @@ from beans_picker.candidates.safety import (
     clipboard_withheld,
     control_context,
     is_destructive_control,
+    is_destructive_label,
     is_destructive_menu,
 )
 from beans_picker.candidates.types import ActionCandidate, ActionKind, ScrollDirection
-from beans_picker.menus.keyequiv import key_equivalent
+from beans_picker.menus.keyequiv import english_title, key_equivalent
 from beans_picker.menus.menukeys import MenuKeyTable
 from beans_picker.observe.exacttext import EDITABLE_ROLES
 from beans_picker.observe.normalize import truncate
@@ -48,7 +49,7 @@ _CLICK_ROLES: Final = frozenset(
 # Items whose own context menu (a right-click) often holds commands found nowhere else: rename, star, move to trash.
 _CONTEXT_ROLES: Final = frozenset({"AXRow", "AXLink", "AXImage"})
 _CHROME_ROLES: Final = frozenset({"AXWindow", "AXToolbar", "AXGroup", "AXScrollArea"})
-_SAFE_KEYS: Final[tuple[tuple[tuple[str, ...], str], ...]] = (
+_KEYS: Final[tuple[tuple[tuple[str, ...], str], ...]] = (
     (("return",), "Return"),
     (("escape",), "Escape"),
     (("tab",), "Tab"),
@@ -79,8 +80,14 @@ def build_candidates(snap: Snapshot, opts: BuildOptions | None = None) -> list[A
     if snap.modal is None:
         drafts.add_menu()
         drafts.add_keypad()
-    for keys, label in _SAFE_KEYS:
-        drafts.add(kind="key", key=f"key|{'+'.join(keys)}", summary=f"press {label}", keys=list(keys))
+    for keys, label in _KEYS:
+        drafts.add(
+            kind="key",
+            key=f"key|{'+'.join(keys)}",
+            summary=f"press {label}",
+            keys=list(keys),
+            destructive=keys in (("return",), ("space",)),
+        )
     out = _place_twins(_dedupe(drafts.out))
     for c in out:
         c.id = candidate_id(c.key)
@@ -90,7 +97,7 @@ def build_candidates(snap: Snapshot, opts: BuildOptions | None = None) -> list[A
 
 def candidate_id(key: str) -> str:
     """The id act and observe hand out for a candidate key."""
-    return "c" + hashlib.sha1(hash_bytes(key)).hexdigest()[:8]  # noqa: S324 - a short id, not security
+    return "c" + hashlib.sha256(hash_bytes(key)).hexdigest()[:32]
 
 
 def describe_short(n: UINode) -> str:
@@ -225,7 +232,7 @@ class _Drafts:
                 summary=f"choose {self.shown()} in {d}",
                 target=n,
                 with_text=True,
-                destructive=destructive,
+                destructive=destructive or is_destructive_label(self.opts.text or ""),
             )
         if n.role in _CLICK_ROLES and (n.role != "AXImage" or "press" in n.actions):
             self.add_click(n, destructive=destructive)
@@ -267,7 +274,8 @@ class _Drafts:
                 kind="menu",
                 key=m.key,
                 summary="menu " + " > ".join(m.path),
-                destructive=is_destructive_menu(m.path, app_menu),
+                destructive=is_destructive_menu(m.path, app_menu)
+                or is_destructive_menu([*m.path[:-1], english_title(m.path[-1], learned) or ""], app_menu),
             )
             c.menu = m
             eq = key_equivalent(m.path, snap.menu, learned)

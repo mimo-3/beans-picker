@@ -25,8 +25,8 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
 ### Changed
 
 - Failures that are not a tool's own refusal have their own codes: `driver_unavailable`,
-  `driver_timeout`, `driver_error` and `jev_bad_response`, besides `internal`. They are logged with
-  their traceback at `WARNING`.
+  `driver_timeout`, `driver_error` and `jev_bad_response`, besides `internal`. They are logged at `WARNING` using only the error code and exception type, without response
+  bodies, request identifiers or tracebacks. Unexpected failures return `an internal error occurred`.
 - A call to an unknown tool is a JSON-RPC error (-32602), not a tool result.
 - `pid` and `windowId` must be at least 1.
 - Unknown command-line arguments print the usage and exit with status 2 instead of starting the
@@ -34,6 +34,15 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
 - An empty `JEV_API_KEY` no longer hides `TYPESAFE_API_KEY`.
 - The exact-text helper also reads switches (`AXSwitch`). Its source changed, so it is rebuilt:
   run `beans-picker grant-ax` again after upgrading.
+
+- Jev endpoints must use HTTPS without credentials, query strings or fragments; redirects are
+  rejected. Jev errors no longer echo remote response bodies or unexpected choice values.
+- Return and Space require `allowDestructive: true`, as do pop-up choices and freshly rebound
+  controls whose current labels or help indicate a destructive action. Common Japanese action
+  labels are also recognized. This precaution still depends on the caller granting permission.
+- Candidate keys use structured encoding. Candidates with duplicate identities are scoped to the
+  current snapshot and are never rebound across snapshots; observe again to obtain a current id.
+- A failed or malformed screen-lock check returns `screen_lock_unavailable` and runs nothing.
 
 ### Fixed
 
@@ -43,9 +52,20 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
 - A Jev answer with a probability or confidence outside [0, 1], or a ranking without
   probabilities, is rejected as `jev_bad_response`.
 - `~` in `CUA_DRIVER_BIN` is expanded.
-- A screenshot that cua-driver saved to a path of its own is deleted on every failure path too.
+- Screenshots and exact-text responses are read only from a private per-operation directory.
+  Symlinks, hard links, non-regular files, oversized files and paths outside that directory are
+  rejected; cleanup never deletes a driver-supplied path outside the directory.
 - A server made by `create_server()` without a session closes the session it made when it stops.
 - A text field named only by its placeholder keeps its candidate ids once it is typed in, so text
   entered into it is checked in that field instead of ending as `mismatch` ("the target field is gone").
+
+- Secure accessibility fields and their descendants are excluded before ranking and extraction.
+  Exact-text values are matched only within a uniquely titled window, with compatible field
+  roles, labels and counts; ambiguous or incomplete helper responses are ignored.
+- PNG input, dimensions and decompressed data are bounded before use. Malformed, truncated and
+  excess image data are rejected.
+- Canceled native helpers are killed and reaped before their temporary files are cleaned up.
+- API key setup instructions create private directories and files, including when updating an
+  existing key file.
 
 [Unreleased]: https://github.com/mimo-3/beans-picker/commits/main

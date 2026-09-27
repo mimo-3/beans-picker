@@ -71,7 +71,7 @@ async def test_rejects_answers_that_pick_an_option_we_did_not_offer() -> None:
     nxt = answers["next"]
     assert isinstance(nxt, dict)
     nxt["choice"] = "a9"
-    with pytest.raises(JevBadResponse, match='"next" chose unknown option a9'):
+    with pytest.raises(JevBadResponse, match=r'"next" chose an unknown option$'):
         await client(Recorder(200, bad)).ask({"instruction": "x"}, QUESTIONS)
 
 
@@ -79,7 +79,7 @@ async def test_reports_api_errors_as_jev_unavailable() -> None:
     rec = Recorder(401, {"detail": "unauthorized"})
     with pytest.raises(JevUnavailable) as err:
         await client(rec).ask({"instruction": "x"}, QUESTIONS)
-    assert str(err.value) == 'Jev API 401: {"detail":"unauthorized"}'
+    assert str(err.value) == "Jev API 401"
     assert len(rec.requests) == 1
 
 
@@ -112,7 +112,7 @@ async def test_the_typesafe_key_is_the_fallback(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_a_malformed_key_is_reported_as_unavailable() -> None:
-    with pytest.raises(JevUnavailable, match="printable ASCII"):
+    with pytest.raises(JevUnavailable, match=r"^invalid Jev client configuration$"):
         JevClient(api_key="sk bad key")
 
 
@@ -129,17 +129,17 @@ async def test_keeps_the_request_id_of_the_response() -> None:
 
 
 @pytest.mark.parametrize(
-    ("body", "expected"),
+    "body",
     [
-        (b"", 'Jev API 400: ""'),
-        (b"plain words", 'Jev API 400: "plain words"'),
-        ({"detail": "x" * 300}, 'Jev API 400: {"detail":"' + "x" * 189),
+        b"",
+        b"SENTINEL-response-private-text",
+        {"detail": "SENTINEL-response-private-text" * 30},
     ],
 )
-async def test_quotes_the_error_body_and_cuts_it_at_200_units(body: object, expected: str) -> None:
+async def test_api_errors_report_status_without_the_response_body(body: object) -> None:
     with pytest.raises(JevUnavailable) as err:
         await client(Recorder(400, body)).ask({"instruction": "x"}, QUESTIONS)
-    assert str(err.value) == expected
+    assert str(err.value) == "Jev API 400"
 
 
 async def test_a_reply_that_is_not_an_object_is_a_bad_response() -> None:
@@ -151,8 +151,9 @@ async def test_other_failures_are_named_by_their_type() -> None:
     def boom(_: httpx2.Request) -> httpx2.Response:
         raise RuntimeError("no route")
 
-    with pytest.raises(JevUnavailable, match=r"^RuntimeError: no route$"):
+    with pytest.raises(JevUnavailable, match=r"RuntimeError") as err:
         await client(boom).ask({"instruction": "x"}, QUESTIONS)
+    assert "no route" not in str(err.value)
 
 
 async def test_requests_have_the_configured_time_limits(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -230,11 +231,11 @@ def test_validate_names_the_first_bad_answer() -> None:
         validate({"pick": choice}, {"pick": {"type": "noul", "noul": 1}})
     with pytest.raises(JevBadResponse, match=r"^missing or mistyped answer for"):
         validate({"pick": choice}, {"pick": "o0"})
-    with pytest.raises(JevBadResponse, match=r'^"pick" chose unknown option \(missing\)$'):
+    with pytest.raises(JevBadResponse, match=r'^"pick" chose an unknown option$'):
         validate({"pick": choice}, {"pick": {"type": "choice"}})
-    with pytest.raises(JevBadResponse, match=r'^"pick" chose unknown option null$'):
+    with pytest.raises(JevBadResponse, match=r'^"pick" chose an unknown option$'):
         validate({"pick": choice}, {"pick": {"type": "choice", "choice": None}})
-    with pytest.raises(JevBadResponse, match=r'^"pick" chose unknown option $'):
+    with pytest.raises(JevBadResponse, match=r'^"pick" chose an unknown option$'):
         validate({"pick": choice}, {"pick": {"type": "choice", "choice": ""}})
     with pytest.raises(JevBadResponse, match=r'^"done" has no noul$'):
         validate({"done": Noul()}, {"done": {"type": "noul", "noul": True}})
@@ -248,3 +249,72 @@ def test_validate_names_the_first_bad_answer() -> None:
             "s": {"type": "score", "score": 1.5},
         },
     )
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://api.example.test",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "https://user:secret@api.example.test",
+        "https://user@api.example.test",
+        "https://api.example.test?secret=private",
+        "https://api.example.test#private",
+        "file:///tmp/private",
+        "not a URL",
+    ],
+)
+def test_rejects_insecure_or_ambiguous_api_endpoints(base_url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TYPESAFE_BASE_URL", base_url)
+    rec = Recorder(200, OK)
+
+    with pytest.raises(JevUnavailable):
+        client(rec)
+
+    assert rec.requests == []
+
+
+async def test_allows_a_custom_https_endpoint_and_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TYPESAFE_BASE_URL", "https://api.example.test/custom/v1")
+    rec = Recorder(200, OK)
+    jev = client(rec)
+    try:
+        await jev.ask({"instruction": "x"}, QUESTIONS)
+    finally:
+        await jev.aclose()
+
+    assert str(rec.requests[0].url).startswith("https://api.example.test/custom/v1/")
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["/redirected", "https://other.example.test/receive", "http://api.example.test/receive"],
+)
+async def test_redirects_never_send_a_second_request(location: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TYPESAFE_BASE_URL", "https://api.example.test")
+    rec = Recorder(307, {"detail": "SENTINEL-redirect-private-text"}, {"location": location})
+    jev = client(rec)
+    try:
+        with pytest.raises(JevUnavailable) as err:
+            await jev.ask({"screen_text": ["SENTINEL-screen-private-text"]}, QUESTIONS)
+    finally:
+        await jev.aclose()
+
+    assert len(rec.requests) == 1
+    assert "SENTINEL" not in str(err.value)
+
+
+async def test_unknown_choice_does_not_expose_response_text() -> None:
+    bad = copy.deepcopy(OK)
+    answers = bad["answers"]
+    assert isinstance(answers, dict)
+    answers["next"] = {"type": "choice", "choice": "SENTINEL-unknown-private-text"}
+    jev = client(Recorder(200, bad))
+    try:
+        with pytest.raises(JevBadResponse) as err:
+            await jev.ask({"instruction": "x"}, QUESTIONS)
+    finally:
+        await jev.aclose()
+
+    assert "SENTINEL" not in str(err.value)
