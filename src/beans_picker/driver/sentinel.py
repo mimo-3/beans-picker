@@ -137,4 +137,4 @@ class ActivationSentinel:
     def _periodic_done(self, task: asyncio.Task[Activation | None]) -> None:
         self._periodic.discard(task)
         if not task.cancelled() and (err := task.exception()) is not None:
-            _log.debug("periodic front sample failed: %s", err)
+            _log.debug("periodic front sample failed: %s", type(err).__name__)

@@ -72,7 +72,7 @@ def test_hierarchy() -> None:
         (DriverTimeout("slow"), "driver_timeout", "slow"),
         (DriverError("click", "stale", "gone"), "driver_error", "click refused (stale): gone"),
         (ForegroundViolation(Activation(pid=1, during="click", at="t")), "foreground_violation", None),
-        (RuntimeError("boom"), "internal", "boom"),
+        (RuntimeError("SENTINEL-exception-private-text"), "internal", "an internal error occurred"),
     ],
 )
 def test_failure_codes(err: Exception, code: str, message: str | None) -> None:

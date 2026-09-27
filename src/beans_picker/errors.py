@@ -93,4 +93,4 @@ def failure(err: Exception) -> tuple[str, str]:
         case ForegroundViolation():
             return "foreground_violation", str(err)
         case _:
-            return "internal", str(err)
+            return "internal", "an internal error occurred"

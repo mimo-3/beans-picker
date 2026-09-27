@@ -212,7 +212,7 @@ class MenuKeys:
         try:
             table = await self._learn(pid)
         except Exception as err:  # learning is best effort: every failure means "no table"
-            _log.debug("menu keys for pid %d: %s", pid, err)
+            _log.debug("menu keys for pid %d: %s", pid, type(err).__name__)
             return None
         if table is not None:
             self._tables[pid] = table

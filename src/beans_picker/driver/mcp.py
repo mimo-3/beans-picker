@@ -189,7 +189,7 @@ class _Connection:
             if not self._ready.done():
                 self._ready.set_exception(failure)
             else:
-                _log.debug("cua-driver connection ended: %r", failure)
+                _log.debug("cua-driver connection ended: %s", type(failure).__name__)
         finally:
             self._ended = True
             errlog.close()
@@ -297,7 +297,7 @@ class CuaDriver:
                 async with asyncio.timeout(END_SESSION_WAIT_S):
                     await self._call_once("end_session", {"session": self.session}, self._conn)
             except Exception as err:
-                _log.debug("end_session failed: %r", err)
+                _log.debug("end_session failed: %s", type(err).__name__)
         finally:
             await self._conn.close()
 
@@ -308,7 +308,7 @@ class CuaDriver:
         except Exception as err:
             if not is_transport_error(err):
                 raise
-            _log.debug("%s: connection to cua-driver lost (%r); reconnecting", tool, err)
+            _log.debug("%s: connection to cua-driver lost (%s); reconnecting", tool, type(err).__name__)
         await self._reconnect(generation)
         # Only reads are replayed: an action may have landed before the transport died.
         if tool in READ_TOOLS:

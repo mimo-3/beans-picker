@@ -95,7 +95,7 @@ async def observe(
         try:
             fields = await read_exact(pid)
         except Exception as err:  # exact text is optional: a failure to read it means "not read"
-            _log.debug("exact text for pid %d: %s", pid, err)
+            _log.debug("exact text for pid %d: %s", pid, type(err).__name__)
             fields = None
         if fields is not None:
             apply_exact_text(snap.nodes, fields, snap.window_title)

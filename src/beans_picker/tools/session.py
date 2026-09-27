@@ -206,23 +206,23 @@ class Session:
         for owner in (self._menu_keys, self.helpers):
             try:
                 await owner.close()
-            except Exception:
-                _log.debug("stopping background work failed", exc_info=True)
+            except Exception as err:
+                _log.debug("stopping background work failed: %s", type(err).__name__)
         driver = await self._settled_driver()
         if driver is not None:
             try:
                 driver.sentinel.stop()
-            except Exception:
-                _log.debug("stopping the sentinel failed", exc_info=True)
+            except Exception as err:
+                _log.debug("stopping the sentinel failed: %s", type(err).__name__)
             try:
                 await driver.close()
-            except Exception:
-                _log.debug("closing cua-driver failed", exc_info=True)
+            except Exception as err:
+                _log.debug("closing cua-driver failed: %s", type(err).__name__)
         if self._jev is not None:
             try:
                 await self._jev.aclose()
-            except Exception:
-                _log.debug("closing the Jev client failed", exc_info=True)
+            except Exception as err:
+                _log.debug("closing the Jev client failed: %s", type(err).__name__)
 
     async def _settled_driver(self) -> Driver | None:
         task = self._driver_task

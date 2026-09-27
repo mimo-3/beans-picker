@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import os
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +52,8 @@ async def run(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
             cwd=cwd,
+            # Native helpers and system utilities do not need the remote Jev credentials.
+            env={k: v for k, v in os.environ.items() if k not in {"JEV_API_KEY", "TYPESAFE_API_KEY"}},
         )
     except OSError as err:
         raise ProcessError(f"{argv[0]}: could not start: {err}") from err
