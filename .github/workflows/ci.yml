@@ -75,5 +75,5 @@ jobs:
         run: |
           uv venv --python 3.12 v
           uv pip install --python v "$GITHUB_WORKSPACE"/dist-from-sdist/*.whl
-          v/bin/cua-jev --version
+          v/bin/beans-picker --version
           v/bin/python "$GITHUB_WORKSPACE/scripts/smoke_installed.py"
