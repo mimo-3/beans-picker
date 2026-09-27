@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import os
+import stat
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -63,7 +65,7 @@ def _silent(argv: tuple[str, ...]) -> Completed:
     return Completed("", 0)
 
 
-FIELDS = '{"fields":[{"window":"W","role":"AXTextField","value":" a "}]}'
+FIELDS = '{"windows":["W"],"fields":[{"window":"W","role":"AXTextField","value":" a "}]}'
 FAILED = ProcessError("axtext exited with code 1", returncode=1)
 
 
@@ -89,7 +91,7 @@ async def test_reads_the_fields_directly(app: Path, paths: Paths) -> None:
 
 
 async def test_an_empty_list_is_a_successful_read(app: Path, paths: Paths) -> None:
-    runner = _Runner([Completed('{"fields":[]}', 0)])
+    runner = _Runner([Completed('{"windows":[],"fields":[]}', 0)])
     assert await _reader(app, paths, runner).read_fields(1) == []
     assert [c[0] for c in runner.calls] == [str(app / "Contents" / "MacOS" / "axtext")]
 
@@ -101,9 +103,9 @@ async def test_falls_back_to_the_helper_app_and_keeps_using_it(app: Path, paths:
     open_call = runner.calls[1]
     assert open_call[:7] == ("open", "-W", "-g", "-n", str(app), "--args", "5")
     out = Path(open_call[7])
-    assert out.parent == paths.axtext
-    assert out.name.startswith(f"out-{os.getpid()}-")
+    assert out.parent.parent == paths.axtext
     assert out.name.endswith(".json")
+    assert not out.parent.exists()
     assert not _exists(out)
     assert runner.max_bytes[1] == DEFAULT_MAX_BYTES
     await reader.read_fields(5)
@@ -209,7 +211,7 @@ def test_fields_of_the_window_are_preferred_over_others() -> None:
     assert (field.raw_value, field.exact) == ("b ", True)
     other = _node("AXTextField", "a")
     apply_exact_text([other], [{"window": "Other", "role": "AXTextField", "value": " a"}], "Doc")
-    assert other.raw_value == " a"
+    assert (other.raw_value, other.exact) == ("a", None)
 
 
 def test_single_line_roles_pair_with_each_other_but_not_with_text_areas() -> None:
@@ -284,7 +286,7 @@ def test_a_field_without_text_is_refused_when_its_text_is_compared() -> None:
         apply_exact_text([_node("AXTextField", "a")], [{"window": "W", "role": "AXTextField"}], "W")
     stepper = _node("AXIncrementor")
     apply_exact_text([stepper], [{"window": "W", "role": "AXIncrementor", "value": 3}], "W")
-    assert (stepper.raw_value, stepper.value, stepper.exact) == ("3", "3", True)
+    assert (stepper.raw_value, stepper.value, stepper.exact) == (None, None, None)
 
 
 def test_a_toggle_state_without_title_pairs_by_order() -> None:
@@ -299,3 +301,53 @@ def test_a_toggle_state_without_title_pairs_by_order() -> None:
     zero = _node("AXCheckBox", raw_label="x")
     apply_exact_text([zero], [{"window": "W", "role": "AXCheckBox", "title": 0, "value": "0"}], "W")
     assert zero.exact is True
+
+
+async def test_ax_output_has_a_private_unique_operation_directory(app: Path, paths: Paths) -> None:
+    destinations: list[Path] = []
+
+    def write(argv: tuple[str, ...]) -> Completed:
+        out = Path(argv[-1])
+        destinations.append(out)
+        assert stat.S_IMODE(out.parent.stat().st_mode) == 0o700
+        return _writes(FIELDS)(argv)
+
+    runner = _Runner([FAILED], [write])
+    old_mask = os.umask(0o022)
+    try:
+        results = await asyncio.gather(*(_reader(app, paths, runner).read_fields(1) for _ in range(2)))
+    finally:
+        os.umask(old_mask)
+    assert all(result is not None for result in results)
+    assert len({out.parent for out in destinations}) == 2
+    assert all(not out.parent.exists() for out in destinations)
+    assert list(paths.axtext.iterdir()) == [app]
+
+
+@pytest.mark.parametrize("failure", ["error", "cancel", "symlink", "hardlink"])
+async def test_ax_output_cleanup_and_symlink_refusal(app: Path, paths: Paths, tmp_path: Path, failure: str) -> None:
+    external = tmp_path / "unrelated.json"
+    external.write_text(FIELDS)
+
+    def write(argv: tuple[str, ...]) -> Completed:
+        out = Path(argv[-1])
+        if failure == "symlink":
+            out.symlink_to(external)
+            return Completed("", 0)
+        if failure == "hardlink":
+            out.hardlink_to(external)
+            return Completed("", 0)
+        out.write_text(FIELDS)
+        (out.parent / "extra.json").write_text(FIELDS)
+        if failure == "cancel":
+            raise asyncio.CancelledError
+        raise RuntimeError("helper failed")
+
+    reader = _reader(app, paths, _Runner([FAILED], [write]))
+    if failure == "cancel":
+        with pytest.raises(asyncio.CancelledError):
+            await reader.read_fields(1)
+    else:
+        assert await reader.read_fields(1) is None
+    assert external.read_text() == FIELDS
+    assert list(paths.axtext.iterdir()) == [app]

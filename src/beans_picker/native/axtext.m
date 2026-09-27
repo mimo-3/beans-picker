@@ -26,9 +26,9 @@ static NSString *str(id v) { return [v isKindOfClass:[NSString class]] ? v : nil
 static void walk(AXUIElementRef e, int depth, NSString *window, NSString *document, NSMutableArray *out) {
   if (depth > 25 || out.count >= 200) return;
   NSString *role = str(copyAttr(e, kAXRoleAttribute));
+  NSString *subrole = str(copyAttr(e, kAXSubroleAttribute));
+  if ([role isEqualToString:@"AXSecureTextField"] || [subrole isEqualToString:(NSString *)kAXSecureTextFieldSubrole]) return;
   if (role && (editable(role) || toggle(role))) {
-    NSString *subrole = str(copyAttr(e, kAXSubroleAttribute));
-    if ([subrole isEqualToString:(NSString *)kAXSecureTextFieldSubrole]) return;
     id value = copyAttr(e, kAXValueAttribute);
     NSString *text = [value isKindOfClass:[NSString class]] ? value : [value isKindOfClass:[NSNumber class]] ? [value stringValue] : nil;
     NSString *title = str(copyAttr(e, kAXTitleAttribute)) ?: str(copyAttr(e, kAXDescriptionAttribute)) ?: @"";
@@ -62,13 +62,21 @@ int main(int argc, const char *argv[]) {
       AXUIElementRef app = AXUIElementCreateApplication(pid);
       NSMutableArray *out = [NSMutableArray array];
       NSArray *windows = copyAttr(app, kAXWindowsAttribute);
+      NSMutableArray *windowTitles = [NSMutableArray array];
       for (id w in windows) {
-        NSString *title = str(copyAttr((__bridge AXUIElementRef)w, kAXTitleAttribute)) ?: @"";
+        [windowTitles addObject:str(copyAttr((__bridge AXUIElementRef)w, kAXTitleAttribute)) ?: @""];
+      }
+      NSCountedSet *titleCounts = [[NSCountedSet alloc] initWithArray:windowTitles];
+      NSUInteger index = 0;
+      for (id w in windows) {
+        NSString *title = windowTitles[index++];
+        // Include even empty windows in the ambiguity check, before collecting any values.
+        if ([titleCounts countForObject:title] != 1) continue;
         NSString *document = str(copyAttr((__bridge AXUIElementRef)w, kAXDocumentAttribute)) ?: @"";
         walk((__bridge AXUIElementRef)w, 0, title, document, out);
       }
       CFRelease(app);
-      json = [NSJSONSerialization dataWithJSONObject:@{@"fields" : out} options:0 error:nil];
+      json = [NSJSONSerialization dataWithJSONObject:@{@"windows" : windowTitles, @"fields" : out} options:0 error:nil];
     }
     if (outFile) {
       [json writeToFile:outFile atomically:YES];
