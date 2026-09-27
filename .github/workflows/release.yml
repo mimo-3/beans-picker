@@ -21,7 +21,7 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          version=$(uv run --no-project python -c 'import re, pathlib; print(re.search(r"__version__ = \"(.+)\"", pathlib.Path("src/cua_jev/__init__.py").read_text()).group(1))')
+          version=$(uv run --no-project python -c 'import re, pathlib; print(re.search(r"__version__ = \"(.+)\"", pathlib.Path("src/beans_picker/__init__.py").read_text()).group(1))')
           test "$TAG" = "v$version"
       - run: uv build
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -53,17 +53,17 @@ jobs:
           uv venv --python 3.12 "$RUNNER_TEMP/v"
           uv pip install --python "$RUNNER_TEMP/v" -r "$RUNNER_TEMP/requirements.txt"
           for attempt in 1 2 3 4 5 6; do
-            uv pip install --python "$RUNNER_TEMP/v" --no-deps --no-cache --index-url https://test.pypi.org/simple/ "cua-jev==$version" && break
+            uv pip install --python "$RUNNER_TEMP/v" --no-deps --no-cache --index-url https://test.pypi.org/simple/ "beans-picker==$version" && break
             sleep 20
           done
-          "$RUNNER_TEMP/v/bin/cua-jev" --version
+          "$RUNNER_TEMP/v/bin/beans-picker" --version
       - name: The installed wheel is the one built
         run: |
           expected=$(sha256sum dist/*.whl | cut -d' ' -f1)
           mkdir -p "$RUNNER_TEMP/wheel"
           cd "$RUNNER_TEMP/wheel"
-          curl -fsSL -o cua_jev.whl "$(curl -fsSL "https://test.pypi.org/pypi/cua-jev/${GITHUB_REF_NAME#v}/json" | python3 -c 'import json, sys; print(next(u["url"] for u in json.load(sys.stdin)["urls"] if u["packagetype"] == "bdist_wheel"))')"
-          test "$(sha256sum cua_jev.whl | cut -d' ' -f1)" = "$expected"
+          curl -fsSL -o beans_picker.whl "$(curl -fsSL "https://test.pypi.org/pypi/beans-picker/${GITHUB_REF_NAME#v}/json" | python3 -c 'import json, sys; print(next(u["url"] for u in json.load(sys.stdin)["urls"] if u["packagetype"] == "bdist_wheel"))')"
+          test "$(sha256sum beans_picker.whl | cut -d' ' -f1)" = "$expected"
 
   pypi:
     needs: testpypi

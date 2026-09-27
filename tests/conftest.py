@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev.paths import Paths
+from beans_picker.paths import Paths
 
 _ISOLATED_PREFIXES = ("TYPESAFE_", "CUA_", "JEV_")
 _ISOLATED_NAMES = ("XDG_CONFIG_HOME",)

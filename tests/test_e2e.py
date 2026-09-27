@@ -12,18 +12,18 @@ import anyio
 import pytest
 from mcp import Client
 
-from cua_jev import config
-from cua_jev._json import JsonObject
-from cua_jev.server import create_server
-from cua_jev.tools.session import Session
+from beans_picker import config
+from beans_picker._json import JsonObject
+from beans_picker.server import create_server
+from beans_picker.tools.session import Session
 
 # Read at import time: the autouse `isolated_env` fixture clears CUA_* before each test runs.
-_ENABLED = sys.platform == "darwin" and os.environ.get("CUA_JEV_E2E") == "1"
+_ENABLED = sys.platform == "darwin" and os.environ.get("BEANS_PICKER_E2E") == "1"
 _REAL_ENV = dict(os.environ)
 
 pytestmark = [
     pytest.mark.macos,
-    pytest.mark.skipif(not _ENABLED, reason="set CUA_JEV_E2E=1 on a Mac with cua-driver to run"),
+    pytest.mark.skipif(not _ENABLED, reason="set BEANS_PICKER_E2E=1 on a Mac with cua-driver to run"),
 ]
 
 
@@ -88,14 +88,14 @@ async def test_observe_act_and_extract_on_calculator() -> None:
 
 
 _ROOT = Path(__file__).resolve().parent.parent
-_FIXTURE_APP = Path.home() / "Library" / "Caches" / "cua-jev" / "fixture" / "CuaJevFixture.app"
+_FIXTURE_APP = Path.home() / "Library" / "Caches" / "beans-picker" / "fixture" / "BeansPickerFixture.app"
 
 
 @pytest.fixture
 def fixture_app(tmp_path: Path) -> Iterator[tuple[int, Path]]:
     subprocess.run(["sh", str(_ROOT / "bench" / "fixture-app" / "build.sh")], check=True, capture_output=True)
     state = tmp_path / "state.json"
-    title = f"cua-jev e2e {os.getpid()}"
+    title = f"beans-picker e2e {os.getpid()}"
     before = set(_fixture_pids())
     subprocess.run(
         ["open", "-g", "-n", str(_FIXTURE_APP), "--args", "--state", str(state), "--title", title], check=True
@@ -115,7 +115,7 @@ def fixture_app(tmp_path: Path) -> Iterator[tuple[int, Path]]:
 
 
 def _fixture_pids() -> list[int]:
-    out = subprocess.run(["pgrep", "-x", "CuaJevFixture"], capture_output=True, text=True, check=False).stdout
+    out = subprocess.run(["pgrep", "-x", "BeansPickerFixture"], capture_output=True, text=True, check=False).stdout
     return [int(p) for p in out.split()]
 
 

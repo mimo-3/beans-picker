@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from cua_jev._json import JsonObject
-from cua_jev.act.pixel import GEOMETRY_TTL_S, PixelMapper, Point, window_shape
-from cua_jev.observe.types import Modal
+from beans_picker._json import JsonObject
+from beans_picker.act.pixel import GEOMETRY_TTL_S, PixelMapper, Point, window_shape
+from beans_picker.observe.types import Modal
 from tests.act_support import frame, geometry_driver, node, ok, refused, snap, window, windows_data
 from tests.fakes import FakeClock
 

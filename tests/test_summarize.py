@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from bench.summarize import HEAD, RUNS_FILE, fmt, load_runs, main, median, row, summarize, tokens_of
 
-from cua_jev._json import JsonObject, JsonValue, dumps
+from beans_picker._json import JsonObject, JsonValue, dumps
 
 SUMMARY = RUNS_FILE.parent / "summary.md"
 DASH = "\u2013"

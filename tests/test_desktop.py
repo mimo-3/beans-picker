@@ -4,12 +4,12 @@ import asyncio
 
 import pytest
 
-from cua_jev._json import JsonObject, JsonValue
-from cua_jev.driver.types import ToolOk, ToolRefused, ToolResult, Window
-from cua_jev.errors import DriverError
-from cua_jev.observe.signature import state_signature
-from cua_jev.observe.snapshot import desktop_facts, observe
-from cua_jev.observe.types import Snapshot
+from beans_picker._json import JsonObject, JsonValue
+from beans_picker.driver.types import ToolOk, ToolRefused, ToolResult, Window
+from beans_picker.errors import DriverError
+from beans_picker.observe.signature import state_signature
+from beans_picker.observe.snapshot import desktop_facts, observe
+from beans_picker.observe.types import Snapshot
 from tests.fakes import FakeDriver
 
 

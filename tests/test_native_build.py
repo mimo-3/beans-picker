@@ -4,8 +4,8 @@ import shutil
 
 import pytest
 
-from cua_jev.observe.helpers import Helpers, axtext_binary
-from cua_jev.paths import Paths
+from beans_picker.observe.helpers import Helpers, axtext_binary
+from beans_picker.paths import Paths
 
 pytestmark = [pytest.mark.macos, pytest.mark.skipif(shutil.which("clang") is None, reason="needs clang")]
 

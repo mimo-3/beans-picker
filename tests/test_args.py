@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from cua_jev._json import JsonObject, JsonValue
-from cua_jev.tools.args import (
+from beans_picker._json import JsonObject, JsonValue
+from beans_picker.tools.args import (
     INPUT_SCHEMAS,
     Issue,
     act_args,

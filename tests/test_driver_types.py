@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cua_jev.driver.types import (
+from beans_picker.driver.types import (
     ActionResult,
     Element,
     Frame,

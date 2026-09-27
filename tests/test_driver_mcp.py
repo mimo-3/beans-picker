@@ -14,8 +14,8 @@ import pytest
 from mcp import MCPError
 from mcp.types import CONNECTION_CLOSED
 
-from cua_jev.driver import mcp as mcp_module
-from cua_jev.driver.mcp import (
+from beans_picker.driver import mcp as mcp_module
+from beans_picker.driver.mcp import (
     FOREGROUND_TOOLS,
     READ_TOOLS,
     CuaDriver,
@@ -25,9 +25,9 @@ from cua_jev.driver.mcp import (
     is_transport_error,
     steals_focus,
 )
-from cua_jev.driver.sentinel import ActivationSentinel
-from cua_jev.driver.types import ToolOk, ToolRefused
-from cua_jev.errors import DriverError, DriverTimeout, DriverUnavailable, ForegroundViolation
+from beans_picker.driver.sentinel import ActivationSentinel
+from beans_picker.driver.types import ToolOk, ToolRefused
+from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable, ForegroundViolation
 
 FAKE_DRIVER = Path(__file__).with_name("fake_driver.py")
 
@@ -147,7 +147,7 @@ async def test_connect_names_a_unique_session_and_reads_session_tools(
     monkeypatch.setenv("CUA_DRIVER_BIN", str(fake_bin.path))
     d = await CuaDriver.connect()
     try:
-        assert re.fullmatch(rf"cua-jev-{os.getpid()}-[0-9a-z]+", d.session)
+        assert re.fullmatch(rf"beans-picker-{os.getpid()}-[0-9a-z]+", d.session)
         assert d.session_tools == {"list_windows", "get_window_state", "click", "end_session"}
         assert d.generation == 0
     finally:
@@ -205,42 +205,43 @@ async def test_text_joins_every_content_item(driver: CuaDriver) -> None:
 @pytest.mark.parametrize(
     ("tool", "args", "message"),
     [
-        ("bring_to_front", {}, "bring_to_front would bring an app to the front; cua-jev runs background-only"),
-        ("activate", {"pid": 1}, "activate would bring an app to the front; cua-jev runs background-only"),
+        ("bring_to_front", {}, "bring_to_front would bring an app to the front; beans-picker runs background-only"),
+        ("activate", {"pid": 1}, "activate would bring an app to the front; beans-picker runs background-only"),
         (
             "click",
             {"delivery_mode": "foreground"},
-            "click (delivery_mode foreground) would bring an app to the front; cua-jev runs background-only",
+            "click (delivery_mode foreground) would bring an app to the front; beans-picker runs background-only",
         ),
         (
             "activate_app",
             {"delivery_mode": "background"},
-            "activate_app (delivery_mode background) would bring an app to the front; cua-jev runs background-only",
+            "activate_app (delivery_mode background) would bring an app to the front; "
+            "beans-picker runs background-only",
         ),
         (
             "invoke_menu",
             {"delivery_mode": ""},
-            "invoke_menu would bring an app to the front; cua-jev runs background-only",
+            "invoke_menu would bring an app to the front; beans-picker runs background-only",
         ),
         (
             "move_cursor",
             {"delivery_mode": 0},
-            "move_cursor would bring an app to the front; cua-jev runs background-only",
+            "move_cursor would bring an app to the front; beans-picker runs background-only",
         ),
         (
             "move_cursor",
             {"delivery_mode": float("nan")},
-            "move_cursor would bring an app to the front; cua-jev runs background-only",
+            "move_cursor would bring an app to the front; beans-picker runs background-only",
         ),
         (
             "activate",
             {"delivery_mode": []},
-            "activate (delivery_mode ) would bring an app to the front; cua-jev runs background-only",
+            "activate (delivery_mode ) would bring an app to the front; beans-picker runs background-only",
         ),
     ],
 )
 async def test_foreground_calls_are_refused_locally(tool: str, args: dict[str, object], message: str) -> None:
-    offline = CuaDriver(_Connection("cua-driver-never-started"), "cua-driver-never-started", "cua-jev")
+    offline = CuaDriver(_Connection("cua-driver-never-started"), "cua-driver-never-started", "beans-picker")
     r = await offline.call(tool, args)
     assert r == ToolRefused(code="foreground_disallowed", message=message, data={}, text=message, ms=0)
     with pytest.raises(DriverError, match=rf"^{tool} refused \(foreground_disallowed\): "):

@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev._proc import Completed
-from cua_jev.errors import ProcessError
-from cua_jev.menus.keyequiv import KeyEquivalent, english_title, key_equivalent, normalize_title, view_modes
-from cua_jev.menus.menukeys import (
+from beans_picker._proc import Completed
+from beans_picker.errors import ProcessError
+from beans_picker.menus.keyequiv import KeyEquivalent, english_title, key_equivalent, normalize_title, view_modes
+from beans_picker.menus.menukeys import (
     LearnedKey,
     MenuKeys,
     MenuKeyTable,
@@ -19,7 +19,7 @@ from cua_jev.menus.menukeys import (
     raw_menu_keys,
     table_from,
 )
-from cua_jev.paths import Paths
+from beans_picker.paths import Paths
 from tests.fakes import FakeRunner
 
 UP_ARROW = chr(0xF700)

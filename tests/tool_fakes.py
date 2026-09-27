@@ -4,16 +4,16 @@ import copy
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
-from cua_jev._json import JsonValue, dumps
-from cua_jev.driver.mcp import Driver
-from cua_jev.jev.client import AskResult, JevUsage, Question
-from cua_jev.jev.state import JevState
-from cua_jev.menus.menukeys import MenuKeys
-from cua_jev.observe.helpers import Helpers
-from cua_jev.observe.types import Snapshot, TextNode
-from cua_jev.paths import Paths
-from cua_jev.tools.args import TargetArgs
-from cua_jev.tools.session import Target
+from beans_picker._json import JsonValue, dumps
+from beans_picker.driver.mcp import Driver
+from beans_picker.jev.client import AskResult, JevUsage, Question
+from beans_picker.jev.state import JevState
+from beans_picker.menus.menukeys import MenuKeys
+from beans_picker.observe.helpers import Helpers
+from beans_picker.observe.types import Snapshot, TextNode
+from beans_picker.paths import Paths
+from beans_picker.tools.args import TargetArgs
+from beans_picker.tools.session import Target
 from tests.fakes import FakeDriver
 
 
@@ -104,7 +104,7 @@ class FakeSession:
         self._snaps = snaps
         self._jev = jev if jev is not None else jev_picking(None)
         self.fake_driver = driver if driver is not None else FakeDriver()
-        self._paths = Paths(cache=cache if cache is not None else Path("/nonexistent/cua-jev-test-cache"))
+        self._paths = Paths(cache=cache if cache is not None else Path("/nonexistent/beans-picker-test-cache"))
         self._menu_keys = MenuKeys(Helpers(self._paths), self._paths)
         self._target = target
         self.types_into_web_fields: set[int] = set()

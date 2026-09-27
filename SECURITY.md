@@ -2,7 +2,7 @@
 
 ## What leaves your machine
 
-cua-jev sends data over the network only when a step needs Jev: `observe` with an `instruction`,
+beans-picker sends data over the network only when a step needs Jev: `observe` with an `instruction`,
 `act` without a `candidateId`, and `extract`. `observe` without an instruction and `act` with a
 `candidateId` send nothing.
 
@@ -17,25 +17,25 @@ Each such step makes a request to the configured Jev endpoint (`TYPESAFE_BASE_UR
   current value (for a table or list, its first rows), the names of the groups it sits in, and its
   menu path.
 
-Treat any window you point cua-jev at as data you are willing to send to the Jev endpoint.
+Treat any window you point beans-picker at as data you are willing to send to the Jev endpoint.
 
 ## What runs locally
 
 - cua-driver (`CUA_DRIVER_BIN`, default `~/.local/bin/cua-driver`) is started as a subprocess and
   does the clicking and typing. It holds its own Accessibility and Screen Recording permissions.
 - Two small helpers are compiled from the Objective-C sources shipped in the package
-  (`cua_jev/native/axtext.m`, `cua_jev/native/menukeys.m`) with `clang`, on first use, into
-  `~/Library/Caches/cua-jev`. Nothing compiled is downloaded.
-- The `axtext` helper is a separate background app, "cua-jev axtext", that reads text fields and
-  checkboxes read-only and skips secure (password) fields. It holds its own Accessibility grant (`cua-jev grant-ax`), so your
+  (`beans_picker/native/axtext.m`, `beans_picker/native/menukeys.m`) with `clang`, on first use, into
+  `~/Library/Caches/beans-picker`. Nothing compiled is downloaded.
+- The `axtext` helper is a separate background app, "beans-picker axtext", that reads text fields and
+  checkboxes read-only and skips secure (password) fields. It holds its own Accessibility grant (`beans-picker grant-ax`), so your
   terminal or agent needs none. The `menukeys` helper reads an app bundle's menu shortcuts from
   its nib and needs no permission.
 
 ## Where secrets are read from
 
 The Jev key is read from the environment (`JEV_API_KEY`, or `TYPESAFE_API_KEY`), then from
-`.env.local` and `.env` in the cua-jev checkout the server runs from (only when it is one), then
-from `.env.local` and `.env` in `~/.config/cua-jev` (`$XDG_CONFIG_HOME/cua-jev`). A value that is
+`.env.local` and `.env` in the beans-picker checkout the server runs from (only when it is one), then
+from `.env.local` and `.env` in `~/.config/beans-picker` (`$XDG_CONFIG_HOME/beans-picker`). A value that is
 already set is never overridden. Keep these files out of version control; `.gitignore` excludes
 `.env*` except `.env.example`.
 
@@ -45,5 +45,5 @@ carry window text.
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately through GitHub:
-[Report a vulnerability](https://github.com/mimo-3/cua-jev/security/advisories/new). Do not open
-a public issue. Include the version (`cua-jev --version`), what you did, and what happened.
+[Report a vulnerability](https://github.com/mimo-3/beans-picker/security/advisories/new). Do not open
+a public issue. Include the version (`beans-picker --version`), what you did, and what happened.

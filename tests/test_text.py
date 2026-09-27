@@ -5,7 +5,7 @@ import re
 
 import pytest
 
-from cua_jev._text import (
+from beans_picker._text import (
     DIGIT,
     LETTER_OR_NUMBER,
     NOT_LETTER_OR_NUMBER,

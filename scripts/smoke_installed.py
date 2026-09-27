@@ -1,4 +1,4 @@
-"""Smoke test of an installed cua-jev, run from outside the checkout."""
+"""Smoke test of an installed beans-picker, run from outside the checkout."""
 
 from __future__ import annotations
 
@@ -11,18 +11,18 @@ from typing import Final
 
 from mcp import Client
 
-import cua_jev
-from cua_jev.observe.helpers import Helpers
-from cua_jev.paths import Paths
-from cua_jev.server import create_server
+import beans_picker
+from beans_picker.observe.helpers import Helpers
+from beans_picker.paths import Paths
+from beans_picker.server import create_server
 
 CHECKOUT: Final = Path(__file__).resolve().parent.parent
 TOOLS: Final = ["act", "extract", "observe"]
 
 
 def imported_from_checkout() -> Path | None:
-    """Where cua_jev was imported from, when that is this checkout rather than the install."""
-    package = Path(cua_jev.__file__).resolve()
+    """Where beans_picker was imported from, when that is this checkout rather than the install."""
+    package = Path(beans_picker.__file__).resolve()
     return package if package.is_relative_to(CHECKOUT) else None
 
 
@@ -50,15 +50,15 @@ async def build_helpers() -> list[str]:
 
 async def main() -> int:
     if package := imported_from_checkout():
-        return fail(f"cua_jev was imported from the checkout ({package}), not from the installed wheel")
+        return fail(f"beans_picker was imported from the checkout ({package}), not from the installed wheel")
     if (names := await list_tools()) != TOOLS:
         return fail(f"tools are {names}, expected {TOOLS}")
     for name in ("axtext.m", "menukeys.m"):
-        if not resources.files("cua_jev.native").joinpath(name).read_bytes():
+        if not resources.files("beans_picker.native").joinpath(name).read_bytes():
             return fail(f"native/{name} is empty")
     if sys.platform == "darwin" and (broken := await build_helpers()):
         return fail(f"could not build {', '.join(broken)}")
-    sys.stdout.write(f"cua-jev {cua_jev.__version__}: ok\n")
+    sys.stdout.write(f"beans-picker {beans_picker.__version__}: ok\n")
     return 0
 
 

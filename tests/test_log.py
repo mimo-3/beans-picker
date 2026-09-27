@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from cua_jev import log
+from beans_picker import log
 
 
 @pytest.fixture
@@ -37,16 +37,16 @@ def test_parse_level(name: str | int | None, want: int) -> None:
 def test_configure_writes_to_the_given_stream(clean_logger: logging.Logger) -> None:
     buf = io.StringIO()
     log.configure("info", stream=buf)
-    logging.getLogger("cua_jev.driver.mcp").info("hello %s", "there")
-    logging.getLogger("cua_jev.x").debug("hidden")
-    assert "INFO cua_jev.driver.mcp: hello there" in buf.getvalue()
+    logging.getLogger("beans_picker.driver.mcp").info("hello %s", "there")
+    logging.getLogger("beans_picker.x").debug("hidden")
+    assert "INFO beans_picker.driver.mcp: hello there" in buf.getvalue()
     assert "hidden" not in buf.getvalue()
 
 
 def test_configure_reads_the_env_and_replaces_its_handler(
     clean_logger: logging.Logger, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("CUA_JEV_LOG_LEVEL", "debug")
+    monkeypatch.setenv("BEANS_PICKER_LOG_LEVEL", "debug")
     log.configure(stream=io.StringIO())
     log.configure(stream=io.StringIO())
     assert clean_logger.level == logging.DEBUG
@@ -59,7 +59,7 @@ def test_silence_stops_records_and_propagation() -> None:
     buf = io.StringIO()
     handler = logging.StreamHandler(buf)
     root.addHandler(handler)
-    name = "cua_jev_test_silenced"
+    name = "beans_picker_test_silenced"
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     try:

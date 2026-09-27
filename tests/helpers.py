@@ -6,10 +6,10 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
-from cua_jev._json import JsonObject
-from cua_jev.observe.png import Rgba
-from cua_jev.observe.snapshot import build_snapshot
-from cua_jev.observe.types import Snapshot
+from beans_picker._json import JsonObject
+from beans_picker.observe.png import Rgba
+from beans_picker.observe.snapshot import build_snapshot
+from beans_picker.observe.types import Snapshot
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

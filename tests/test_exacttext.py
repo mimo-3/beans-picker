@@ -6,11 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev._proc import DEFAULT_MAX_BYTES, Completed
-from cua_jev.errors import ProcessError
-from cua_jev.observe.exacttext import ExactText, apply_exact_text, prompt_for_access
-from cua_jev.observe.types import UINode
-from cua_jev.paths import Paths
+from beans_picker._proc import DEFAULT_MAX_BYTES, Completed
+from beans_picker.errors import ProcessError
+from beans_picker.observe.exacttext import ExactText, apply_exact_text, prompt_for_access
+from beans_picker.observe.types import UINode
+from beans_picker.paths import Paths
 from tests.fakes import FakeClock, fake_runner
 
 
@@ -69,7 +69,7 @@ FAILED = ProcessError("axtext exited with code 1", returncode=1)
 
 @pytest.fixture
 def app(paths: Paths) -> Path:
-    app = paths.axtext / "CuaJevAXText-0123456789ab.app"
+    app = paths.axtext / "BeansPickerAXText-0123456789ab.app"
     app.mkdir(parents=True)
     return app
 

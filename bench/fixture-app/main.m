@@ -1,5 +1,5 @@
 // Bench fixture: an AppKit window whose control values are written to a JSON state file.
-// Usage: CuaJevFixture --state <file.json> [--title <t>] [--body <b>] [--search <s>] [--name <n>] [--email <e>]
+// Usage: BeansPickerFixture --state <file.json> [--title <t>] [--body <b>] [--search <s>] [--name <n>] [--email <e>]
 #import <AppKit/AppKit.h>
 
 @interface Fixture : NSObject <NSApplicationDelegate, NSTextFieldDelegate, NSTextViewDelegate, NSSearchFieldDelegate>
@@ -28,7 +28,7 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)note {
   NSArray *args = [[NSProcessInfo processInfo] arguments];
-  NSString *title = @"cua-jev fixture";
+  NSString *title = @"beans-picker fixture";
   NSMutableDictionary *initial = [NSMutableDictionary dictionary];
   for (NSUInteger i = 1; i + 1 < args.count; i++) {
     if ([args[i] isEqualToString:@"--state"]) self.statePath = args[i + 1];
@@ -156,7 +156,7 @@ static NSMenu *mainMenu(void) {
   NSMenuItem *appItem = [[NSMenuItem alloc] init];
   [bar addItem:appItem];
   NSMenu *appMenu = [[NSMenu alloc] init];
-  [appMenu addItemWithTitle:@"Quit CuaJevFixture" action:@selector(terminate:) keyEquivalent:@"q"];
+  [appMenu addItemWithTitle:@"Quit BeansPickerFixture" action:@selector(terminate:) keyEquivalent:@"q"];
   appItem.submenu = appMenu;
   NSMenuItem *editItem = [[NSMenuItem alloc] init];
   [bar addItem:editItem];

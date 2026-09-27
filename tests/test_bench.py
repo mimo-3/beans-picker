@@ -37,16 +37,16 @@ from bench.run import (
     take,
 )
 
-from cua_jev._json import JsonObject, JsonValue, dumps
-from cua_jev._proc import DEFAULT_MAX_BYTES, Completed, Runner
-from cua_jev.errors import ProcessError
+from beans_picker._json import JsonObject, JsonValue, dumps
+from beans_picker._proc import DEFAULT_MAX_BYTES, Completed, Runner
+from beans_picker.errors import ProcessError
 from tests.fakes import FakeRunner, RecordingSleep, fake_runner
 
 TASKS = {t["id"]: t for t in load_tasks()}
 NOW = datetime(2026, 9, 24, 12, 28, 41, 383_999, tzinfo=UTC)
-FIXTURE_FIND = ("lsappinfo", "find", "bundleid=dev.cua-jev.fixture")
+FIXTURE_FIND = ("lsappinfo", "find", "bundleid=dev.beans-picker.fixture")
 CALC_FIND = ("lsappinfo", "find", "bundleid=com.apple.calculator")
-PKILL = ("pkill", "-x", "CuaJevFixture")
+PKILL = ("pkill", "-x", "BeansPickerFixture")
 
 type Step = Completed | Exception | Callable[[], Completed]
 
@@ -138,9 +138,9 @@ def test_run_id_is_the_utc_start_time_with_dashes() -> None:
 
 
 def test_prompt_for() -> None:
-    target = Target(pid=321, window_id=9, app_label='the "CuaJevFixture" app')
+    target = Target(pid=321, window_id=9, app_label='the "BeansPickerFixture" app')
     assert prompt_for(TASKS["fx-size-save"], target) == (
-        'You are operating a macOS app with the tools you have. The target is the "CuaJevFixture" app, '
+        'You are operating a macOS app with the tools you have. The target is the "BeansPickerFixture" app, '
         "running as pid 321, window id 9. Use only that window.\n"
         "Work in the background: never bring the app to the front and never activate it.\n"
         "\n"
@@ -153,7 +153,7 @@ def test_prompt_for() -> None:
 
 def test_mcp_servers() -> None:
     assert mcp_servers("a") == {"cua-driver": {"command": str(DRIVER), "args": ["mcp"]}}
-    assert mcp_servers("b") == {"cua-jev": {"command": sys.executable, "args": ["-m", "cua_jev"]}}
+    assert mcp_servers("b") == {"beans-picker": {"command": sys.executable, "args": ["-m", "beans_picker"]}}
 
 
 def test_claude_argv_denies_driver_tools_only_in_a() -> None:
@@ -162,14 +162,14 @@ def test_claude_argv_denies_driver_tools_only_in_a() -> None:
     head = ["-p", "P", "--model", "sonnet", "--tools", "", "--mcp-config", str(cfg), "--strict-mcp-config"]
     deny = ["--disallowedTools", *(f"mcp__cua-driver__{t}" for t in DRIVER_DENY)]
     assert claude_argv("a", "P", "sonnet", cfg) == [*head, "--allowedTools", "mcp__cua-driver", *deny, *tail]
-    assert claude_argv("b", "P", "sonnet", cfg) == [*head, "--allowedTools", "mcp__cua-jev", *tail]
+    assert claude_argv("b", "P", "sonnet", cfg) == [*head, "--allowedTools", "mcp__beans-picker", *tail]
     assert len(DRIVER_DENY) == 10
 
 
 @pytest.mark.parametrize(
     ("name", "want"),
     [
-        ("mcp__cua-jev__act", "act"),
+        ("mcp__beans-picker__act", "act"),
         ("mcp__cua-driver__get_window_state", "get_window_state"),
         ("mcp__server__tool__x", "tool__x"),
         ("Bash", "Bash"),
@@ -187,7 +187,7 @@ def test_take_counts_tool_uses_only() -> None:
     m = Metrics()
     event = {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}, {"type": "tool_use"}]}}
     take(m, dumps(event))
-    take(m, assistant("mcp__cua-jev__act", "mcp__cua-jev__act"))
+    take(m, assistant("mcp__beans-picker__act", "mcp__beans-picker__act"))
     assert m.tool_calls == 3
     assert m.tool_names == {"(unnamed)": 1, "act": 2}
 
@@ -295,7 +295,7 @@ FULL_RESULT = result_event(
         (FAILING, [FULL_RESULT], FULL_KEYS, "success", True),
         (
             FAILING,
-            [assistant("mcp__cua-jev__act")],
+            [assistant("mcp__beans-picker__act")],
             [k for k in FULL_KEYS if k not in ("numTurns", "durationMs", "costUsd", "isError")],
             "none",
             False,
@@ -326,7 +326,7 @@ def test_record_keys_and_claims(
 
 
 def test_record_values() -> None:
-    rec = _record(PASSING, assistant("mcp__cua-jev__act"), FULL_RESULT)
+    rec = _record(PASSING, assistant("mcp__beans-picker__act"), FULL_RESULT)
     assert dumps(rec) == (
         '{"runId":"r","rep":1,"task":"calc-chain","condition":"b","model":"sonnet","pass":true,'
         '"claimed":"success","falseSuccess":false,"mismatches":[],"actual":{"display":"8"},"toolCalls":1,'
@@ -454,7 +454,7 @@ async def test_setup_fixture_starts_a_fresh_window(tmp_path: Path) -> None:
     )
     bench = _bench(tmp_path, runner)
     target = await bench.setup_fixture(task, "rid")
-    assert target == Target(pid=321, window_id=9, app_label='the "CuaJevFixture" app', state_file=state)
+    assert target == Target(pid=321, window_id=9, app_label='the "BeansPickerFixture" app', state_file=state)
     assert isinstance(bench.sleep, RecordingSleep)
     assert bench.sleep.delays == [0.15, 0.15]
     assert runner.calls[0] == PKILL
@@ -533,7 +533,7 @@ async def test_run_claude_streams_and_saves_the_events(tmp_path: Path) -> None:
         "cache_creation_input_tokens": 8,
     }
     lines = [
-        assistant("mcp__cua-jev__act"),
+        assistant("mcp__beans-picker__act"),
         "",
         "   ",
         tool_result([{"type": "text", "text": '{"jev":{"calls":2,"inputTokens":300}}'}]),

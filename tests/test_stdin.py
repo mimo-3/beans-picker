@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 
-from cua_jev._stdin import StdinLines
+from beans_picker._stdin import StdinLines
 
 
 async def test_reads_lines_then_the_end_of_input() -> None:

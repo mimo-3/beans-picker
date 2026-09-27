@@ -4,7 +4,7 @@ import zlib
 
 import pytest
 
-from cua_jev.observe.png import Rgba, crop, decode_png
+from beans_picker.observe.png import Rgba, crop, decode_png
 from tests.helpers import blank, encode_png, paint
 
 

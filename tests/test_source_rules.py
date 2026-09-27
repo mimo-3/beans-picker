@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-SRC = Path(__file__).resolve().parent.parent / "src" / "cua_jev"
+SRC = Path(__file__).resolve().parent.parent / "src" / "beans_picker"
 PATTERN_FUNCTIONS = frozenset(
     {"compile", "search", "match", "fullmatch", "sub", "subn", "split", "findall", "finditer"}
 )

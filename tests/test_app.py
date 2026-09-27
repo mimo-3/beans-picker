@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev._json import JsonObject
-from cua_jev._proc import DEFAULT_MAX_BYTES, Completed
-from cua_jev.driver.app import (
+from beans_picker._json import JsonObject
+from beans_picker._proc import DEFAULT_MAX_BYTES, Completed
+from beans_picker.driver.app import (
     WINDOW_CHECK_INTERVAL_S,
     WINDOW_CHECKS,
     AppContext,
@@ -17,8 +17,8 @@ from cua_jev.driver.app import (
     resolve_bundle,
     running_pid,
 )
-from cua_jev.driver.types import ToolOk, ToolRefused, ToolResult, Window
-from cua_jev.errors import AppLaunchError, DriverError, ProcessError
+from beans_picker.driver.types import ToolOk, ToolRefused, ToolResult, Window
+from beans_picker.errors import AppLaunchError, DriverError, ProcessError
 from tests.fakes import FakeDriver, RecordingSleep, fake_runner
 
 FIND_CALC = ("lsappinfo", "find", "bundleid=com.apple.calculator")

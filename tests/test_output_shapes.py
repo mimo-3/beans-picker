@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cua_jev._json import dumps
-from cua_jev._numbers import round3
-from cua_jev.candidates.types import ActionCandidate
-from cua_jev.menus.keyequiv import KeyEquivalent
-from cua_jev.observe.types import Modal, UINode
-from cua_jev.tools.observe import observe_tool
-from cua_jev.tools.present import show_candidate, show_screen, show_window
+from beans_picker._json import dumps
+from beans_picker._numbers import round3
+from beans_picker.candidates.types import ActionCandidate
+from beans_picker.menus.keyequiv import KeyEquivalent
+from beans_picker.observe.types import Modal, UINode
+from beans_picker.tools.observe import observe_tool
+from beans_picker.tools.present import show_candidate, show_screen, show_window
 from tests.helpers import snap_fixture
 from tests.test_act import popup_window
 from tests.test_state import node, snap, text

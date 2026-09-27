@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev._json import JsonObject, JsonValue
-from cua_jev._proc import Completed
-from cua_jev.driver.mcp import Driver
-from cua_jev.driver.types import ToolOk, ToolRefused, ToolResult
-from cua_jev.errors import CuaJevError, JevUnavailable, ToolError
-from cua_jev.paths import Paths
-from cua_jev.tools.session import Session, Target
+from beans_picker._json import JsonObject, JsonValue
+from beans_picker._proc import Completed
+from beans_picker.driver.mcp import Driver
+from beans_picker.driver.types import ToolOk, ToolRefused, ToolResult
+from beans_picker.errors import BeansPickerError, JevUnavailable, ToolError
+from beans_picker.paths import Paths
+from beans_picker.tools.session import Session, Target
 from tests.fakes import FakeDriver, FakeRunner, RecordingSleep
 from tests.helpers import raw_fixture
 from tests.tool_fakes import JevPicking
@@ -92,7 +92,7 @@ async def test_a_window_list_without_windows_is_an_internal_failure(tmp_path: Pa
         return ToolOk(data={}, text="", ms=1)
 
     s = session_with(FakeDriver(on_call), tmp_path)
-    with pytest.raises(CuaJevError, match="no window list"):
+    with pytest.raises(BeansPickerError, match="no window list"):
         await s.target({"pid": 1})
     with pytest.raises(ToolError, match="no window with id 3"):
         await s.target({"windowId": 3})
@@ -272,7 +272,7 @@ async def test_close_cancels_the_running_call_drops_queued_ones_and_closes_every
     assert jev.closed
     assert not driver.sentinel.watching
     await s.close()
-    with pytest.raises(CuaJevError, match="server is shutting down"):
+    with pytest.raises(BeansPickerError, match="server is shutting down"):
         await s.exclusive(queued)
 
 

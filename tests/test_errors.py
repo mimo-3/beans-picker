@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from cua_jev.driver.types import Activation
-from cua_jev.errors import (
+from beans_picker.driver.types import Activation
+from beans_picker.errors import (
     AppLaunchError,
-    CuaJevError,
+    BeansPickerError,
     DriverError,
     DriverTimeout,
     DriverUnavailable,
@@ -57,7 +57,7 @@ def test_hierarchy() -> None:
         JevError,
         ProcessError,
     ):
-        assert issubclass(cls, CuaJevError)
+        assert issubclass(cls, BeansPickerError)
     assert issubclass(JevUnavailable, JevError)
     assert issubclass(JevBadResponse, JevError)
 

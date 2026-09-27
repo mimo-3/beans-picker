@@ -3,7 +3,7 @@
 | | success | false success / success claims | tool calls (median) | time s (median) | Claude tokens (median, incl. cache) | output tokens (median) | USD (median) | Jev calls (total) | focus steals |
 |---|---|---|---|---|---|---|---|---|---|
 | (a) cua-driver only | 23/24 | 0/22 | 10.0 | 49.7 | 646.0k | 1876 | 0.388 | 0 | 0 |
-| (b) cua-jev | 24/24 | 0/24 | 5.5 | 28.1 | 117.9k | 962 | 0.060 | 265 | 0 |
+| (b) beans-picker | 24/24 | 0/24 | 5.5 | 28.1 | 117.9k | 962 | 0.060 | 265 | 0 |
 
 ### Per task
 

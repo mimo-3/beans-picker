@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from cua_jev._proc import DEFAULT_MAX_BYTES, Completed
-from cua_jev.errors import ProcessError
-from cua_jev.observe.helpers import AXTEXT_PLIST, MENUKEYS_PLIST, Helpers, native_sources
-from cua_jev.paths import Paths
+from beans_picker._proc import DEFAULT_MAX_BYTES, Completed
+from beans_picker.errors import ProcessError
+from beans_picker.observe.helpers import AXTEXT_PLIST, MENUKEYS_PLIST, Helpers, native_sources
+from beans_picker.paths import Paths
 
 
 class _Clang:
@@ -54,9 +54,9 @@ def _hash(path: Path) -> str:
 async def test_builds_the_axtext_app_once(paths: Paths, sources: Path, caplog: pytest.LogCaptureFixture) -> None:
     clang = _Clang()
     helpers = Helpers(paths, runner=clang, sources=sources)
-    with caplog.at_level(logging.WARNING, logger="cua_jev"):
+    with caplog.at_level(logging.WARNING, logger="beans_picker"):
         app = await helpers.axtext_app()
-    expected = paths.axtext / f"CuaJevAXText-{_hash(sources / 'axtext.m')}.app"
+    expected = paths.axtext / f"BeansPickerAXText-{_hash(sources / 'axtext.m')}.app"
     assert app == expected
     assert clang.calls == [
         (
@@ -86,7 +86,7 @@ async def test_builds_the_axtext_app_once(paths: Paths, sources: Path, caplog: p
 
 async def test_an_existing_build_is_reused(paths: Paths, sources: Path) -> None:
     clang = _Clang()
-    app = paths.axtext / f"CuaJevAXText-{_hash(sources / 'axtext.m')}.app"
+    app = paths.axtext / f"BeansPickerAXText-{_hash(sources / 'axtext.m')}.app"
     (app / "Contents" / "MacOS").mkdir(parents=True)
     (app / "Contents" / "MacOS" / "axtext").write_bytes(b"built earlier")
     binary = paths.menukeys / f"menukeys-{_hash(sources / 'menukeys.m')}"

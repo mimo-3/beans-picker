@@ -355,7 +355,7 @@ wheels = [
 ]
 
 [[package]]
-name = "cua-jev"
+name = "beans-picker"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },

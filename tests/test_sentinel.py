@@ -6,8 +6,8 @@ from collections.abc import Callable
 
 import pytest
 
-from cua_jev._proc import Completed
-from cua_jev.driver.sentinel import ActivationSentinel, front_pid
+from beans_picker._proc import Completed
+from beans_picker.driver.sentinel import ActivationSentinel, front_pid
 from tests.fakes import fake_runner
 
 AT = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\Z")

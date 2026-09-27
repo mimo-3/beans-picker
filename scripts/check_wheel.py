@@ -7,7 +7,7 @@ import zipfile
 from collections.abc import Sequence
 from typing import Final
 
-REQUIRED: Final = ("cua_jev/native/axtext.m", "cua_jev/native/menukeys.m", "cua_jev/py.typed")
+REQUIRED: Final = ("beans_picker/native/axtext.m", "beans_picker/native/menukeys.m", "beans_picker/py.typed")
 
 
 def missing(wheel: str) -> list[str]:

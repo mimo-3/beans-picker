@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from cua_jev.observe.normalize import humanize_identifier, normalize_text, tokenize, truncate
+from beans_picker.observe.normalize import humanize_identifier, normalize_text, tokenize, truncate
 
 
 @pytest.mark.parametrize(

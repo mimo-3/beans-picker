@@ -9,10 +9,10 @@ import httpx2
 import pytest
 from typesafe_sdk import Choice, Noul, Score
 
-from cua_jev import config
-from cua_jev._json import JsonValue
-from cua_jev.errors import JevBadResponse, JevUnavailable
-from cua_jev.jev.client import MISSING_KEY, JevClient, JevUsage, Question, validate
+from beans_picker import config
+from beans_picker._json import JsonValue
+from beans_picker.errors import JevBadResponse, JevUnavailable
+from beans_picker.jev.client import MISSING_KEY, JevClient, JevUsage, Question, validate
 
 QUESTIONS: dict[str, Question] = {
     "next": Choice(instructions="Which action?", criteria={"a0": "press 7", "a1": "press 8"}),
@@ -86,7 +86,7 @@ async def test_reports_api_errors_as_jev_unavailable() -> None:
 def test_refuses_to_start_without_a_key() -> None:
     with pytest.raises(JevUnavailable, match="JEV_API_KEY is not set"):
         JevClient()
-    assert str(JevUnavailable(MISSING_KEY)).endswith("~/.config/cua-jev/.env.local)")
+    assert str(JevUnavailable(MISSING_KEY)).endswith("~/.config/beans-picker/.env.local)")
 
 
 def test_an_empty_key_is_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -118,7 +118,7 @@ def test_a_malformed_key_is_reported_as_unavailable() -> None:
 
 def test_the_model_defaults_to_the_configured_one(monkeypatch: pytest.MonkeyPatch) -> None:
     assert JevClient(api_key="sk-1").model == "jev-latest"
-    monkeypatch.setenv("CUA_JEV_MODEL", "jev-other")
+    monkeypatch.setenv("BEANS_PICKER_MODEL", "jev-other")
     assert JevClient(api_key="sk-1").model == "jev-other"
 
 

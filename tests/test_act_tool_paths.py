@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cua_jev._json import JsonValue
-from cua_jev.candidates.build import BuildOptions, build_candidates
-from cua_jev.driver.types import Activation, ToolOk, ToolRefused, ToolResult
-from cua_jev.errors import ForegroundViolation
-from cua_jev.observe.png import Rgba
-from cua_jev.observe.snapshot import build_snapshot
-from cua_jev.observe.types import Snapshot
-from cua_jev.tools.act import act_tool
+from beans_picker._json import JsonValue
+from beans_picker.candidates.build import BuildOptions, build_candidates
+from beans_picker.driver.types import Activation, ToolOk, ToolRefused, ToolResult
+from beans_picker.errors import ForegroundViolation
+from beans_picker.observe.png import Rgba
+from beans_picker.observe.snapshot import build_snapshot
+from beans_picker.observe.types import Snapshot
+from beans_picker.tools.act import act_tool
 from tests.fakes import FakeDriver
 from tests.helpers import blank, encode_png, paint, snap_fixture
 from tests.test_act import first, popup_window, row_window, text_window

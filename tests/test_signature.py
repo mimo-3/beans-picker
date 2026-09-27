@@ -3,8 +3,8 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 
-from cua_jev.observe.signature import state_signature
-from cua_jev.observe.types import Modal, Snapshot, TextNode, UINode
+from beans_picker.observe.signature import state_signature
+from beans_picker.observe.types import Modal, Snapshot, TextNode, UINode
 
 
 def _node(key: str, **fields: object) -> UINode:

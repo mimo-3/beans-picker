@@ -11,10 +11,10 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final, Literal, TypedDict
 
-from cua_jev._json import JsonObject, JsonValue, dumps
-from cua_jev._numbers import parse_number
-from cua_jev._proc import Runner, run
-from cua_jev._text import NOT_LINE_END
+from beans_picker._json import JsonObject, JsonValue, dumps
+from beans_picker._numbers import parse_number
+from beans_picker._proc import Runner, run
+from beans_picker._text import NOT_LINE_END
 
 HERE: Final = Path(__file__).resolve().parent
 TASKS_FILE: Final = HERE / "tasks.json"

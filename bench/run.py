@@ -1,4 +1,4 @@
-"""Runs each task with Claude Code under cua-driver alone and under cua-jev, same prompt and model."""
+"""Runs each task with Claude Code under cua-driver alone and under beans-picker, same prompt and model."""
 
 from __future__ import annotations
 
@@ -17,23 +17,23 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final, TextIO
 
+from beans_picker._aio import Sleep
+from beans_picker._json import JsonObject, JsonValue, dumps
+from beans_picker._numbers import parse_number, round_half_up, scalar_text
+from beans_picker._proc import Runner, run
+from beans_picker._text import DIGIT, WS, WS_CLASS_BODY, trim
+from beans_picker.driver import lock
+from beans_picker.errors import ProcessError
 from bench.judge import Task, load_tasks
-from cua_jev._aio import Sleep
-from cua_jev._json import JsonObject, JsonValue, dumps
-from cua_jev._numbers import parse_number, round_half_up, scalar_text
-from cua_jev._proc import Runner, run
-from cua_jev._text import DIGIT, WS, WS_CLASS_BODY, trim
-from cua_jev.driver import lock
-from cua_jev.errors import ProcessError
 
 HERE: Final = Path(__file__).resolve().parent
 ROOT: Final = HERE.parent
 WORK: Final = HERE / ".work"
 OUT: Final = HERE / "results/runs.jsonl"
 DRIVER: Final = Path.home() / ".local/bin/cua-driver"
-FIXTURE_APP: Final = Path.home() / "Library/Caches/cua-jev/fixture/CuaJevFixture.app"
-FIXTURE_QUERY: Final = "bundleid=dev.cua-jev.fixture"
-FIXTURE_PROCESS: Final = "CuaJevFixture"
+FIXTURE_APP: Final = Path.home() / "Library/Caches/beans-picker/fixture/BeansPickerFixture.app"
+FIXTURE_QUERY: Final = "bundleid=dev.beans-picker.fixture"
+FIXTURE_PROCESS: Final = "BeansPickerFixture"
 CALCULATOR_BUNDLE: Final = "com.apple.calculator"
 TEXTEDIT_APP: Final = Path("/Applications/TextEdit.app")
 DRIVER_MAX_BYTES: Final = 32 * 1024 * 1024
@@ -148,7 +148,7 @@ def mcp_servers(condition: str) -> JsonObject:
     """The one MCP server a condition gets."""
     if condition == "a":
         return {"cua-driver": {"command": str(DRIVER), "args": ["mcp"]}}
-    return {"cua-jev": {"command": sys.executable, "args": ["-m", "cua_jev"]}}
+    return {"beans-picker": {"command": sys.executable, "args": ["-m", "beans_picker"]}}
 
 
 def claude_argv(condition: str, prompt: str, model: str, mcp_config: Path) -> list[str]:
@@ -164,7 +164,7 @@ def claude_argv(condition: str, prompt: str, model: str, mcp_config: Path) -> li
         str(mcp_config),
         "--strict-mcp-config",
         "--allowedTools",
-        "mcp__cua-driver" if condition == "a" else "mcp__cua-jev",
+        "mcp__cua-driver" if condition == "a" else "mcp__beans-picker",
         *deny,
         "--output-format",
         "stream-json",
@@ -435,7 +435,7 @@ class Bench:
                 return Target(
                     pid=pid,
                     window_id=_int(win.get("window_id")),
-                    app_label='the "CuaJevFixture" app',
+                    app_label='the "BeansPickerFixture" app',
                     state_file=state_file,
                 )
             await self.sleep(POLL)

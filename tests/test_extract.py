@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cua_jev._json import JsonValue, dumps
-from cua_jev.observe.snapshot import build_snapshot
-from cua_jev.observe.types import Snapshot, UINode
-from cua_jev.tools.args import ExtractArgs
-from cua_jev.tools.extract import content_of, describe_element, elements_of, extract_tool, extracted
+from beans_picker._json import JsonValue, dumps
+from beans_picker.observe.snapshot import build_snapshot
+from beans_picker.observe.types import Snapshot, UINode
+from beans_picker.tools.args import ExtractArgs
+from beans_picker.tools.extract import content_of, describe_element, elements_of, extract_tool, extracted
 from tests.test_state import el, node, snap
 from tests.tool_fakes import FakeSession, jev_picking
 

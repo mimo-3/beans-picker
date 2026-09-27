@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import copy
 
-from cua_jev._json import JsonObject, JsonValue, dumps
-from cua_jev.jev.state import Change, build_state, change_of, changed, controls_of, fields_of, screen_text
-from cua_jev.observe.snapshot import build_snapshot
-from cua_jev.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
+from beans_picker._json import JsonObject, JsonValue, dumps
+from beans_picker.jev.state import Change, build_state, change_of, changed, controls_of, fields_of, screen_text
+from beans_picker.observe.snapshot import build_snapshot
+from beans_picker.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
 
 
 def el(index: int, role: str, parent: int | None = None, depth: int = 0, **extra: JsonValue) -> JsonObject:

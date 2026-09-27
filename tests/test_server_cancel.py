@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from cua_jev.candidates.build import build_candidates
-from cua_jev.driver.types import ToolOk, ToolResult
-from cua_jev.observe.types import Snapshot
-from cua_jev.paths import Paths
-from cua_jev.server import create_server
-from cua_jev.tools.args import TargetArgs
-from cua_jev.tools.session import Session, Target
+from beans_picker.candidates.build import build_candidates
+from beans_picker.driver.types import ToolOk, ToolResult
+from beans_picker.observe.types import Snapshot
+from beans_picker.paths import Paths
+from beans_picker.server import create_server
+from beans_picker.tools.args import TargetArgs
+from beans_picker.tools.session import Session, Target
 from tests.fakes import FakeDriver
 from tests.helpers import snap_fixture
 from tests.raw_mcp import raw_client

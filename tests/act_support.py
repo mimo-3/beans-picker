@@ -3,11 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 
-from cua_jev._json import JsonObject, JsonValue
-from cua_jev.candidates.types import ActionCandidate, ActionKind, ScrollDirection
-from cua_jev.driver.types import Frame, ToolOk, ToolRefused, ToolResult
-from cua_jev.menus.menukeys import MenuKeyTable
-from cua_jev.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
+from beans_picker._json import JsonObject, JsonValue
+from beans_picker.candidates.types import ActionCandidate, ActionKind, ScrollDirection
+from beans_picker.driver.types import Frame, ToolOk, ToolRefused, ToolResult
+from beans_picker.menus.menukeys import MenuKeyTable
+from beans_picker.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
 
 
 def ok(data: JsonObject | None = None) -> ToolOk:
