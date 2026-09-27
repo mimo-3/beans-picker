@@ -10,13 +10,13 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
 
 ### Added
 
-- The `cua-jev` command and `python -m cua_jev`: an MCP server over stdio with the tools `observe`,
+- The `beans-picker` command and `python -m beans_picker`: an MCP server over stdio with the tools `observe`,
   `act` and `extract`. It runs on macOS; on other systems it exits with an error.
-- `cua-jev --version` and `cua-jev --help`, which work on every system.
-- `CUA_JEV_LOG_LEVEL` sets the level of the server's log on stderr (default `WARNING`).
+- `beans-picker --version` and `beans-picker --help`, which work on every system.
+- `BEANS_PICKER_LOG_LEVEL` sets the level of the server's log on stderr (default `WARNING`).
 - The Jev key and other settings are read from the environment, then from `.env.local` / `.env`
-  in the checkout when the package runs from a cua-jev checkout, then from `~/.config/cua-jev/`
-  (`$XDG_CONFIG_HOME/cua-jev`), so an installed server finds its key without a checkout.
+  in the checkout when the package runs from a beans-picker checkout, then from `~/.config/beans-picker/`
+  (`$XDG_CONFIG_HOME/beans-picker`), so an installed server finds its key without a checkout.
 - Time limits on every request: `CUA_DRIVER_TIMEOUT` (default 120 s) for cua-driver's startup and
   each call, `JEV_CONNECT_TIMEOUT` (10 s) and `JEV_READ_TIMEOUT` (120 s) for Jev. A request that
   runs out of time fails with `driver_timeout` or `jev_unavailable` instead of blocking later calls.
@@ -33,7 +33,7 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
   server.
 - An empty `JEV_API_KEY` no longer hides `TYPESAFE_API_KEY`.
 - The exact-text helper also reads switches (`AXSwitch`). Its source changed, so it is rebuilt:
-  run `cua-jev grant-ax` again after upgrading.
+  run `beans-picker grant-ax` again after upgrading.
 
 ### Fixed
 
@@ -48,4 +48,4 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
 - A text field named only by its placeholder keeps its candidate ids once it is typed in, so text
   entered into it is checked in that field instead of ending as `mismatch` ("the target field is gone").
 
-[Unreleased]: https://github.com/mimo-3/cua-jev/commits/main
+[Unreleased]: https://github.com/mimo-3/beans-picker/commits/main
