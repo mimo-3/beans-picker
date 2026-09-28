@@ -39,17 +39,26 @@ as `failed` with `foreground_required`).
 
 ## The fast loop
 
+Almost all of a task's time is your own replies, a few seconds each; a tool call takes about a
+second. Make as few replies as you can: no plan or progress messages between steps, one short
+message at the end.
+
 1. **observe** the window once, with the task's `pid` / `windowId` and no instruction. You get
    candidate ids with what each one does, plus `screenText` and `fields`.
 2. **act** on everything you can already name, in one call: the first step in the top-level fields,
    the rest in `then` (`[{instruction, candidateId, text?}, …]`). The run stops at the first step
    that is not `done` or `unverified`, and `steps` says what each one did. The step that commits
    (Save, Submit) can be the last in `then` when the steps before it are routine.
-3. **Read the status** of the last step (and `steps` when it stopped early). When the action
-   brought up new controls (a dialog, a menu, the next step of a form), `newCandidates` lists them
-   with their ids: act on those directly. Observe again only when what you need is not there.
+   A step whose control appears only after an earlier one (the item of a menu the step before
+   opens, a dialog's button) goes in `then` too, with an `instruction` and no `candidateId`: Jev
+   picks it on the window as it is by then. Opening a menu and choosing its item is one call.
+3. **Read the status** of the last step (and `steps` when it stopped early). Do not observe to see
+   what happened: `change` says what changed, and when the action brought up new controls (a dialog,
+   a menu, the next step of a form) `newCandidates` lists them with their ids, so act on those
+   directly. Observe again only when what you need is in neither.
 4. Name a step with an `instruction` (Jev) only when the id is not in hand or several controls look
    alike.
+5. Check once, at the end (see "Before you report success"), not after every step.
 
 | status | what to do |
 |---|---|
