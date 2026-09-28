@@ -44,6 +44,10 @@ STATUS: Final[dict[VerifyEffect, ActStatus]] = {
     "none": "no_effect",
 }
 _REFUSED: Final = "cua-driver refused the action"
+_SETTLED_AT_ONCE: Final = frozenset({"set_value", "type_into", "append", "keypad", "toggle"})
+"""Kinds whose effect is the control's own value: once it shows, there is nothing more to wait for."""
+SETTLE_RETAKES: Final = 4
+"""How many more snapshots act takes, at most, while the window's controls keep changing after the effect showed."""
 
 
 class ShownAction(ShownCandidate):
@@ -381,7 +385,8 @@ async def _judge(
     snapshot: Callable[[], Awaitable[Snapshot]],
     pixels: Callable[[], Awaitable[EffectVerdict | None]] | None = None,
 ) -> tuple[EffectVerdict, Snapshot, int]:
-    """Retakes snapshots until the effect shows; the count decides, not a wait."""
+    """Retakes snapshots until the effect shows, then until the window's controls stop changing; the count decides,
+    not a wait."""
     retakes = config.effect_retakes()
     after = await snapshot()
     n = 1
@@ -392,9 +397,28 @@ async def _judge(
             if seen is not None:
                 verdict = seen
         if verdict.effect in ("ok", "unverified") or n >= retakes:
-            return verdict, after, n
+            break
         after = await snapshot()
         n += 1
+    if verdict.effect != "ok" or c.kind in _SETTLED_AT_ONCE:
+        return verdict, after, n
+    # A page may still be loading what the step brought up: wait until two snapshots offer the same controls. Their
+    # values and texts are left out, so a clock or a spinner does not keep the wait going.
+    for _ in range(SETTLE_RETAKES):
+        later = await snapshot()
+        n += 1
+        same = _controls(later) == _controls(after)
+        after = later
+        if same:
+            break
+    again = verify_effect(c, before, after)
+    return (again if again.effect == "ok" else verdict), after, n
+
+
+def _controls(snap: Snapshot) -> list[tuple[str, str]]:
+    """Roles and names only: a look-alike's key can carry the page's state, which a spinner keeps changing."""
+    modal = [(snap.modal.role, snap.modal.label)] if snap.modal is not None else []
+    return modal + [(n.role, n.label) for n in snap.nodes]
 
 
 def _toggled_pixels(
