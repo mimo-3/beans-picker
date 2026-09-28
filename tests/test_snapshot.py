@@ -760,3 +760,19 @@ def test_a_web_pages_look_alike_lists_are_placed_by_the_text_before_them() -> No
     )
     lists = [n for n in build_snapshot(raw, 1, 1).nodes if n.role == "AXList"]
     assert [n.within[0] for n in lists] == ['near "Users"', 'near "Company"']
+
+
+def test_a_twin_left_unplaced_never_hands_its_id_to_a_lone_control_later() -> None:
+    raw = _sections("a")
+    raw["tree_markdown"] = str(raw["tree_markdown"]).replace('    - [4] AXButton "Edit"\n', "").rstrip()
+    first = build_snapshot(raw, 1, 1)
+    placed, unplaced = [n for n in first.nodes if n.role == "AXButton"]
+    assert placed.within[0] == 'near "User"'
+    alone = _sections("b")
+    elements = alone["elements"]
+    assert isinstance(elements, list)
+    alone["elements"] = [e for e in elements if not (isinstance(e, dict) and e["element_index"] == 2)]
+    alone["tree_markdown"] = str(alone["tree_markdown"]).replace('    - [2] AXButton "Edit"\n', "")
+    (left,) = [n for n in build_snapshot(alone, 1, 1).nodes if n.role == "AXButton"]
+    assert unplaced.key != left.key
+    assert placed.key != left.key

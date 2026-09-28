@@ -25,7 +25,7 @@ from beans_picker.menus.keyequiv import english_title, key_equivalent
 from beans_picker.menus.menukeys import MenuKeyTable
 from beans_picker.observe.exacttext import EDITABLE_ROLES
 from beans_picker.observe.normalize import truncate
-from beans_picker.observe.snapshot import is_descendant
+from beans_picker.observe.snapshot import UNPLACED, is_descendant
 from beans_picker.observe.types import Snapshot, UINode
 
 # Two-state controls; a radio button is chosen with a click instead.
@@ -326,7 +326,9 @@ def _dedupe(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
     return out
 
 
-def _place_of(within: str) -> str:
+def _place_of(within: str) -> str | None:
+    if within.startswith(UNPLACED):
+        return None
     return within if within.startswith("near ") else f"in {within}"
 
 
@@ -334,8 +336,11 @@ def _place_twins(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
     """Look-alike candidates are told apart by their named container or nearest text, then by order."""
     before = Counter(c.summary for c in cands)
     placed = [
-        replace(c, summary=f"{c.summary} {_place_of(c.target.within[0])}")
-        if before[c.summary] > 1 and c.target is not None and c.target.within and c.target.within[0]
+        replace(c, summary=f"{c.summary} {place}")
+        if before[c.summary] > 1
+        and c.target is not None
+        and c.target.within
+        and (place := _place_of(c.target.within[0]))
         else c
         for c in cands
     ]

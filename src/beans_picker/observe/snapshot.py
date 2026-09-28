@@ -52,6 +52,8 @@ _OPERABLE_ROLES: Final = frozenset(
 )  # fmt: skip
 # Controls placed by nearby text, with the areas that scroll: a page's lists come as look-alike, unnamed Lists.
 _PLACED_ROLES: Final = _OPERABLE_ROLES | {"AXList", "AXScrollArea", "AXTable", "AXOutline"}
+UNPLACED: Final = "unplaced twin"
+"""Marks a look-alike that no nearby text tells apart; its identity stays bound to the snapshot's token."""
 # How many tree lines back to look for the text that tells a look-alike control apart.
 _NEAR_TEXT_LINES: Final = 40
 # The driver's own overlay (agent cursor) sits above everything and is never "the front app".
@@ -424,11 +426,19 @@ def _place_twins_by_text(base: Sequence[UINode], md: Sequence[MdNode], by_index:
         by_heading = [before(n, True) for n in twins]
         by_text = [before(n, False) for n in twins]
         headings, others = Counter(by_heading), Counter(by_text)
+        unplaced: list[UINode] = []
         for n, head, other in zip(twins, by_heading, by_text, strict=True):
             near = head if head is not None and headings[head] == 1 else other
             if near is not None and (near == head or others[near] == 1):
                 n.within = [f'near "{truncate(near, 40)}"', *n.within][:3]
                 changed = True
+            else:
+                unplaced.append(n)
+        if len(unplaced) < len(twins):
+            # Once its twins are placed, an unplaced one's bare key would look unique: keep it bound
+            # to this snapshot, so a lone control left later never answers to it.
+            for n in unplaced:
+                n.within = [f"{UNPLACED} {n.token}", *n.within][:3]
     if changed:
         assign_keys(base)
 
