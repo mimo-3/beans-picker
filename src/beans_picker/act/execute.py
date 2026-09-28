@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal, NotRequired, Protocol, TypedDict, assert_never
 
@@ -507,8 +507,27 @@ _PIXEL_PRESS_ROLES: Final = frozenset(
 )
 
 
+# Elements that hold others; one listed earlier in the tree that spans the point is taken for a container.
+_CONTAINERS: Final = frozenset(
+    {
+        "AXWebArea",
+        "AXGroup",
+        "AXList",
+        "AXScrollArea",
+        "AXTable",
+        "AXRow",
+        "AXCell",
+        "AXOutline",
+        "AXSplitGroup",
+        "AXTabGroup",
+    }
+)
+
+
 def uncovered(snap: Snapshot, node: UINode) -> bool:
-    """Whether no element after `node` in the tree, other than its own content, lies over its centre."""
+    """Whether nothing but `node`'s own content and its containers lies over its centre: no element after
+    it in the tree (a popover, a toast), and no control or text anywhere else in the tree, since the
+    tree's order is not always the order the page paints in."""
     f = node.frame
     if f is None:
         return False
@@ -525,14 +544,26 @@ def uncovered(snap: Snapshot, node: UINode) -> bool:
             cur = by_index.get(cur.parent if cur.parent is not None else -1)
         return False
 
+    ancestors = {a.index for a in _chain(by_index, node.parent)}
     return not any(
-        o.index > node.index
+        o.index != node.index
+        and o.index not in ancestors
+        and (o.index > node.index or o.role not in _CONTAINERS)
         and o.frame is not None
         and o.frame.x <= cx <= o.frame.x + o.frame.w
         and o.frame.y <= cy <= o.frame.y + o.frame.h
         and not inside_node(o)
         for o in snap.nodes
     )
+
+
+def _chain(by_index: Mapping[int, UINode], index: int | None) -> Iterator[UINode]:
+    cur = by_index.get(index if index is not None else -1)
+    seen: set[int] = set()
+    while cur is not None and cur.index not in seen:
+        seen.add(cur.index)
+        yield cur
+        cur = by_index.get(cur.parent if cur.parent is not None else -1)
 
 
 def _resolve(snap: Snapshot, target: UINode) -> UINode | None:

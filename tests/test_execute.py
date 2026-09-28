@@ -639,3 +639,13 @@ async def test_a_web_pages_clickable_text_is_clicked_at_its_centre() -> None:
     r = await ex.execute(cand("click", chip), snap([PAGE, chip]))
     assert r.route == ["pixel"]
     assert driver.calls[-1] == ("click", {"pid": 1, "window_id": 1, "x": 120, "y": 120})
+
+
+async def test_a_control_listed_earlier_that_overlaps_the_centre_counts_as_cover() -> None:
+    danger = node(1, "AXButton", "Delete account", parent=0, frame=frame(140, 90, 80, 80))
+    target = node(2, "AXButton", "Open", parent=0, frame=frame(150, 100))
+    driver = CallDriver()
+    ex, _ = executor(driver)
+    r = await ex.execute(cand("click", target), snap([PAGE, danger, target]))
+    assert r.route == ["click"]
+    assert driver.calls == [("click", {"pid": 1, "element_token": "t:2"})]
