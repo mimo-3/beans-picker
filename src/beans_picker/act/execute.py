@@ -492,7 +492,18 @@ class Executor:
 
 
 _PIXEL_PRESS_ROLES: Final = frozenset(
-    {"AXButton", "AXLink", "AXCheckBox", "AXRadioButton", "AXTab", "AXPopUpButton", "AXMenuButton", "AXSwitch"}
+    {
+        "AXButton",
+        "AXLink",
+        "AXCheckBox",
+        "AXRadioButton",
+        "AXTab",
+        "AXPopUpButton",
+        "AXMenuButton",
+        "AXSwitch",
+        # A page's plain clickable text (a label chip) answers to a click, rarely to AXPress.
+        "AXStaticText",
+    }
 )
 
 

@@ -1051,3 +1051,78 @@ class TestBuild:
             ("choose_option", True),
             ("click", True),
         ]
+
+
+class TestPageTexts:
+    def _page(self) -> Snapshot:
+        f: JsonObject = {"x": 10, "y": 10, "w": 40, "h": 14}
+        elements: list[JsonObject] = [
+            {"element_index": 0, "element_token": "t:0", "role": "AXWindow", "label": "Tags", "depth": 0},
+            {"element_index": 1, "element_token": "t:1", "role": "AXWebArea", "parent_index": 0, "depth": 1},
+            {
+                "element_index": 2,
+                "element_token": "t:2",
+                "role": "AXButton",
+                "label": "Apply",
+                "parent_index": 1,
+                "depth": 2,
+            },
+            {
+                "element_index": 3,
+                "element_token": "t:3",
+                "role": "AXStaticText",
+                "label": "Apply",
+                "parent_index": 2,
+                "depth": 3,
+                "frame": f,
+            },
+            {
+                "element_index": 4,
+                "element_token": "t:4",
+                "role": "AXStaticText",
+                "label": "Referral",
+                "parent_index": 1,
+                "depth": 2,
+                "frame": f,
+            },
+            {
+                "element_index": 5,
+                "element_token": "t:5",
+                "role": "AXStaticText",
+                "label": "Open",
+                "parent_index": 1,
+                "depth": 2,
+                "frame": f,
+            },
+            {
+                "element_index": 6,
+                "element_token": "t:6",
+                "role": "AXStaticText",
+                "label": "Open",
+                "parent_index": 1,
+                "depth": 2,
+                "frame": f,
+            },
+        ]
+        md = [
+            '- [0] AXWindow "Tags"',
+            '  - [1] AXWebArea "Tags"',
+            '    - [2] AXButton "Apply" [actions=[press]]',
+            '      - [3] AXStaticText = "Apply"',
+            '    - [4] AXStaticText = "Referral"',
+            '    - [5] AXStaticText = "Open"',
+            '    - [6] AXStaticText = "Open"',
+        ]
+        return build({"elements": list(elements), "tree_markdown": "\n".join(md), "window_title": "Tags"})
+
+    def test_a_pages_lone_short_texts_are_clickable_after_every_control(self) -> None:
+        cands = [c for c in build_candidates(self._page()) if c.kind == "click"]
+        assert summaries(cands) == ['click Button "Apply"', 'click the text "Referral"']
+
+    def test_texts_outside_a_web_page_are_not_offered(self) -> None:
+        snap = self._page()
+        snap.nodes = [n for n in snap.nodes if n.role != "AXWebArea"]
+        for n in snap.nodes:
+            if n.parent == 1:
+                n.parent = 0
+        assert not any("the text" in c.summary for c in build_candidates(snap))

@@ -630,3 +630,12 @@ async def test_a_web_button_under_a_popover_is_pressed_by_token() -> None:
     r = await ex.execute(cand("click", target), snap([PAGE, target, popover]))
     assert r.route == ["click"]
     assert driver.calls == [("click", {"pid": 1, "element_token": "t:1"})]
+
+
+async def test_a_web_pages_clickable_text_is_clicked_at_its_centre() -> None:
+    chip = node(4, "AXStaticText", "Referral", parent=0, frame=frame(150, 100))
+    driver = geometry_driver(scripts={"click": [ok()]})
+    ex, _ = executor(driver)
+    r = await ex.execute(cand("click", chip), snap([PAGE, chip]))
+    assert r.route == ["pixel"]
+    assert driver.calls[-1] == ("click", {"pid": 1, "window_id": 1, "x": 120, "y": 120})
