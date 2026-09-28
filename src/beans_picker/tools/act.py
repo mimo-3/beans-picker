@@ -18,12 +18,12 @@ from beans_picker.errors import ForegroundViolation, ToolError, failure
 from beans_picker.jev.client import JevUsageOut
 from beans_picker.jev.questions import action_question, action_question_forced
 from beans_picker.jev.rank import Ambiguous, NotFound, Pick, RankSpec, gate, rank
-from beans_picker.jev.state import Change, bare_role, build_state, change_of
+from beans_picker.jev.state import CHANGED_TEXTS, Change, bare_role, build_state, change_of, screen_text
 from beans_picker.observe.snapshot import in_web_area
 from beans_picker.observe.types import Snapshot
 from beans_picker.observe.visual import Shot, capture_window, region_change
 from beans_picker.tools.args import ActArgs, Modifier, Step
-from beans_picker.tools.present import ShownCandidate, ShownWindow, show_candidate, show_window
+from beans_picker.tools.present import SCREEN_LINES, ShownCandidate, ShownWindow, show_candidate, show_window
 from beans_picker.tools.session import Target, ToolSession
 from beans_picker.verify.effect import EffectVerdict, VerifyEffect, verify_effect
 
@@ -75,7 +75,9 @@ class ActOutput(TypedDict):
     verification: NotRequired[Verification]
     change: NotRequired[Change]
     candidates: NotRequired[list[ShownCandidate]]
+    screenText: NotRequired[list[str]]
     newCandidates: NotRequired[list[ShownCandidate]]
+    newTotal: NotRequired[int]
     pick: NotRequired[PickOut]
     jev: NotRequired[JevUsageOut]
     steps: NotRequired[list[ActOutput]]
@@ -123,21 +125,28 @@ async def act_tool(session: ToolSession, args: ActArgs) -> ActOutput:
 def _with_new_candidates(
     session: ToolSession, t: Target, out: ActOutput, before: Snapshot, after: Snapshot
 ) -> ActOutput:
-    """The controls the action brought up (a dialog's fields, a menu's items), with their ids, so the
-    next step can use them without another observe."""
+    """What the action brought up (a dialog, a menu, the next page): its texts and its controls with their ids, so
+    the next step can use them without another observe."""
     if after is before or out["status"] not in CARRY_ON:
         return out
     opts = BuildOptions(list_text_kinds=True, learned=session.menu_keys.table_for(t.pid))
     had = {c.key for c in build_candidates(before, opts)}
-    new = [
-        show_candidate(c) for c in build_candidates(after, opts) if c.key not in had and c.kind not in ("menu", "key")
-    ][:NEW_CANDIDATES]
+    now = build_candidates(after, opts)
+    new = [c for c in now if c.key not in had and c.kind not in ("menu", "key")]
+    gone = len(had - {c.key for c in now})
+    # More new texts than `change` names: the page's content changed, so its text is shown too.
+    was = {x.value for x in before.texts}
+    if new or gone or sum(x.value not in was for x in after.texts) > CHANGED_TEXTS:
+        out["screenText"] = screen_text(after, SCREEN_LINES)
     if new:
-        out["newCandidates"] = new
+        out["newCandidates"] = [show_candidate(c) for c in new[:NEW_CANDIDATES]]
+        if len(new) > NEW_CANDIDATES:
+            out["newTotal"] = len(new)
     return out
 
 
-NEW_CANDIDATES: Final = 20
+NEW_CANDIDATES: Final = 80
+"""As many as a plain observe lists, so a step that opens a new page needs no observe."""
 
 
 def _without_window(out: ActOutput) -> ActOutput:

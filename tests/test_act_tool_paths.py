@@ -9,7 +9,7 @@ from beans_picker.errors import ForegroundViolation
 from beans_picker.observe.png import Rgba
 from beans_picker.observe.snapshot import build_snapshot
 from beans_picker.observe.types import Snapshot
-from beans_picker.tools.act import SETTLE_RETAKES, act_tool
+from beans_picker.tools.act import NEW_CANDIDATES, SETTLE_RETAKES, act_tool
 from tests.fakes import FakeDriver
 from tests.helpers import blank, encode_png, paint, snap_fixture
 from tests.test_act import first, popup_window, row_window, text_window
@@ -327,6 +327,8 @@ async def test_an_act_that_brings_up_controls_hands_back_their_ids(tmp_path: Pat
     assert any("Add tag" in d for d in new.values())
     assert any("Tag name" in d for d in new.values())
     assert not any("Manage tags" in d for d in new.values())
+    assert "screenText" in out
+    assert "newTotal" not in out
     assert out["verification"] == {"snapshots": 2}
 
 
@@ -348,6 +350,27 @@ async def test_a_field_entry_does_not_wait_for_the_window_to_settle(tmp_path: Pa
     out = await act_tool(session, {"pid": 1, "instruction": "name", "candidateId": field.id, "text": "Ada"})
     assert out["status"] == "done"
     assert out["verification"]["snapshots"] == 1
+    assert "screenText" not in out
+
+
+def _page_window(buttons: int) -> Snapshot:
+    elements: list[JsonValue] = [el(0, "AXWindow", title="Shop"), el(1, "AXButton", 0, 1, label="Next page")]
+    md = ['- [0] AXWindow "Shop"', '  - [1] AXButton "Next page"']
+    for i in range(2, buttons + 2):
+        elements.append(el(i, "AXButton", 0, 1, label=f"Item {i}"))
+        md.append(f'  - [{i}] AXButton "Item {i}"')
+    return build_snapshot({"elements": elements, "tree_markdown": "\n".join(md), "window_title": "Shop"}, 1, 1)
+
+
+async def test_a_step_that_opens_a_long_page_lists_as_many_new_ids_as_an_observe_and_counts_the_rest(
+    tmp_path: Path,
+) -> None:
+    before, after = _page_window(0), _page_window(NEW_CANDIDATES + 5)
+    nxt = next(c for c in build_candidates(before) if "Next page" in c.summary)
+    session = FakeSession([before, after], cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "next page", "candidateId": nxt.id})
+    assert len(out["newCandidates"]) == NEW_CANDIDATES
+    assert out["newTotal"] == NEW_CANDIDATES + 5
 
 
 async def test_a_page_whose_controls_keep_changing_ends_the_wait_after_a_few_snapshots(tmp_path: Path) -> None:
