@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import NotRequired, TypedDict
+from typing import Final, NotRequired, TypedDict
 
 from beans_picker._numbers import round3
 from beans_picker.candidates.types import TEXT_KINDS, ActionCandidate
@@ -65,5 +65,9 @@ def show_window(snap: Snapshot) -> ShownWindow:
     return out
 
 
+SCREEN_LINES: Final = 60
+"""Lines of screenText an observe shows: enough for a web page's navigation and the content below it."""
+
+
 def show_screen(snap: Snapshot) -> ShownScreen:
-    return {"screenText": screen_text(snap, 30), "fields": fields_of(snap)}
+    return {"screenText": screen_text(snap, SCREEN_LINES), "fields": fields_of(snap)}
