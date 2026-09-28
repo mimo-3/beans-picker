@@ -326,10 +326,11 @@ def _dedupe(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
     return out
 
 
-def _place_of(within: str) -> str | None:
-    if within.startswith(UNPLACED):
+def _place_of(within: Sequence[str]) -> str | None:
+    shown = next((w for w in within if w and not w.startswith(UNPLACED)), None)
+    if shown is None:
         return None
-    return within if within.startswith("near ") else f"in {within}"
+    return shown if shown.startswith("near ") else f"in {shown}"
 
 
 def _place_twins(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
@@ -337,10 +338,7 @@ def _place_twins(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
     before = Counter(c.summary for c in cands)
     placed = [
         replace(c, summary=f"{c.summary} {place}")
-        if before[c.summary] > 1
-        and c.target is not None
-        and c.target.within
-        and (place := _place_of(c.target.within[0]))
+        if before[c.summary] > 1 and c.target is not None and (place := _place_of(c.target.within))
         else c
         for c in cands
     ]

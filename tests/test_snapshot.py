@@ -189,9 +189,9 @@ def test_windows_with_other_frames_are_both_kept() -> None:
     }
     snap = build_snapshot(raw, 1, 1)
     assert [n.index for n in snap.nodes if n.label == "7"] == [1, 3]
-    assert [n.key for n in snap.nodes if n.label == "7"] == [
-        ambiguous_key(key_of("AXButton", None, "7", ["AXWindow: A"]), "", i) for i in (1, 3)
-    ]
+    sevens = [n for n in snap.nodes if n.label == "7"]
+    assert [n.within[0].split(" of page ")[0] for n in sevens] == ["unplaced twin 1/2", "unplaced twin 2/2"]
+    assert len({n.key for n in sevens}) == 2
 
 
 def test_keeps_the_cells_under_their_rows_only() -> None:
@@ -716,11 +716,17 @@ def test_look_alike_buttons_take_the_nearest_text_and_keep_their_ids() -> None:
     assert [n.key for n in edits] == [n.key for n in again.nodes if n.role == "AXButton"]
 
 
-def test_look_alikes_the_nearest_text_does_not_tell_apart_stay_token_bound() -> None:
+def test_look_alikes_the_nearest_text_does_not_tell_apart_are_bound_to_the_whole_tree() -> None:
     raw = _sections("a")
     raw["tree_markdown"] = str(raw["tree_markdown"]).replace("Company", "User")
-    edits = [n for n in build_snapshot(raw, 1, 1).nodes if n.role == "AXButton"]
-    assert all(n.key.startswith('["ambiguous",') for n in edits)
+    edits = [n.key for n in build_snapshot(raw, 1, 1).nodes if n.role == "AXButton"]
+    assert len(set(edits)) == 2
+    again = _sections("b")
+    again["tree_markdown"] = str(again["tree_markdown"]).replace("Company", "User")
+    assert [n.key for n in build_snapshot(again, 1, 1).nodes if n.role == "AXButton"] == edits
+    changed = _sections("c")
+    changed["tree_markdown"] = str(changed["tree_markdown"]).replace("Company", "User") + '\n  - AXStaticText = "Saved"'
+    assert set(edits).isdisjoint(n.key for n in build_snapshot(changed, 1, 1).nodes if n.role == "AXButton")
 
 
 def test_a_flat_web_lists_row_menus_take_their_rows_heading() -> None:
@@ -776,3 +782,55 @@ def test_a_twin_left_unplaced_never_hands_its_id_to_a_lone_control_later() -> No
     (left,) = [n for n in build_snapshot(alone, 1, 1).nodes if n.role == "AXButton"]
     assert unplaced.key != left.key
     assert placed.key != left.key
+
+
+def _icons(tokens: str, xs: list[int]) -> JsonObject:
+    """Icon-only buttons side by side under one heading: nothing but their place tells them apart."""
+    elements: list[JsonValue] = [
+        {"element_index": 0, "element_token": f"{tokens}:0", "role": "AXWindow", "label": "Tags", "depth": 0},
+        {"element_index": 1, "element_token": f"{tokens}:1", "role": "AXWebArea", "parent_index": 0, "depth": 1},
+        {
+            "element_index": 2,
+            "element_token": f"{tokens}:2",
+            "role": "AXHeading",
+            "label": "Tags",
+            "parent_index": 1,
+            "depth": 2,
+        },
+    ]
+    md = [
+        '- [0] AXWindow "Tags"',
+        '  - [1] AXWebArea "Tags"',
+        '    - [2] AXHeading "Tags"',
+        '      - AXStaticText = "Tags"',
+    ]
+    for i, x in enumerate(xs, 3):
+        elements.append(
+            {
+                "element_index": i,
+                "element_token": f"{tokens}:{i}",
+                "role": "AXButton",
+                "parent_index": 1,
+                "depth": 2,
+                "frame": {"x": x, "y": 40, "w": 16, "h": 16},
+            }
+        )
+        md.append(f"    - [{i}] AXButton [actions=[press]]")
+    return {"elements": elements, "tree_markdown": "\n".join(md), "window_title": "Tags"}
+
+
+def _icon_keys(tokens: str, xs: list[int]) -> list[str]:
+    return [n.key for n in build_snapshot(_icons(tokens, xs), 1, 1).nodes if n.role == "AXButton"]
+
+
+def test_icon_only_twins_keep_their_ids_while_the_group_sits_still() -> None:
+    first = _icon_keys("a", [10, 30, 50])
+    assert len(set(first)) == 3
+    assert not any(k.startswith('["ambiguous",') for k in first)
+    assert _icon_keys("b", [10, 30, 50]) == first
+
+
+def test_icon_only_twins_lose_every_id_when_the_window_changes_at_all() -> None:
+    first = set(_icon_keys("a", [10, 30, 50]))
+    for xs in ([10, 30, 60], [10, 30], [30, 10, 50], [10, 30, 50, 70]):
+        assert first.isdisjoint(_icon_keys("b", xs)), xs

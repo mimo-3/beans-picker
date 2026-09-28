@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import time
@@ -12,8 +13,9 @@ from dataclasses import dataclass
 from typing import Final
 
 from beans_picker._aio import gather_settled
+from beans_picker._json import dumps
 from beans_picker._numbers import round_half_up, scalar_text
-from beans_picker._text import DIGIT, utf16_len
+from beans_picker._text import DIGIT, hash_bytes, utf16_len
 from beans_picker.driver.markdown import MdNode, parse_tree_markdown
 from beans_picker.driver.mcp import Driver
 from beans_picker.driver.sentinel import FrontSampler, front_pid
@@ -53,7 +55,7 @@ _OPERABLE_ROLES: Final = frozenset(
 # Controls placed by nearby text, with the areas that scroll: a page's lists come as look-alike, unnamed Lists.
 _PLACED_ROLES: Final = _OPERABLE_ROLES | {"AXList", "AXScrollArea", "AXTable", "AXOutline"}
 UNPLACED: Final = "unplaced twin"
-"""Marks a look-alike that no nearby text tells apart; its identity stays bound to the snapshot's token."""
+"""Marks a look-alike that no nearby text tells apart; its identity is bound to the whole tree."""
 # How many tree lines back to look for the text that tells a look-alike control apart.
 _NEAR_TEXT_LINES: Final = 40
 # The driver's own overlay (agent cursor) sits above everything and is never "the front app".
@@ -422,25 +424,48 @@ def _place_twins_by_text(base: Sequence[UINode], md: Sequence[MdNode], by_index:
         return None
 
     changed = False
+    page: str | None = None
     for twins in groups.values():
         by_heading = [before(n, True) for n in twins]
         by_text = [before(n, False) for n in twins]
         headings, others = Counter(by_heading), Counter(by_text)
         unplaced: list[UINode] = []
         for n, head, other in zip(twins, by_heading, by_text, strict=True):
-            near = head if head is not None and headings[head] == 1 else other
-            if near is not None and (near == head or others[near] == 1):
+            near = head if head is not None and headings[head] == 1 else None
+            if near is None and other is not None and others[other] == 1:
+                near = other
+            if near is not None:
                 n.within = [f'near "{truncate(near, 40)}"', *n.within][:3]
                 changed = True
             else:
                 unplaced.append(n)
-        if len(unplaced) < len(twins):
-            # Once its twins are placed, an unplaced one's bare key would look unique: keep it bound
-            # to this snapshot, so a lone control left later never answers to it.
-            for n in unplaced:
-                n.within = [f"{UNPLACED} {n.token}", *n.within][:3]
+        if not unplaced:
+            continue
+        page = page if page is not None else _page_digest(base, md)
+        for i, n in enumerate(unplaced, 1):
+            # Its rank among its twins holds only on this very tree: any change on the window (a twin
+            # replaced, moved, added, a popover opened for another row) changes the id. That keeps
+            # the id of a control in a still window, whose tokens Chrome renews on every snapshot.
+            n.within = [f"{UNPLACED} {i}/{len(unplaced)} of page {page}", *n.within][:3]
+            changed = True
     if changed:
         assign_keys(base)
+
+
+def _box(f: Frame) -> list[int]:
+    return [round_half_up(f.x), round_half_up(f.y), round_half_up(f.w), round_half_up(f.h)]
+
+
+def _page_digest(base: Sequence[UINode], md: Sequence[MdNode]) -> str:
+    """A digest of the window's whole tree: every element (menu bar aside) with where it sits, and every
+    text, in order."""
+    parts = [
+        dumps([n.index, n.role, n.label, n.value, *(_box(n.frame) if n.frame is not None else [])])
+        for n in base
+        if not n.in_menu_bar
+    ]
+    parts += [dumps([t.line, t.value]) for t in md if t.role == "AXStaticText" and t.index is None]
+    return hashlib.sha256(hash_bytes("\n".join(parts))).hexdigest()[:12]
 
 
 def _ancestors_of(n: UINode, by_index: Mapping[int, UINode]) -> list[str]:
