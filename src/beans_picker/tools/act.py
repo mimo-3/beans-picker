@@ -313,12 +313,12 @@ async def _execute(
         if chosen.kind == "toggle" and target is not None and target.exact is not True and target.frame is not None
         else None
     )
-    # This app's pages already ignored an AXValue write once: type straight away rather than write and wait.
+    # A web page's own copy of a field's value (a React form's state) follows typing, not an AXValue write: the write
+    # shows in the field, yet the page saves what it had.
     retype = _retypeable(chosen, before)
-    type_first = retype and t.pid in session.types_into_web_fields
     res = (
         await executor.retype_field(chosen, before)
-        if type_first
+        if retype
         else await executor.execute(chosen, before, modifiers, allow_destructive=allow_destructive)
     )
     action = _shown_action(chosen)
@@ -340,8 +340,8 @@ async def _execute(
     pixels = _toggled_pixels(session, driver, t, shot, chosen) if shot is not None else None
     verdict, after, snapshots = await _judge(chosen, before, snapshot, pixels)
     seen.after = after
-    if not type_first and retype and verdict.effect in ("wrong", "none"):
-        # The page kept its own copy of the value and ignored the AXValue write (or put it back): type it instead.
+    if retype and verdict.effect in ("wrong", "none"):
+        # A keystroke delivered in the background can be dropped: type the text once more.
         again = await executor.retype_field(chosen, after)
         action["route"] = [*action.get("route", []), *again.route]
         if not again.ok:
@@ -351,8 +351,6 @@ async def _execute(
         verdict, after, more = await _judge(chosen, before, snapshot)
         seen.after = after
         snapshots += more
-        if verdict.effect == "ok":
-            session.types_into_web_fields.add(t.pid)
     # A row's selection is often not in the accessibility tree: an unchanged window does not show it was not selected.
     if (
         verdict.effect == "none"
@@ -380,12 +378,10 @@ async def _execute(
 
 def _retypeable(c: ActionCandidate, snap: Snapshot) -> bool:
     target = c.target
-    return (
-        c.kind == "set_value"
-        and target is not None
-        and target.role in ("AXTextField", "AXSearchField")
-        and in_web_area(snap, target)
-    )
+    if c.kind != "set_value" or target is None or not in_web_area(snap, target):
+        return False
+    # A typed line break is a Return, which submits a form or sends a message: text with one is written instead.
+    return target.role in ("AXTextField", "AXSearchField", "AXTextArea") and "\n" not in (c.text or "")
 
 
 async def _judge(

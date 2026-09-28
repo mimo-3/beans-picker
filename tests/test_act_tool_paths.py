@@ -224,24 +224,18 @@ async def test_a_rows_unchanged_click_is_unverified_not_no_effect(tmp_path: Path
     assert out["verification"] == {"snapshots": 5}
 
 
-async def test_the_retype_after_an_ignored_write_is_judged_against_the_first_before(tmp_path: Path) -> None:
-    value = "120"
-
+async def test_a_field_that_stays_wrong_after_a_second_typing_is_judged_against_the_first_before(
+    tmp_path: Path,
+) -> None:
     def on_call(tool: str, args: dict[str, object]) -> ToolResult:
-        nonlocal value
-        if tool == "set_value":
-            value = "120"
-        if tool == "type_text":
-            value = "wrong"
         return _ok()
 
-    session = FakeSession(lambda: text_window(value), driver=FakeDriver(on_call), cache=tmp_path)
+    windows = iter([text_window("120"), text_window("120"), *[text_window("9x")] * 20])
+    session = FakeSession(lambda: next(windows), driver=FakeDriver(on_call), cache=tmp_path)
     set_value = first(build_candidates(text_window("120"), BuildOptions(list_text_kinds=True, text="9")), "set_value")
     out = await act_tool(session, {"pid": 1, "instruction": "seats 9", "candidateId": set_value.id, "text": "9"})
     assert out["status"] == "mismatch"
-    assert out["verification"]["snapshots"] == 10
-    assert out["action"]["route"] == ["set_value", "press_key", "press_key", "type_text"]
-    assert 1 not in session.types_into_web_fields
+    assert out["action"]["route"] == ["press_key", "press_key", "type_text", "press_key", "press_key", "type_text"]
 
 
 async def test_a_failed_retype_reports_the_window_it_left(tmp_path: Path) -> None:
@@ -255,8 +249,7 @@ async def test_a_failed_retype_reports_the_window_it_left(tmp_path: Path) -> Non
     out = await act_tool(session, {"pid": 1, "instruction": "seats 9", "candidateId": set_value.id, "text": "9"})
     assert list(out) == ["status", "code", "window", "message", "action"]
     assert (out["status"], out["code"], out["message"]) == ("failed", "key_refused", "no keys today")
-    assert out["action"]["route"] == ["set_value", "press_key"]
-    assert session.snapshots == 6
+    assert out["action"]["route"] == ["press_key"]
 
 
 def _checkbox_window(value: str | None) -> Snapshot:

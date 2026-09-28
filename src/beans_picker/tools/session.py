@@ -49,9 +49,6 @@ class Target:
 class ToolSession(Protocol):
     """What the tools use of a Session."""
 
-    types_into_web_fields: set[int]
-    """Apps whose web pages ignored an AXValue write to a text field: their fields are typed into."""
-
     @property
     def paths(self) -> Paths: ...
 
@@ -88,7 +85,6 @@ class Session:
         self._jev_factory: Callable[[], JevLike] = jev_factory if jev_factory is not None else JevClient
         self._runner = runner
         self._sleep = sleep
-        self.types_into_web_fields: set[int] = set()
         self._paths = paths if paths is not None else Paths.default()
         self.helpers = Helpers(self._paths, runner=runner)
         self.exact_text = ExactText(self.helpers, self._paths, runner=runner, clock=clock)
