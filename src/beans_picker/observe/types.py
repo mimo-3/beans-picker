@@ -46,6 +46,8 @@ class UINode:
     selected: bool | None = None
     frame: Frame | None = None
     parent: int | None = None
+    colour: str | None = None
+    """The colour an unnamed swatch shows (`purple #8B5CF6`); not part of its key."""
 
 
 @dataclass(slots=True, kw_only=True)

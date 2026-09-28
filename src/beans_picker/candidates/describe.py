@@ -49,6 +49,8 @@ def describe(c: ActionCandidate, snap: Snapshot, learned: MenuKeyTable | None = 
             d["help"] = truncate(t.help, 80)
         if t.value is not None:
             d["current_value"] = truncate(t.value, 80)
+        if t.colour:
+            d["shows_colour"] = t.colour
         if t.within:
             within: list[JsonValue] = [truncate(w, 40) for w in t.within[:3]]
             d["within"] = within

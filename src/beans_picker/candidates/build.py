@@ -109,6 +109,8 @@ def describe_short(n: UINode) -> str:
         out += f' "{truncate(n.label, 40)}"'
     if n.identifier and n.identifier != n.label:
         out += f" ({truncate(n.identifier, 30)})"
+    if n.colour:
+        out += f" showing {n.colour}"
     return out
 
 
