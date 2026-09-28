@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Iterator
+from itertools import islice
 from typing import Final, NotRequired, TypedDict
 
 from beans_picker._json import JsonValue, quote
+from beans_picker._text import utf16_len
 from beans_picker.observe.exacttext import EDITABLE_ROLES
 from beans_picker.observe.menudiff import enabled_changes, relabeled_menu_items
 from beans_picker.observe.normalize import truncate
@@ -75,24 +77,23 @@ _ITEM_MAX_TEXTS: Final = 15
 
 
 def _row_finder(snap: Snapshot, by_index: dict[int, UINode]) -> Callable[[TextNode], int | None]:
-    """The row a text belongs to: a table row, or one of three or more look-alike items of a list
+    """The row a text belongs to: a table row, else one of three or more look-alike items of a list
     drawn with plain groups (a web page's cards and list rows), so its texts read as one line."""
     texts_in: Counter[int] = Counter(n.index for t in snap.texts for n in _up(by_index, t.parent_index))
-    siblings: dict[int | None, list[UINode]] = {}
-    for n in snap.nodes:
-        siblings.setdefault(n.parent, []).append(n)
+    alike: Counter[tuple[int | None, str]] = Counter((n.parent, n.role) for n in snap.nodes if texts_in[n.index] >= 2)
+    rows: dict[int | None, int | None] = {}
 
     def is_item(n: UINode) -> bool:
-        if not 2 <= texts_in[n.index] <= _ITEM_MAX_TEXTS:
-            return False
-        alike = [s for s in siblings.get(n.parent, []) if s.role == n.role and texts_in[s.index] >= 2]
-        return len(alike) >= 3
+        return 2 <= texts_in[n.index] <= _ITEM_MAX_TEXTS and alike[(n.parent, n.role)] >= 3
 
     def row_of(t: TextNode) -> int | None:
-        for level, n in enumerate(_up(by_index, t.parent_index)):
-            if n.role == "AXRow" or (level < _ITEM_LEVELS and is_item(n)):
-                return n.index
-        return None
+        if t.parent_index not in rows:
+            chain = list(_up(by_index, t.parent_index))
+            row = next((n.index for n in chain if n.role == "AXRow"), None)
+            if row is None:
+                row = next((n.index for n in chain[:_ITEM_LEVELS] if is_item(n)), None)
+            rows[t.parent_index] = row
+        return rows[t.parent_index]
 
     return row_of
 
@@ -109,12 +110,12 @@ def screen_text(snap: Snapshot, limit: int = 20) -> list[str]:
     run_texts = 0
     for t in reading_texts(snap):
         row = row_of(t)
-        heading = next((n.index for n in list(_up(by_index, t.parent_index))[:2] if n.role == "AXHeading"), None)
+        heading = next((n.index for n in islice(_up(by_index, t.parent_index), 2) if n.role == "AXHeading"), None)
         if row is not None:
             run = None
         elif heading is not None:
             row, run, run_texts = heading, heading, 0
-        elif run is not None and len(t.value) <= _RUN_TEXT_CHARS and run_texts < _RUN_TEXTS:
+        elif run is not None and utf16_len(t.value) <= _RUN_TEXT_CHARS and run_texts < _RUN_TEXTS:
             row = run
             run_texts += 1
         else:
