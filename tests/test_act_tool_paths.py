@@ -5,7 +5,7 @@ from pathlib import Path
 from beans_picker._json import JsonValue
 from beans_picker.candidates.build import BuildOptions, build_candidates
 from beans_picker.driver.types import Activation, ToolOk, ToolRefused, ToolResult
-from beans_picker.errors import ForegroundViolation
+from beans_picker.errors import ForegroundViolation, ToolError
 from beans_picker.observe.png import Rgba
 from beans_picker.observe.snapshot import build_snapshot
 from beans_picker.observe.types import Snapshot
@@ -381,3 +381,27 @@ async def test_a_page_whose_controls_keep_changing_ends_the_wait_after_a_few_sna
     out = await act_tool(session, {"pid": 1, "instruction": "open tag management", "candidateId": manage.id})
     assert out["status"] == "done"
     assert out["verification"] == {"snapshots": 1 + SETTLE_RETAKES}
+
+
+async def test_a_choice_the_page_puts_back_while_it_settles_is_not_reported_done(tmp_path: Path) -> None:
+    closed, is_open, chosen = popup_window("Small", False), popup_window("Small", True), popup_window("Large", False)
+    session = FakeSession([closed, is_open, chosen, chosen, closed], jev_picking("PopUpButton"), cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "size large", "text": "Large"})
+    assert out["status"] != "done"
+
+
+async def test_a_snapshot_that_fails_while_the_page_settles_keeps_the_step_done(tmp_path: Path) -> None:
+    closed, opened = _dialog_window(False), _dialog_window(True)
+    manage = next(c for c in build_candidates(closed) if "Manage tags" in c.summary)
+    frames = iter([closed, closed, opened])  # the first finds the target
+
+    def snap() -> Snapshot:
+        frame = next(frames, None)
+        if frame is None:
+            raise ToolError("window_not_found", "pid 1 has no window 1")
+        return frame
+
+    session = FakeSession(snap, cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "open tag management", "candidateId": manage.id})
+    assert out["status"] == "done"
+    assert out["verification"] == {"snapshots": 1}

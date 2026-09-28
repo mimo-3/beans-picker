@@ -14,7 +14,7 @@ from beans_picker.candidates.describe import describe
 from beans_picker.candidates.prune import in_shard_order
 from beans_picker.candidates.types import TEXT_KINDS, ActionCandidate
 from beans_picker.driver.mcp import Driver
-from beans_picker.errors import ForegroundViolation, ToolError, failure
+from beans_picker.errors import DriverError, DriverTimeout, ForegroundViolation, ToolError, failure
 from beans_picker.jev.client import JevUsageOut
 from beans_picker.jev.questions import action_question, action_question_forced
 from beans_picker.jev.rank import Ambiguous, NotFound, Pick, RankSpec, gate, rank
@@ -414,14 +414,20 @@ async def _judge(
     # A page may still be loading what the step brought up: wait until two snapshots offer the same controls. Their
     # values and texts are left out, so a clock or a spinner does not keep the wait going.
     for _ in range(SETTLE_RETAKES):
-        later = await snapshot()
+        try:
+            later = await snapshot()
+        except (ToolError, DriverError, DriverTimeout):
+            # The step already ran and its effect showed: a snapshot that fails now only ends the wait.
+            break
         n += 1
         same = _controls(later) == _controls(after)
         after = later
         if same:
             break
     again = verify_effect(c, before, after)
-    return (again if again.effect == "ok" else verdict), after, n
+    # A chosen option is judged by its value, which the page may have put back meanwhile; a click by any change,
+    # which a passing notice may have taken away again.
+    return (again if again.effect == "ok" or c.kind in TEXT_KINDS else verdict), after, n
 
 
 def _controls(snap: Snapshot) -> list[tuple[str, str]]:
