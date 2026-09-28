@@ -22,10 +22,21 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
   runs out of time fails with `driver_timeout` or `jev_unavailable` instead of blocking later calls.
   At shutdown, the final `end_session` to cua-driver waits at most 5 seconds.
 - `act` lists the controls its action brought up (a dialog's fields, a menu's items) with their ids
-  in `newCandidates`, so the next step needs no `observe`.
+  in `newCandidates`, so the next step needs no `observe`. When a step changed the controls or much of
+  the text, the result also carries the window's `screenText`, and `newCandidates` lists as many as a
+  plain `observe` does (`newTotal` counts the rest).
+- After a click, `act` takes snapshots until two in a row offer the same controls (a few at most), so a
+  page that is still loading is reported as it lands.
+- Unnamed square buttons in a row of three or more on a web page (a colour picker) are described by the
+  colour they show, read from a capture of the window, and Jev is told that colour.
+- The server instructions describe the fast loop: one `observe`, then every known step in one `act`
+  with `then`, and no extra checks of a step that is `done`.
 
 ### Changed
 
+- Text fields, search fields and text areas on a web page are typed into instead of written through
+  AXValue: a page's own copy of a value (a React form's state) follows typing only. Text with a line
+  break is still written, since a typed Return would submit a form or send a message.
 - Failures that are not a tool's own refusal have their own codes: `driver_unavailable`,
   `driver_timeout`, `driver_error` and `jev_bad_response`, besides `internal`. They are logged at `WARNING` using only the error code and exception type, without response
   bodies, request identifiers or tracebacks. Unexpected failures return `an internal error occurred`.
