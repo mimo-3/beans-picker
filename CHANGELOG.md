@@ -21,6 +21,8 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
   each call, `JEV_CONNECT_TIMEOUT` (10 s) and `JEV_READ_TIMEOUT` (120 s) for Jev. A request that
   runs out of time fails with `driver_timeout` or `jev_unavailable` instead of blocking later calls.
   At shutdown, the final `end_session` to cua-driver waits at most 5 seconds.
+- `act` lists the controls its action brought up (a dialog's fields, a menu's items) with their ids
+  in `newCandidates`, so the next step needs no `observe`.
 
 ### Changed
 
@@ -42,6 +44,13 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
   labels are also recognized. This precaution still depends on the caller granting permission.
 - Candidate keys use structured encoding. Candidates with duplicate identities are scoped to the
   current snapshot and are never rebound across snapshots; observe again to obtain a current id.
+- Look-alike controls and scroll areas with no named container between them (common on web pages,
+  which reach cua-driver as one flat list) take the nearest heading, or else the nearest text no twin
+  shares, as part of their identity, so their ids last across snapshots. Twins that neither tells
+  apart stay bound to the snapshot.
+- `screenText` reads a web list one row per line (a heading and the short texts after it), and
+  `observe` shows 60 lines instead of 30.
+- Jev is told that a browser's menu-bar commands are not part of the web page it shows.
 - A failed or malformed screen-lock check returns `screen_lock_unavailable` and runs nothing.
 
 ### Fixed

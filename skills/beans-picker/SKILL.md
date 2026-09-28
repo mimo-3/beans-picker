@@ -45,8 +45,9 @@ as `failed` with `foreground_required`).
    the rest in `then` (`[{instruction, candidateId, text?}, …]`). The run stops at the first step
    that is not `done` or `unverified`, and `steps` says what each one did. The step that commits
    (Save, Submit) can be the last in `then` when the steps before it are routine.
-3. **Read the status** of the last step (and `steps` when it stopped early). Observe again only
-   when the view changed (a dialog, a new page) and you need new ids.
+3. **Read the status** of the last step (and `steps` when it stopped early). When the action
+   brought up new controls (a dialog, a menu, the next step of a form), `newCandidates` lists them
+   with their ids: act on those directly. Observe again only when what you need is not there.
 4. Name a step with an `instruction` (Jev) only when the id is not in hand or several controls look
    alike.
 
@@ -62,7 +63,9 @@ as `failed` with `foreground_required`).
 | `failed` | Read `code`. `foreground_required` and `foreground_violation` mean this action needs cua-driver. |
 
 Ids are stable: an id from an earlier `observe` still works while that control is on the window,
-including in later steps of the same `then`.
+including in later steps of the same `then`. Look-alike controls (the Edit button of each section,
+the menu button of each list row) are told apart by the nearest heading or text: `click Button
+"Edit" near "Company"`.
 
 ## Recipes
 
@@ -101,7 +104,8 @@ need is still not there, act on a `scroll … down one page` candidate and read 
 **Reading values.** `extract` returns the text as read. A field's value is exact to the character
 only when the element has `exact: true`; without it, whitespace at the ends may be missing. For a whole table or list, name the table
 ("the Transactions table", or "the table of rooms" when it has no name). In `screenText` a table
-row is one line, its cells joined by ` | `. When the result is `ambiguous`, the shortlist already carries each
+row is one line, its cells joined by ` | `; so is a row of a web list (its heading and the short
+texts after it). When the result is `ambiguous`, the shortlist already carries each
 element's value or rows, so read them from there.
 
 **Dialogs and sheets.** While one is open, only its own controls are offered (`window.modal` names
