@@ -131,5 +131,6 @@ it). Finish it or dismiss it with Escape before going back to the page.
   `screenText` shows the result: a "Saved" message, the new value, the row in its new state. That
   is the check. Do not reopen an editor or reload the page to look again.
 - If the result does not show there, one `extract` (or one observe) of it is enough.
-- For tasks with several parts (several tabs, several items), every part's step returned `done`.
+- For tasks with several parts (several tabs, several items), every part's step returned `done` and its
+  result shows that part; a part that is only `unverified` still needs its one check.
 - If you could not confirm it, say so. An honest "not done" beats a false "done".
