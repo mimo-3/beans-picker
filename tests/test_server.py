@@ -58,7 +58,7 @@ async def test_offers_observe_act_and_extract_and_reports_a_bad_target_as_a_tool
 
 def test_instructions_keep_their_lines() -> None:
     lines = INSTRUCTIONS.split("\n")
-    assert len(lines) == 11
+    assert len(lines) == 13
     assert lines[3].startswith("  status: done | unverified")
     assert lines[4].startswith("  When a step brings up something new")
     assert lines[-1] == "Plan the steps yourself and read each step's status."
