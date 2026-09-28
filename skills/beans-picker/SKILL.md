@@ -87,6 +87,10 @@ want once, and never press Return in it: Return takes the highlighted item, whic
 4. **Do not press Return to pick.** Return takes whichever suggestion is highlighted, and that is
    often the first one, not the one you mean.
 
+**Search-or-create fields** ("Search or create a label…"). Return creates a new item, even when
+one with that name already exists. Type to filter, then click the existing item (on a web page it
+may be offered as `click the text "…"`).
+
 **Right-click menus.** Commands such as rename, star or move to trash may live only in an item's
 context menu. Act on its `open the context menu of … (right-click)` candidate, or press Shift+F10
 after selecting the item. The menu's items then appear as candidates; press the one you want.

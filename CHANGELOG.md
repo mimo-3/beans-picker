@@ -47,7 +47,14 @@ To be released as 0.3.0, the first release on PyPI. Versions 0.1 and 0.2 were ne
 - Look-alike controls and scroll areas with no named container between them (common on web pages,
   which reach cua-driver as one flat list) take the nearest heading, or else the nearest text no twin
   shares, as part of their identity, so their ids last across snapshots. Twins that neither tells
-  apart stay bound to the snapshot.
+  apart (icon-only buttons side by side) hold their rank among their twins and a digest of the whole
+  window: their ids last while nothing on the window changes, even though Chrome renews every
+  element's token on each snapshot, and all change with any change on the window.
+- On a web page, buttons, links, checkboxes and similar controls are clicked at their centre when
+  nothing but their own content and containers lies over it (about 0.2 s instead of about 2 s for
+  an AX press).
+- Short texts on a web page that no control holds and that appear once are offered as clicks, after
+  every control: pages often make a label chip or a custom menu entry clickable without a role.
 - `screenText` reads a web list one row per line (a heading and the short texts after it), and
   `observe` shows 60 lines instead of 30.
 - Jev is told that a browser's menu-bar commands are not part of the web page it shows.
