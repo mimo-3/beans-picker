@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Final
 
 from beans_picker._json import quote
-from beans_picker._text import hash_bytes
+from beans_picker._text import hash_bytes, utf16_len
 from beans_picker.candidates.keypad import compile_keypad, keypad_keys, keypad_parents
 from beans_picker.candidates.menu import offerable_menu_items
 from beans_picker.candidates.prune import lexical_score
@@ -24,8 +24,9 @@ from beans_picker.candidates.types import ActionCandidate, ActionKind, ScrollDir
 from beans_picker.menus.keyequiv import english_title, key_equivalent
 from beans_picker.menus.menukeys import MenuKeyTable
 from beans_picker.observe.exacttext import EDITABLE_ROLES
+from beans_picker.observe.identity import is_ambiguous_key
 from beans_picker.observe.normalize import truncate
-from beans_picker.observe.snapshot import is_descendant
+from beans_picker.observe.snapshot import UNPLACED, is_descendant
 from beans_picker.observe.types import Snapshot, UINode
 
 # Two-state controls; a radio button is chosen with a click instead.
@@ -77,6 +78,7 @@ def build_candidates(snap: Snapshot, opts: BuildOptions | None = None) -> list[A
     drafts = _Drafts(snap, opts)
     for n in snap.nodes:
         drafts.add_node(n)
+    drafts.add_page_texts()
     if snap.modal is None:
         drafts.add_menu()
         drafts.add_keypad()
@@ -244,6 +246,32 @@ class _Drafts:
                 target=n,
             )
 
+    def add_page_texts(self) -> None:
+        """Short texts on a web page that no control carries: pages often make a plain element
+        clickable (a label chip, a menu entry drawn with divs) without giving it a role. They come
+        after every control, so they never push one out of a list."""
+        snap = self.snap
+        for n in snap.nodes:
+            if n.role != "AXStaticText" or not n.enabled or not n.token or n.frame is None:
+                continue
+            # A text repeated on the page ("〜", "Open") says nothing about which one to click.
+            if not n.label or utf16_len(n.label) > _PAGE_TEXT_UNITS or is_ambiguous_key(n.key):
+                continue
+            if snap.modal is not None and not is_descendant(snap, n, snap.modal.index):
+                continue
+            chain = list(_up(self.by_index, n.parent))
+            if not any(a.role == "AXWebArea" for a in chain):
+                continue
+            if any(a.role in _TEXT_OWNERS for a in chain):
+                continue
+            self.add(
+                kind="click",
+                key=f"click|{n.key}",
+                summary=f'click the text "{truncate(n.label, 40)}"',
+                target=n,
+                destructive=is_destructive_control(n, self.ctx),
+            )
+
     def add_click(self, n: UINode, *, destructive: bool = False) -> None:
         self.add(
             kind="click", key=f"click|{n.key}", summary=f"click {describe_short(n)}", target=n, destructive=destructive
@@ -306,6 +334,25 @@ class _Drafts:
             )
 
 
+_PAGE_TEXT_UNITS: Final = 40
+# Texts already reachable through the element that holds them.
+_TEXT_OWNERS: Final = frozenset(
+    {
+        "AXButton", "AXLink", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXMenuItem",
+        "AXTab", "AXList", "AXTextField", "AXTextArea", "AXComboBox", "AXSwitch",
+    }
+)  # fmt: skip
+
+
+def _up(by_index: Mapping[int, UINode], index: int | None) -> Iterator[UINode]:
+    cur = by_index.get(index if index is not None else -1)
+    seen: set[int] = set()
+    while cur is not None and cur.index not in seen:
+        seen.add(cur.index)
+        yield cur
+        cur = by_index.get(cur.parent if cur.parent is not None else -1)
+
+
 def _top(path: Sequence[str]) -> str | None:
     return path[0] if path else None
 
@@ -326,12 +373,19 @@ def _dedupe(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
     return out
 
 
+def _place_of(within: Sequence[str]) -> str | None:
+    shown = next((w for w in within if w and not w.startswith(UNPLACED)), None)
+    if shown is None:
+        return None
+    return shown if shown.startswith("near ") else f"in {shown}"
+
+
 def _place_twins(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
-    """Look-alike candidates are told apart by their named container, then by order."""
+    """Look-alike candidates are told apart by their named container or nearest text, then by order."""
     before = Counter(c.summary for c in cands)
     placed = [
-        replace(c, summary=f"{c.summary} in {c.target.within[0]}")
-        if before[c.summary] > 1 and c.target is not None and c.target.within and c.target.within[0]
+        replace(c, summary=f"{c.summary} {place}")
+        if before[c.summary] > 1 and c.target is not None and (place := _place_of(c.target.within))
         else c
         for c in cands
     ]

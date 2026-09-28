@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import time
@@ -12,8 +13,9 @@ from dataclasses import dataclass
 from typing import Final
 
 from beans_picker._aio import gather_settled
+from beans_picker._json import dumps
 from beans_picker._numbers import round_half_up, scalar_text
-from beans_picker._text import DIGIT, utf16_len
+from beans_picker._text import DIGIT, hash_bytes, utf16_len
 from beans_picker.driver.markdown import MdNode, parse_tree_markdown
 from beans_picker.driver.mcp import Driver
 from beans_picker.driver.sentinel import FrontSampler, front_pid
@@ -27,7 +29,7 @@ from beans_picker.driver.types import (
     windows_of,
 )
 from beans_picker.observe.exacttext import EDITABLE_ROLES, TOGGLE_ROLES, apply_exact_text
-from beans_picker.observe.identity import ambiguous_key, key_of, menu_key
+from beans_picker.observe.identity import ambiguous_key, is_ambiguous_key, key_of, menu_key
 from beans_picker.observe.normalize import humanize_identifier, normalize_text, truncate
 from beans_picker.observe.signature import state_signature
 from beans_picker.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
@@ -43,6 +45,19 @@ _CONTAINER_ROLES: Final = frozenset(
         "AXTabGroup", "AXList", "AXOutline", "AXTable", "AXRow", "AXWindow",
     }
 )  # fmt: skip
+_OPERABLE_ROLES: Final = frozenset(
+    {
+        "AXButton", "AXLink", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXComboBox",
+        "AXTextField", "AXTextArea", "AXSearchField", "AXSlider", "AXIncrementor", "AXColorWell", "AXMenuItem",
+        "AXDisclosureTriangle", "AXSwitch", "AXTab",
+    }
+)  # fmt: skip
+# Controls placed by nearby text, with the areas that scroll: a page's lists come as look-alike, unnamed Lists.
+_PLACED_ROLES: Final = _OPERABLE_ROLES | {"AXList", "AXScrollArea", "AXTable", "AXOutline"}
+UNPLACED: Final = "unplaced twin"
+"""Marks a look-alike that no nearby text tells apart; its identity is bound to the whole tree."""
+# How many tree lines back to look for the text that tells a look-alike control apart.
+_NEAR_TEXT_LINES: Final = 40
 # The driver's own overlay (agent cursor) sits above everything and is never "the front app".
 _OVERLAY_APP: Final = re.compile("cua driver", re.IGNORECASE | re.ASCII)
 # Directional marks split digit runs: a pending "2^10" must not read as "210".
@@ -159,6 +174,7 @@ def build_snapshot(raw: Mapping[str, object], pid: int, window_id: int) -> Snaps
     for n in base:
         n.within = _ancestors_of(n, base_by_index)
     assign_keys(base)
+    _place_twins_by_text(base, md, base_by_index)
 
     nodes = [n for n in base if not n.in_menu_bar]
     snap = Snapshot(
@@ -367,6 +383,89 @@ def _name_rows_by_first_text(base: Sequence[UINode], md: Sequence[MdNode], by_in
         if row is not None and row.index in unnamed:
             unnamed.discard(row.index)
             row.label = truncate(text, 40)
+
+
+def _place_twins_by_text(base: Sequence[UINode], md: Sequence[MdNode], by_index: Mapping[int, UINode]) -> None:
+    """Look-alike controls with no named container to tell them apart (the "Edit" of each section, the
+    menu button of each list row: web pages reach us as one flat list) take the text just before them
+    in reading order, so each keeps an id of its own across snapshots instead of one bound to this
+    snapshot's tokens: the nearest heading when no twin shares it, else the nearest text that is not a
+    control's own caption when no twin shares that. Twins that neither tells apart stay token-bound."""
+    groups: dict[tuple[str, str | None, str, tuple[str, ...]], list[UINode]] = {}
+    for n in base:
+        if is_ambiguous_key(n.key) and n.role in _PLACED_ROLES:
+            groups.setdefault((n.role, n.identifier, n.label, tuple(n.within)), []).append(n)
+    if not groups:
+        return
+    line_of = {n.index: n.line for n in md if n.index is not None}
+    texts: list[tuple[int, str, bool, frozenset[int]]] = []
+    for t in md:
+        if t.role not in {"AXStaticText", "AXHeading"}:
+            continue
+        text = normalize_text(_first(t.value, t.title, t.label, ""))
+        if not text:
+            continue
+        chain = [cur for cur in _node_chain(by_index.get(_owner(t)), by_index)]
+        heading = t.role == "AXHeading" or any(c.role == "AXHeading" for c in chain[:2])
+        caption = any(c.role in _OPERABLE_ROLES for c in chain)
+        if heading or not caption:
+            texts.append((t.line, text, heading, frozenset(c.index for c in chain)))
+
+    def before(n: UINode, headings: bool) -> str | None:
+        at = line_of.get(n.index)
+        if at is None:
+            return None
+        for line, text, heading, chain in reversed(texts):
+            if line >= at or n.index in chain or (headings and not heading):
+                continue
+            if at - line > _NEAR_TEXT_LINES:
+                return None
+            return text if text != n.label else None
+        return None
+
+    changed = False
+    page: str | None = None
+    for twins in groups.values():
+        by_heading = [before(n, True) for n in twins]
+        by_text = [before(n, False) for n in twins]
+        headings, others = Counter(by_heading), Counter(by_text)
+        unplaced: list[UINode] = []
+        for n, head, other in zip(twins, by_heading, by_text, strict=True):
+            near = head if head is not None and headings[head] == 1 else None
+            if near is None and other is not None and others[other] == 1:
+                near = other
+            if near is not None:
+                n.within = [f'near "{truncate(near, 40)}"', *n.within][:3]
+                changed = True
+            else:
+                unplaced.append(n)
+        if not unplaced:
+            continue
+        page = page if page is not None else _page_digest(base, md)
+        for i, n in enumerate(unplaced, 1):
+            # Its rank among its twins holds only on this very tree: any change on the window (a twin
+            # replaced, moved, added, a popover opened for another row) changes the id. That keeps
+            # the id of a control in a still window, whose tokens Chrome renews on every snapshot.
+            n.within = [f"{UNPLACED} {i}/{len(unplaced)} of page {page}", *n.within][:3]
+            changed = True
+    if changed:
+        assign_keys(base)
+
+
+def _box(f: Frame) -> list[int]:
+    return [round_half_up(f.x), round_half_up(f.y), round_half_up(f.w), round_half_up(f.h)]
+
+
+def _page_digest(base: Sequence[UINode], md: Sequence[MdNode]) -> str:
+    """A digest of the window's whole tree: every element (menu bar aside) with where it sits, and every
+    text, in order."""
+    parts = [
+        dumps([n.index, n.role, n.label, n.value, *(_box(n.frame) if n.frame is not None else [])])
+        for n in base
+        if not n.in_menu_bar
+    ]
+    parts += [dumps([t.line, t.value]) for t in md if t.role == "AXStaticText" and t.index is None]
+    return hashlib.sha256(hash_bytes("\n".join(parts))).hexdigest()[:12]
 
 
 def _ancestors_of(n: UINode, by_index: Mapping[int, UINode]) -> list[str]:

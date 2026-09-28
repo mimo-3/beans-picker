@@ -63,9 +63,9 @@ def test_show_window_with_a_modal_and_other_windows() -> None:
     assert list(show_window(snap([], app_windows=[]))) == ["app", "pid", "windowId", "title"]
 
 
-def test_show_screen_reads_thirty_lines() -> None:
-    s = snap([], [text(f"line {i}") for i in range(40)])
-    assert len(show_screen(s)["screenText"]) == 30
+def test_show_screen_reads_sixty_lines() -> None:
+    s = snap([], [text(f"line {i}") for i in range(80)])
+    assert len(show_screen(s)["screenText"]) == 60
     assert list(show_screen(s)) == ["screenText", "fields"]
 
 

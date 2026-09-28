@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections import Counter
+from collections.abc import Callable, Iterator
+from itertools import islice
 from typing import Final, NotRequired, TypedDict
 
 from beans_picker._json import JsonValue, quote
+from beans_picker._text import utf16_len
 from beans_picker.observe.exacttext import EDITABLE_ROLES
 from beans_picker.observe.menudiff import enabled_changes, relabeled_menu_items
 from beans_picker.observe.normalize import truncate
@@ -67,16 +70,56 @@ def reading_texts(snap: Snapshot) -> list[TextNode]:
     return out
 
 
+_ITEM_LEVELS: Final = 6
+_RUN_TEXT_CHARS: Final = 30
+_RUN_TEXTS: Final = 12
+_ITEM_MAX_TEXTS: Final = 15
+
+
+def _row_finder(snap: Snapshot, by_index: dict[int, UINode]) -> Callable[[TextNode], int | None]:
+    """The row a text belongs to: a table row, else one of three or more look-alike items of a list
+    drawn with plain groups (a web page's cards and list rows), so its texts read as one line."""
+    texts_in: Counter[int] = Counter(n.index for t in snap.texts for n in _up(by_index, t.parent_index))
+    alike: Counter[tuple[int | None, str]] = Counter((n.parent, n.role) for n in snap.nodes if texts_in[n.index] >= 2)
+    rows: dict[int | None, int | None] = {}
+
+    def is_item(n: UINode) -> bool:
+        return 2 <= texts_in[n.index] <= _ITEM_MAX_TEXTS and alike[(n.parent, n.role)] >= 3
+
+    def row_of(t: TextNode) -> int | None:
+        if t.parent_index not in rows:
+            chain = list(_up(by_index, t.parent_index))
+            row = next((n.index for n in chain if n.role == "AXRow"), None)
+            if row is None:
+                row = next((n.index for n in chain[:_ITEM_LEVELS] if is_item(n)), None)
+            rows[t.parent_index] = row
+        return rows[t.parent_index]
+
+    return row_of
+
+
 def screen_text(snap: Snapshot, limit: int = 20) -> list[str]:
     """The window's texts in order, repeats left out."""
     by_index = _by_index(snap)
-
-    def row_of(t: TextNode) -> int | None:
-        return next((n.index for n in _up(by_index, t.parent_index) if n.role == "AXRow"), None)
+    row_of = _row_finder(snap, by_index)
 
     lines: list[tuple[int | None, list[str]]] = []
+    # A web page reaches us flat: a list item is a heading and the short texts after it, so those
+    # share its line, and the row a status belongs to is not lost.
+    run: int | None = None
+    run_texts = 0
     for t in reading_texts(snap):
         row = row_of(t)
+        heading = next((n.index for n in islice(_up(by_index, t.parent_index), 2) if n.role == "AXHeading"), None)
+        if row is not None:
+            run = None
+        elif heading is not None:
+            row, run, run_texts = heading, heading, 0
+        elif run is not None and utf16_len(t.value) <= _RUN_TEXT_CHARS and run_texts < _RUN_TEXTS:
+            row = run
+            run_texts += 1
+        else:
+            run = None
         if row is not None and lines and lines[-1][0] == row:
             lines[-1][1].append(truncate(t.value, 60))
         else:

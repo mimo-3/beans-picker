@@ -39,16 +39,26 @@ as `failed` with `foreground_required`).
 
 ## The fast loop
 
+Almost all of a task's time is your own replies, a few seconds each; a tool call takes about a
+second. Make as few replies as you can: no plan or progress messages between steps, one short
+message at the end.
+
 1. **observe** the window once, with the task's `pid` / `windowId` and no instruction. You get
    candidate ids with what each one does, plus `screenText` and `fields`.
 2. **act** on everything you can already name, in one call: the first step in the top-level fields,
    the rest in `then` (`[{instruction, candidateId, text?}, …]`). The run stops at the first step
    that is not `done` or `unverified`, and `steps` says what each one did. The step that commits
    (Save, Submit) can be the last in `then` when the steps before it are routine.
-3. **Read the status** of the last step (and `steps` when it stopped early). Observe again only
-   when the view changed (a dialog, a new page) and you need new ids.
+   A step whose control appears only after an earlier one (the item of a menu the step before
+   opens, a dialog's button) goes in `then` too, with an `instruction` and no `candidateId`: Jev
+   picks it on the window as it is by then. Opening a menu and choosing its item is one call.
+3. **Read the status** of the last step (and `steps` when it stopped early). Do not observe to see
+   what happened: `change` says what changed, and when the action brought up new controls (a dialog,
+   a menu, the next step of a form) `newCandidates` lists them with their ids, so act on those
+   directly. Observe again only when what you need is in neither.
 4. Name a step with an `instruction` (Jev) only when the id is not in hand or several controls look
    alike.
+5. Check once, at the end (see "Before you report success"), not after every step.
 
 | status | what to do |
 |---|---|
@@ -62,7 +72,9 @@ as `failed` with `foreground_required`).
 | `failed` | Read `code`. `foreground_required` and `foreground_violation` mean this action needs cua-driver. |
 
 Ids are stable: an id from an earlier `observe` still works while that control is on the window,
-including in later steps of the same `then`.
+including in later steps of the same `then`. Look-alike controls (the Edit button of each section,
+the menu button of each list row) are told apart by the nearest heading or text: `click Button
+"Edit" near "Company"`.
 
 ## Recipes
 
@@ -84,6 +96,10 @@ want once, and never press Return in it: Return takes the highlighted item, whic
 4. **Do not press Return to pick.** Return takes whichever suggestion is highlighted, and that is
    often the first one, not the one you mean.
 
+**Search-or-create fields** ("Search or create a label…"). Return creates a new item, even when
+one with that name already exists. Type to filter, then click the existing item (on a web page it
+may be offered as `click the text "…"`).
+
 **Right-click menus.** Commands such as rename, star or move to trash may live only in an item's
 context menu. Act on its `open the context menu of … (right-click)` candidate, or press Shift+F10
 after selecting the item. The menu's items then appear as candidates; press the one you want.
@@ -101,7 +117,8 @@ need is still not there, act on a `scroll … down one page` candidate and read 
 **Reading values.** `extract` returns the text as read. A field's value is exact to the character
 only when the element has `exact: true`; without it, whitespace at the ends may be missing. For a whole table or list, name the table
 ("the Transactions table", or "the table of rooms" when it has no name). In `screenText` a table
-row is one line, its cells joined by ` | `. When the result is `ambiguous`, the shortlist already carries each
+row is one line, its cells joined by ` | `; so is a row of a web list (its heading and the short
+texts after it). When the result is `ambiguous`, the shortlist already carries each
 element's value or rows, so read them from there.
 
 **Dialogs and sheets.** While one is open, only its own controls are offered (`window.modal` names

@@ -62,6 +62,8 @@ def describe(c: ActionCandidate, snap: Snapshot, learned: MenuKeyTable | None = 
     if c.menu is not None:
         path = c.menu.path
         d["path"] = " > ".join(path)
+        if any(n.role == "AXWebArea" for n in snap.nodes):
+            d["scope"] = "the browser's own menu bar, not the web page shown in the window"
         english = english_title(path[-1] if path else "", learned)
         if english:
             d["standard_command"] = f"{english} (the stock macOS command this localized item is)"

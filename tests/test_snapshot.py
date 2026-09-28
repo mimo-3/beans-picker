@@ -12,6 +12,7 @@ from beans_picker.observe.types import UINode
 from beans_picker.verify.effect import verify_effect
 from tests.act_support import cand, snap
 from tests.helpers import fixture_ids, raw_fixture, snap_fixture
+from tests.web_list import web_list
 
 
 def _markdown(name: str) -> str:
@@ -188,9 +189,9 @@ def test_windows_with_other_frames_are_both_kept() -> None:
     }
     snap = build_snapshot(raw, 1, 1)
     assert [n.index for n in snap.nodes if n.label == "7"] == [1, 3]
-    assert [n.key for n in snap.nodes if n.label == "7"] == [
-        ambiguous_key(key_of("AXButton", None, "7", ["AXWindow: A"]), "", i) for i in (1, 3)
-    ]
+    sevens = [n for n in snap.nodes if n.label == "7"]
+    assert [n.within[0].split(" of page ")[0] for n in sevens] == ["unplaced twin 1/2", "unplaced twin 2/2"]
+    assert len({n.key for n in sevens}) == 2
 
 
 def test_keeps_the_cells_under_their_rows_only() -> None:
@@ -666,3 +667,170 @@ def test_a_row_is_named_after_its_first_nonempty_text_only() -> None:
     snap = build_snapshot(raw, 1, 1)
     assert [n.label for n in snap.nodes] == ["W", "", "INV-1043", "Named"]
     assert [t.value for t in snap.texts] == ["INV-1043", "Paid", "Other", "outside"]
+
+
+def _sections(tokens: str) -> JsonObject:
+    elements: list[JsonValue] = [
+        {"element_index": 0, "element_token": f"{tokens}:0", "role": "AXWindow", "label": "Profile", "depth": 0},
+        {"element_index": 1, "element_token": f"{tokens}:1", "role": "AXGroup", "parent_index": 0, "depth": 1},
+        {
+            "element_index": 2,
+            "element_token": f"{tokens}:2",
+            "role": "AXButton",
+            "label": "Edit",
+            "actions": ["AXPress"],
+            "parent_index": 1,
+            "depth": 2,
+        },
+        {"element_index": 3, "element_token": f"{tokens}:3", "role": "AXGroup", "parent_index": 0, "depth": 1},
+        {
+            "element_index": 4,
+            "element_token": f"{tokens}:4",
+            "role": "AXButton",
+            "label": "Edit",
+            "actions": ["AXPress"],
+            "parent_index": 3,
+            "depth": 2,
+        },
+    ]
+    md = "\n".join(
+        [
+            '- [0] AXWindow "Profile"',
+            "  - [1] AXGroup",
+            '    - AXStaticText = "User"',
+            '    - [2] AXButton "Edit"',
+            "  - [3] AXGroup",
+            '    - AXStaticText = "Company"',
+            '    - [4] AXButton "Edit"',
+        ]
+    )
+    return {"elements": elements, "tree_markdown": md, "window_title": "Profile"}
+
+
+def test_look_alike_buttons_take_the_nearest_text_and_keep_their_ids() -> None:
+    first = build_snapshot(_sections("a"), 1, 1)
+    again = build_snapshot(_sections("b"), 1, 1)
+    edits = [n for n in first.nodes if n.role == "AXButton"]
+    assert [n.within[0] for n in edits] == ['near "User"', 'near "Company"']
+    assert len({n.key for n in edits}) == 2
+    assert [n.key for n in edits] == [n.key for n in again.nodes if n.role == "AXButton"]
+
+
+def test_look_alikes_the_nearest_text_does_not_tell_apart_are_bound_to_the_whole_tree() -> None:
+    raw = _sections("a")
+    raw["tree_markdown"] = str(raw["tree_markdown"]).replace("Company", "User")
+    edits = [n.key for n in build_snapshot(raw, 1, 1).nodes if n.role == "AXButton"]
+    assert len(set(edits)) == 2
+    again = _sections("b")
+    again["tree_markdown"] = str(again["tree_markdown"]).replace("Company", "User")
+    assert [n.key for n in build_snapshot(again, 1, 1).nodes if n.role == "AXButton"] == edits
+    changed = _sections("c")
+    changed["tree_markdown"] = str(changed["tree_markdown"]).replace("Company", "User") + '\n  - AXStaticText = "Saved"'
+    assert set(edits).isdisjoint(n.key for n in build_snapshot(changed, 1, 1).nodes if n.role == "AXButton")
+
+
+def test_a_flat_web_lists_row_menus_take_their_rows_heading() -> None:
+    rows = [("Designer", "Open"), ("Analyst", "Open"), ("Engineer", "Closed")]
+    first = build_snapshot(web_list("a", rows), 1, 1)
+    again = build_snapshot(web_list("b", rows), 1, 1)
+    menus = [n for n in first.nodes if n.role == "AXPopUpButton"]
+    assert [n.within[0] for n in menus] == ['near "Designer"', 'near "Analyst"', 'near "Engineer"']
+    assert [n.key for n in menus] == [n.key for n in again.nodes if n.role == "AXPopUpButton"]
+
+
+def test_rows_with_the_same_heading_fall_back_to_a_text_no_other_row_shares() -> None:
+    menus = [
+        n
+        for n in build_snapshot(web_list("a", [("Designer", "Open"), ("Designer", "Closed")]), 1, 1).nodes
+        if n.role == "AXPopUpButton"
+    ]
+    assert [n.within[0] for n in menus] == ['near "Open"', 'near "Closed"']
+
+
+def test_a_web_pages_look_alike_lists_are_placed_by_the_text_before_them() -> None:
+    raw = web_list("a", [("Designer", "Open")])
+    elements = raw["elements"]
+    assert isinstance(elements, list)
+    elements += [
+        {"element_index": 8, "element_token": "a:8", "role": "AXList", "parent_index": 1, "depth": 2},
+        {"element_index": 9, "element_token": "a:9", "role": "AXList", "parent_index": 1, "depth": 2},
+    ]
+    raw["tree_markdown"] = "\n".join(
+        [
+            str(raw["tree_markdown"]),
+            '    - AXStaticText = "Users"',
+            "    - [8] AXList",
+            '    - AXStaticText = "Company"',
+            "    - [9] AXList",
+        ]
+    )
+    lists = [n for n in build_snapshot(raw, 1, 1).nodes if n.role == "AXList"]
+    assert [n.within[0] for n in lists] == ['near "Users"', 'near "Company"']
+
+
+def test_a_twin_left_unplaced_never_hands_its_id_to_a_lone_control_later() -> None:
+    raw = _sections("a")
+    raw["tree_markdown"] = str(raw["tree_markdown"]).replace('    - [4] AXButton "Edit"\n', "").rstrip()
+    first = build_snapshot(raw, 1, 1)
+    placed, unplaced = [n for n in first.nodes if n.role == "AXButton"]
+    assert placed.within[0] == 'near "User"'
+    alone = _sections("b")
+    elements = alone["elements"]
+    assert isinstance(elements, list)
+    alone["elements"] = [e for e in elements if not (isinstance(e, dict) and e["element_index"] == 2)]
+    alone["tree_markdown"] = str(alone["tree_markdown"]).replace('    - [2] AXButton "Edit"\n', "")
+    (left,) = [n for n in build_snapshot(alone, 1, 1).nodes if n.role == "AXButton"]
+    assert unplaced.key != left.key
+    assert placed.key != left.key
+
+
+def _icons(tokens: str, xs: list[int]) -> JsonObject:
+    """Icon-only buttons side by side under one heading: nothing but their place tells them apart."""
+    elements: list[JsonValue] = [
+        {"element_index": 0, "element_token": f"{tokens}:0", "role": "AXWindow", "label": "Tags", "depth": 0},
+        {"element_index": 1, "element_token": f"{tokens}:1", "role": "AXWebArea", "parent_index": 0, "depth": 1},
+        {
+            "element_index": 2,
+            "element_token": f"{tokens}:2",
+            "role": "AXHeading",
+            "label": "Tags",
+            "parent_index": 1,
+            "depth": 2,
+        },
+    ]
+    md = [
+        '- [0] AXWindow "Tags"',
+        '  - [1] AXWebArea "Tags"',
+        '    - [2] AXHeading "Tags"',
+        '      - AXStaticText = "Tags"',
+    ]
+    for i, x in enumerate(xs, 3):
+        elements.append(
+            {
+                "element_index": i,
+                "element_token": f"{tokens}:{i}",
+                "role": "AXButton",
+                "parent_index": 1,
+                "depth": 2,
+                "frame": {"x": x, "y": 40, "w": 16, "h": 16},
+            }
+        )
+        md.append(f"    - [{i}] AXButton [actions=[press]]")
+    return {"elements": elements, "tree_markdown": "\n".join(md), "window_title": "Tags"}
+
+
+def _icon_keys(tokens: str, xs: list[int]) -> list[str]:
+    return [n.key for n in build_snapshot(_icons(tokens, xs), 1, 1).nodes if n.role == "AXButton"]
+
+
+def test_icon_only_twins_keep_their_ids_while_the_group_sits_still() -> None:
+    first = _icon_keys("a", [10, 30, 50])
+    assert len(set(first)) == 3
+    assert not any(k.startswith('["ambiguous",') for k in first)
+    assert _icon_keys("b", [10, 30, 50]) == first
+
+
+def test_icon_only_twins_lose_every_id_when_the_window_changes_at_all() -> None:
+    first = set(_icon_keys("a", [10, 30, 50]))
+    for xs in ([10, 30, 60], [10, 30], [30, 10, 50], [10, 30, 50, 70]):
+        assert first.isdisjoint(_icon_keys("b", xs)), xs

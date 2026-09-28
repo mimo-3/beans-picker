@@ -71,6 +71,7 @@ class ActOutput(TypedDict):
     verification: NotRequired[Verification]
     change: NotRequired[Change]
     candidates: NotRequired[list[ShownCandidate]]
+    newCandidates: NotRequired[list[ShownCandidate]]
     pick: NotRequired[PickOut]
     jev: NotRequired[JevUsageOut]
     steps: NotRequired[list[ActOutput]]
@@ -79,10 +80,11 @@ class ActOutput(TypedDict):
 
 async def act_tool(session: ToolSession, args: ActArgs) -> ActOutput:
     t = await session.target(args)
-    first, after = await _act_once(session, t, args, await session.snapshot(t))
+    before = await session.snapshot(t)
+    first, after = await _act_once(session, t, args, before)
     then = args.get("then")
     if not then:
-        return first
+        return _with_new_candidates(session, t, first, before, after)
     outs = [first]
     for step in then:
         if outs[-1]["status"] not in CARRY_ON:
@@ -111,7 +113,27 @@ async def act_tool(session: ToolSession, args: ActArgs) -> ActOutput:
     result["steps"] = [_without_window(o) for o in outs]
     if skipped:
         result["skipped"] = skipped
-    return result
+    return _with_new_candidates(session, t, result, before, after)
+
+
+def _with_new_candidates(
+    session: ToolSession, t: Target, out: ActOutput, before: Snapshot, after: Snapshot
+) -> ActOutput:
+    """The controls the action brought up (a dialog's fields, a menu's items), with their ids, so the
+    next step can use them without another observe."""
+    if after is before or out["status"] not in CARRY_ON:
+        return out
+    opts = BuildOptions(list_text_kinds=True, learned=session.menu_keys.table_for(t.pid))
+    had = {c.key for c in build_candidates(before, opts)}
+    new = [
+        show_candidate(c) for c in build_candidates(after, opts) if c.key not in had and c.kind not in ("menu", "key")
+    ][:NEW_CANDIDATES]
+    if new:
+        out["newCandidates"] = new
+    return out
+
+
+NEW_CANDIDATES: Final = 20
 
 
 def _without_window(out: ActOutput) -> ActOutput:

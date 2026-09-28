@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import time
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal, NotRequired, Protocol, TypedDict, assert_never
 
@@ -245,6 +245,17 @@ class Executor:
     async def _press(
         self, node: UINode, snap: Snapshot, route: list[str], *, allow_destructive: bool = False
     ) -> _Outcome:
+        # On a web page an AX press waits about 2 s, a click at the control's centre about 0.2 s. It is
+        # taken only when nothing drawn later on the page (a popover, a toast) covers that point.
+        if node.role in _PIXEL_PRESS_ROLES and in_web_area(snap, node) and uncovered(snap, node):
+            pt = await self._pixels.point(snap, node)
+            if pt is not None:
+                clicked = await self._driver.call(
+                    "click", _PointArgs(pid=snap.pid, window_id=snap.window_id, x=pt.x, y=pt.y)
+                )
+                if clicked.ok:
+                    route.append("pixel")
+                    return to_act(clicked)
         r = await self._with_rebind(
             node,
             route,
@@ -478,6 +489,81 @@ class Executor:
             route.append("rebind")
             r = await self._driver.call(tool, args(again.token))
         return to_act(r)
+
+
+_PIXEL_PRESS_ROLES: Final = frozenset(
+    {
+        "AXButton",
+        "AXLink",
+        "AXCheckBox",
+        "AXRadioButton",
+        "AXTab",
+        "AXPopUpButton",
+        "AXMenuButton",
+        "AXSwitch",
+        # A page's plain clickable text (a label chip) answers to a click, rarely to AXPress.
+        "AXStaticText",
+    }
+)
+
+
+# Elements that hold others; one listed earlier in the tree that spans the point is taken for a container.
+_CONTAINERS: Final = frozenset(
+    {
+        "AXWebArea",
+        "AXGroup",
+        "AXList",
+        "AXScrollArea",
+        "AXTable",
+        "AXRow",
+        "AXCell",
+        "AXOutline",
+        "AXSplitGroup",
+        "AXTabGroup",
+    }
+)
+
+
+def uncovered(snap: Snapshot, node: UINode) -> bool:
+    """Whether nothing but `node`'s own content and its containers lies over its centre: no element after
+    it in the tree (a popover, a toast), and no control or text anywhere else in the tree, since the
+    tree's order is not always the order the page paints in."""
+    f = node.frame
+    if f is None:
+        return False
+    cx, cy = f.x + f.w / 2, f.y + f.h / 2
+    by_index = {n.index: n for n in snap.nodes}
+
+    def inside_node(n: UINode) -> bool:
+        cur: UINode | None = n
+        seen: set[int] = set()
+        while cur is not None and cur.index not in seen:
+            if cur.index == node.index:
+                return True
+            seen.add(cur.index)
+            cur = by_index.get(cur.parent if cur.parent is not None else -1)
+        return False
+
+    ancestors = {a.index for a in _chain(by_index, node.parent)}
+    return not any(
+        o.index != node.index
+        and o.index not in ancestors
+        and (o.index > node.index or o.role not in _CONTAINERS)
+        and o.frame is not None
+        and o.frame.x <= cx <= o.frame.x + o.frame.w
+        and o.frame.y <= cy <= o.frame.y + o.frame.h
+        and not inside_node(o)
+        for o in snap.nodes
+    )
+
+
+def _chain(by_index: Mapping[int, UINode], index: int | None) -> Iterator[UINode]:
+    cur = by_index.get(index if index is not None else -1)
+    seen: set[int] = set()
+    while cur is not None and cur.index not in seen:
+        seen.add(cur.index)
+        yield cur
+        cur = by_index.get(cur.parent if cur.parent is not None else -1)
 
 
 def _resolve(snap: Snapshot, target: UINode) -> UINode | None:

@@ -6,6 +6,7 @@ from beans_picker._json import JsonObject, JsonValue, dumps
 from beans_picker.jev.state import Change, build_state, change_of, changed, controls_of, fields_of, screen_text
 from beans_picker.observe.snapshot import build_snapshot
 from beans_picker.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
+from tests.web_list import web_list
 
 
 def el(index: int, role: str, parent: int | None = None, depth: int = 0, **extra: JsonValue) -> JsonObject:
@@ -208,3 +209,31 @@ def test_changed_counts_an_empty_title_but_not_empty_lists() -> None:
     nothing: Change = {"appeared": [], "disappeared": []}
     assert not changed(nothing)
     assert changed({"appeared": [], "disappeared": [], "window_title": ""})
+
+
+def test_a_flat_web_list_reads_one_row_per_line() -> None:
+    snap = build_snapshot(web_list("a", [("Designer", "Open"), ("Analyst", "Closed")]), 1, 1)
+    assert screen_text(snap) == ["Designer | Open", "Analyst | Closed"]
+
+
+def test_a_table_row_stays_one_line_even_when_its_cells_look_like_list_items() -> None:
+    elements: list[JsonValue] = [el(0, "AXWindow", title="Rooms"), el(1, "AXTable", 0, 1)]
+    md = ['- [0] AXWindow "Rooms"', "  - [1] AXTable"]
+    i = 2
+    for room in ("B", "D"):
+        elements.append(el(i, "AXRow", 1, 2))
+        md.append(f"    - [{i}] AXRow")
+        row = i
+        for cell in ("size", "free", "floor"):
+            i += 1
+            elements.append(el(i, "AXCell", row, 3))
+            md += [f"      - [{i}] AXCell", f'        - AXStaticText = "{room}"', f'        - AXStaticText = "{cell}"']
+        i += 1
+    snap = build_snapshot({"elements": elements, "tree_markdown": "\n".join(md), "window_title": "Rooms"}, 1, 1)
+    assert screen_text(snap) == ["B | size | B | free | B | floor", "D | size | D | free | D | floor"]
+
+
+def test_a_web_list_row_ends_at_a_text_longer_than_thirty_utf16_units() -> None:
+    emoji = "\U0001f600" * 16
+    snap = build_snapshot(web_list("a", [("Designer", emoji)]), 1, 1)
+    assert screen_text(snap) == ["Designer", emoji]
