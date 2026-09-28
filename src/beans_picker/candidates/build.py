@@ -326,11 +326,15 @@ def _dedupe(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
     return out
 
 
+def _place_of(within: str) -> str:
+    return within if within.startswith("near ") else f"in {within}"
+
+
 def _place_twins(cands: Sequence[ActionCandidate]) -> list[ActionCandidate]:
-    """Look-alike candidates are told apart by their named container, then by order."""
+    """Look-alike candidates are told apart by their named container or nearest text, then by order."""
     before = Counter(c.summary for c in cands)
     placed = [
-        replace(c, summary=f"{c.summary} in {c.target.within[0]}")
+        replace(c, summary=f"{c.summary} {_place_of(c.target.within[0])}")
         if before[c.summary] > 1 and c.target is not None and c.target.within and c.target.within[0]
         else c
         for c in cands

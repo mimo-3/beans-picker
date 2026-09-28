@@ -12,6 +12,7 @@ from beans_picker.observe.types import UINode
 from beans_picker.verify.effect import verify_effect
 from tests.act_support import cand, snap
 from tests.helpers import fixture_ids, raw_fixture, snap_fixture
+from tests.web_list import web_list
 
 
 def _markdown(name: str) -> str:
@@ -666,3 +667,75 @@ def test_a_row_is_named_after_its_first_nonempty_text_only() -> None:
     snap = build_snapshot(raw, 1, 1)
     assert [n.label for n in snap.nodes] == ["W", "", "INV-1043", "Named"]
     assert [t.value for t in snap.texts] == ["INV-1043", "Paid", "Other", "outside"]
+
+
+def _sections(tokens: str) -> JsonObject:
+    elements: list[JsonValue] = [
+        {"element_index": 0, "element_token": f"{tokens}:0", "role": "AXWindow", "label": "Profile", "depth": 0},
+        {"element_index": 1, "element_token": f"{tokens}:1", "role": "AXGroup", "parent_index": 0, "depth": 1},
+        {
+            "element_index": 2,
+            "element_token": f"{tokens}:2",
+            "role": "AXButton",
+            "label": "Edit",
+            "actions": ["AXPress"],
+            "parent_index": 1,
+            "depth": 2,
+        },
+        {"element_index": 3, "element_token": f"{tokens}:3", "role": "AXGroup", "parent_index": 0, "depth": 1},
+        {
+            "element_index": 4,
+            "element_token": f"{tokens}:4",
+            "role": "AXButton",
+            "label": "Edit",
+            "actions": ["AXPress"],
+            "parent_index": 3,
+            "depth": 2,
+        },
+    ]
+    md = "\n".join(
+        [
+            '- [0] AXWindow "Profile"',
+            "  - [1] AXGroup",
+            '    - AXStaticText = "User"',
+            '    - [2] AXButton "Edit"',
+            "  - [3] AXGroup",
+            '    - AXStaticText = "Company"',
+            '    - [4] AXButton "Edit"',
+        ]
+    )
+    return {"elements": elements, "tree_markdown": md, "window_title": "Profile"}
+
+
+def test_look_alike_buttons_take_the_nearest_text_and_keep_their_ids() -> None:
+    first = build_snapshot(_sections("a"), 1, 1)
+    again = build_snapshot(_sections("b"), 1, 1)
+    edits = [n for n in first.nodes if n.role == "AXButton"]
+    assert [n.within[0] for n in edits] == ['near "User"', 'near "Company"']
+    assert len({n.key for n in edits}) == 2
+    assert [n.key for n in edits] == [n.key for n in again.nodes if n.role == "AXButton"]
+
+
+def test_look_alikes_the_nearest_text_does_not_tell_apart_stay_token_bound() -> None:
+    raw = _sections("a")
+    raw["tree_markdown"] = str(raw["tree_markdown"]).replace("Company", "User")
+    edits = [n for n in build_snapshot(raw, 1, 1).nodes if n.role == "AXButton"]
+    assert all(n.key.startswith('["ambiguous",') for n in edits)
+
+
+def test_a_flat_web_lists_row_menus_take_their_rows_heading() -> None:
+    rows = [("Designer", "Open"), ("Analyst", "Open"), ("Engineer", "Closed")]
+    first = build_snapshot(web_list("a", rows), 1, 1)
+    again = build_snapshot(web_list("b", rows), 1, 1)
+    menus = [n for n in first.nodes if n.role == "AXPopUpButton"]
+    assert [n.within[0] for n in menus] == ['near "Designer"', 'near "Analyst"', 'near "Engineer"']
+    assert [n.key for n in menus] == [n.key for n in again.nodes if n.role == "AXPopUpButton"]
+
+
+def test_rows_with_the_same_heading_fall_back_to_a_text_no_other_row_shares() -> None:
+    menus = [
+        n
+        for n in build_snapshot(web_list("a", [("Designer", "Open"), ("Designer", "Closed")]), 1, 1).nodes
+        if n.role == "AXPopUpButton"
+    ]
+    assert [n.within[0] for n in menus] == ['near "Open"', 'near "Closed"']

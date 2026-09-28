@@ -27,7 +27,7 @@ from beans_picker.driver.types import (
     windows_of,
 )
 from beans_picker.observe.exacttext import EDITABLE_ROLES, TOGGLE_ROLES, apply_exact_text
-from beans_picker.observe.identity import ambiguous_key, key_of, menu_key
+from beans_picker.observe.identity import ambiguous_key, is_ambiguous_key, key_of, menu_key
 from beans_picker.observe.normalize import humanize_identifier, normalize_text, truncate
 from beans_picker.observe.signature import state_signature
 from beans_picker.observe.types import MenuItem, Modal, Snapshot, TextNode, UINode
@@ -43,6 +43,15 @@ _CONTAINER_ROLES: Final = frozenset(
         "AXTabGroup", "AXList", "AXOutline", "AXTable", "AXRow", "AXWindow",
     }
 )  # fmt: skip
+_OPERABLE_ROLES: Final = frozenset(
+    {
+        "AXButton", "AXLink", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton", "AXComboBox",
+        "AXTextField", "AXTextArea", "AXSearchField", "AXSlider", "AXIncrementor", "AXColorWell", "AXMenuItem",
+        "AXDisclosureTriangle", "AXSwitch", "AXTab",
+    }
+)  # fmt: skip
+# How many tree lines back to look for the text that tells a look-alike control apart.
+_NEAR_TEXT_LINES: Final = 40
 # The driver's own overlay (agent cursor) sits above everything and is never "the front app".
 _OVERLAY_APP: Final = re.compile("cua driver", re.IGNORECASE | re.ASCII)
 # Directional marks split digit runs: a pending "2^10" must not read as "210".
@@ -159,6 +168,7 @@ def build_snapshot(raw: Mapping[str, object], pid: int, window_id: int) -> Snaps
     for n in base:
         n.within = _ancestors_of(n, base_by_index)
     assign_keys(base)
+    _place_twins_by_text(base, md, base_by_index)
 
     nodes = [n for n in base if not n.in_menu_bar]
     snap = Snapshot(
@@ -367,6 +377,58 @@ def _name_rows_by_first_text(base: Sequence[UINode], md: Sequence[MdNode], by_in
         if row is not None and row.index in unnamed:
             unnamed.discard(row.index)
             row.label = truncate(text, 40)
+
+
+def _place_twins_by_text(base: Sequence[UINode], md: Sequence[MdNode], by_index: Mapping[int, UINode]) -> None:
+    """Look-alike controls with no named container to tell them apart (the "Edit" of each section, the
+    menu button of each list row: web pages reach us as one flat list) take the text just before them
+    in reading order, so each keeps an id of its own across snapshots instead of one bound to this
+    snapshot's tokens: the nearest heading when no twin shares it, else the nearest text that is not a
+    control's own caption when no twin shares that. Twins that neither tells apart stay token-bound."""
+    groups: dict[tuple[str, str | None, str, tuple[str, ...]], list[UINode]] = {}
+    for n in base:
+        if is_ambiguous_key(n.key) and n.role in _OPERABLE_ROLES:
+            groups.setdefault((n.role, n.identifier, n.label, tuple(n.within)), []).append(n)
+    if not groups:
+        return
+    line_of = {n.index: n.line for n in md if n.index is not None}
+    texts: list[tuple[int, str, bool, frozenset[int]]] = []
+    for t in md:
+        if t.role not in {"AXStaticText", "AXHeading"}:
+            continue
+        text = normalize_text(_first(t.value, t.title, t.label, ""))
+        if not text:
+            continue
+        chain = [cur for cur in _node_chain(by_index.get(_owner(t)), by_index)]
+        heading = t.role == "AXHeading" or any(c.role == "AXHeading" for c in chain[:2])
+        caption = any(c.role in _OPERABLE_ROLES for c in chain)
+        if heading or not caption:
+            texts.append((t.line, text, heading, frozenset(c.index for c in chain)))
+
+    def before(n: UINode, headings: bool) -> str | None:
+        at = line_of.get(n.index)
+        if at is None:
+            return None
+        for line, text, heading, chain in reversed(texts):
+            if line >= at or n.index in chain or (headings and not heading):
+                continue
+            if at - line > _NEAR_TEXT_LINES:
+                return None
+            return text if text != n.label else None
+        return None
+
+    changed = False
+    for twins in groups.values():
+        by_heading = [before(n, True) for n in twins]
+        by_text = [before(n, False) for n in twins]
+        headings, others = Counter(by_heading), Counter(by_text)
+        for n, head, other in zip(twins, by_heading, by_text, strict=True):
+            near = head if head is not None and headings[head] == 1 else other
+            if near is not None and (near == head or others[near] == 1):
+                n.within = [f'near "{truncate(near, 40)}"', *n.within][:3]
+                changed = True
+    if changed:
+        assign_keys(base)
 
 
 def _ancestors_of(n: UINode, by_index: Mapping[int, UINode]) -> list[str]:
