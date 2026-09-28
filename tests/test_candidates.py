@@ -1119,6 +1119,13 @@ class TestPageTexts:
         cands = [c for c in build_candidates(self._page()) if c.kind == "click"]
         assert summaries(cands) == ['click Button "Apply"', 'click the text "Referral"']
 
+    def test_a_text_that_reads_as_destructive_asks_first(self) -> None:
+        snap = self._page()
+        referral = next(n for n in snap.nodes if n.label == "Referral")
+        referral.help = "Permanently delete the account"
+        (text,) = [c for c in build_candidates(snap) if "the text" in c.summary]
+        assert text.destructive
+
     def test_texts_outside_a_web_page_are_not_offered(self) -> None:
         snap = self._page()
         snap.nodes = [n for n in snap.nodes if n.role != "AXWebArea"]

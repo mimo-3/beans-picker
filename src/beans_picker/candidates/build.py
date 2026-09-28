@@ -269,7 +269,7 @@ class _Drafts:
                 key=f"click|{n.key}",
                 summary=f'click the text "{truncate(n.label, 40)}"',
                 target=n,
-                destructive=is_destructive_label(n.label),
+                destructive=is_destructive_control(n, self.ctx),
             )
 
     def add_click(self, n: UINode, *, destructive: bool = False) -> None:
