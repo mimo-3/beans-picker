@@ -739,3 +739,24 @@ def test_rows_with_the_same_heading_fall_back_to_a_text_no_other_row_shares() ->
         if n.role == "AXPopUpButton"
     ]
     assert [n.within[0] for n in menus] == ['near "Open"', 'near "Closed"']
+
+
+def test_a_web_pages_look_alike_lists_are_placed_by_the_text_before_them() -> None:
+    raw = web_list("a", [("Designer", "Open")])
+    elements = raw["elements"]
+    assert isinstance(elements, list)
+    elements += [
+        {"element_index": 8, "element_token": "a:8", "role": "AXList", "parent_index": 1, "depth": 2},
+        {"element_index": 9, "element_token": "a:9", "role": "AXList", "parent_index": 1, "depth": 2},
+    ]
+    raw["tree_markdown"] = "\n".join(
+        [
+            str(raw["tree_markdown"]),
+            '    - AXStaticText = "Users"',
+            "    - [8] AXList",
+            '    - AXStaticText = "Company"',
+            "    - [9] AXList",
+        ]
+    )
+    lists = [n for n in build_snapshot(raw, 1, 1).nodes if n.role == "AXList"]
+    assert [n.within[0] for n in lists] == ['near "Users"', 'near "Company"']

@@ -50,6 +50,8 @@ _OPERABLE_ROLES: Final = frozenset(
         "AXDisclosureTriangle", "AXSwitch", "AXTab",
     }
 )  # fmt: skip
+# Controls placed by nearby text, with the areas that scroll: a page's lists come as look-alike, unnamed Lists.
+_PLACED_ROLES: Final = _OPERABLE_ROLES | {"AXList", "AXScrollArea", "AXTable", "AXOutline"}
 # How many tree lines back to look for the text that tells a look-alike control apart.
 _NEAR_TEXT_LINES: Final = 40
 # The driver's own overlay (agent cursor) sits above everything and is never "the front app".
@@ -387,7 +389,7 @@ def _place_twins_by_text(base: Sequence[UINode], md: Sequence[MdNode], by_index:
     control's own caption when no twin shares that. Twins that neither tells apart stay token-bound."""
     groups: dict[tuple[str, str | None, str, tuple[str, ...]], list[UINode]] = {}
     for n in base:
-        if is_ambiguous_key(n.key) and n.role in _OPERABLE_ROLES:
+        if is_ambiguous_key(n.key) and n.role in _PLACED_ROLES:
             groups.setdefault((n.role, n.identifier, n.label, tuple(n.within)), []).append(n)
     if not groups:
         return
