@@ -825,6 +825,12 @@ class TestDescribe:
             "effect_hint": "chooses this menu command",
         }
 
+    def test_a_browsers_menu_command_says_it_is_not_the_page(self) -> None:
+        settings = item("Chrome", "設定…")
+        d = describe(cand("menu", menu=settings), snap_of([node(1, "AXWebArea", "Profile")], [settings]))
+        assert d["scope"] == "the browser's own menu bar, not the web page shown in the window"
+        assert "scope" not in describe(cand("menu", menu=settings), snap_of([], [settings]))
+
     def test_the_view_hint_is_trimmed_to_200(self) -> None:
         menu = [item("View", f"Mode number {i:02d} with a long name") for i in range(9)]
         d = describe(cand("menu", menu=menu[0]), snap_of([], menu))
