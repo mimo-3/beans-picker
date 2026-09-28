@@ -300,3 +300,26 @@ async def test_a_popup_choice_via_jev_enters_the_text(tmp_path: Path) -> None:
     out = await act_tool(session, {"pid": 1, "instruction": "size large", "text": "Large"})
     assert out["status"] == "done"
     assert session._jev.states[0]["text"] == "Large"
+
+
+def _dialog_window(open_: bool) -> Snapshot:
+    elements: list[JsonValue] = [el(0, "AXWindow", title="Tags"), el(1, "AXButton", 0, 1, label="Manage tags")]
+    md = ['- [0] AXWindow "Tags"', '  - [1] AXButton "Manage tags"']
+    if open_:
+        elements += [el(2, "AXTextField", 0, 1, label="Tag name"), el(3, "AXButton", 0, 1, label="Add tag")]
+        md += ['  - [2] AXTextField "Tag name"', '  - [3] AXButton "Add tag"']
+    return build_snapshot({"elements": elements, "tree_markdown": "\n".join(md), "window_title": "Tags"}, 1, 1)
+
+
+async def test_an_act_that_brings_up_controls_hands_back_their_ids(tmp_path: Path) -> None:
+    closed, opened = _dialog_window(False), _dialog_window(True)
+    manage = next(c for c in build_candidates(closed) if "Manage tags" in c.summary)
+    session = FakeSession([closed, opened, opened], cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "open tag management", "candidateId": manage.id})
+    assert out["status"] == "done"
+    new = {c["id"]: c["does"] for c in out["newCandidates"]}
+    later = {c.id: c.summary for c in build_candidates(opened, BuildOptions(list_text_kinds=True))}
+    assert set(new) <= set(later)
+    assert any("Add tag" in d for d in new.values())
+    assert any("Tag name" in d for d in new.values())
+    assert not any("Manage tags" in d for d in new.values())
