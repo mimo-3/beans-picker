@@ -605,3 +605,28 @@ async def test_ms_is_the_elapsed_time_rounded_half_up() -> None:
     ex = Executor(CallDriver(), Reobserve(), menu_keys=FakeMenuKeys(), clock=lambda: next(ticks))
     r = await ex.execute(cand("click", BTN), WIN)
     assert r.ms == 13
+
+
+PAGE = node(0, "AXWebArea", "Page", frame=frame(100, 80, 400, 300))
+
+
+async def test_a_web_pages_uncovered_button_is_pressed_at_its_centre() -> None:
+    target = node(1, "AXButton", "Save", parent=0, frame=frame(150, 100))
+    caption = node(2, "AXStaticText", "Save", parent=1, frame=frame(152, 104, 16, 12))
+    driver = geometry_driver(scripts={"click": [ok()]})
+    ex, again = executor(driver)
+    r = await ex.execute(cand("click", target), snap([PAGE, target, caption]))
+    assert r.ok
+    assert r.route == ["pixel"]
+    assert driver.calls[-1] == ("click", {"pid": 1, "window_id": 1, "x": 120, "y": 120})
+    assert again.count == 0
+
+
+async def test_a_web_button_under_a_popover_is_pressed_by_token() -> None:
+    target = node(1, "AXButton", "Save", parent=0, frame=frame(150, 100))
+    popover = node(3, "AXGroup", "Menu", parent=0, frame=frame(140, 90, 80, 80))
+    driver = CallDriver()
+    ex, _ = executor(driver)
+    r = await ex.execute(cand("click", target), snap([PAGE, target, popover]))
+    assert r.route == ["click"]
+    assert driver.calls == [("click", {"pid": 1, "element_token": "t:1"})]

@@ -245,6 +245,17 @@ class Executor:
     async def _press(
         self, node: UINode, snap: Snapshot, route: list[str], *, allow_destructive: bool = False
     ) -> _Outcome:
+        # On a web page an AX press waits about 2 s, a click at the control's centre about 0.2 s. It is
+        # taken only when nothing drawn later on the page (a popover, a toast) covers that point.
+        if node.role in _PIXEL_PRESS_ROLES and in_web_area(snap, node) and uncovered(snap, node):
+            pt = await self._pixels.point(snap, node)
+            if pt is not None:
+                clicked = await self._driver.call(
+                    "click", _PointArgs(pid=snap.pid, window_id=snap.window_id, x=pt.x, y=pt.y)
+                )
+                if clicked.ok:
+                    route.append("pixel")
+                    return to_act(clicked)
         r = await self._with_rebind(
             node,
             route,
@@ -478,6 +489,39 @@ class Executor:
             route.append("rebind")
             r = await self._driver.call(tool, args(again.token))
         return to_act(r)
+
+
+_PIXEL_PRESS_ROLES: Final = frozenset(
+    {"AXButton", "AXLink", "AXCheckBox", "AXRadioButton", "AXTab", "AXPopUpButton", "AXMenuButton", "AXSwitch"}
+)
+
+
+def uncovered(snap: Snapshot, node: UINode) -> bool:
+    """Whether no element after `node` in the tree, other than its own content, lies over its centre."""
+    f = node.frame
+    if f is None:
+        return False
+    cx, cy = f.x + f.w / 2, f.y + f.h / 2
+    by_index = {n.index: n for n in snap.nodes}
+
+    def inside_node(n: UINode) -> bool:
+        cur: UINode | None = n
+        seen: set[int] = set()
+        while cur is not None and cur.index not in seen:
+            if cur.index == node.index:
+                return True
+            seen.add(cur.index)
+            cur = by_index.get(cur.parent if cur.parent is not None else -1)
+        return False
+
+    return not any(
+        o.index > node.index
+        and o.frame is not None
+        and o.frame.x <= cx <= o.frame.x + o.frame.w
+        and o.frame.y <= cy <= o.frame.y + o.frame.h
+        and not inside_node(o)
+        for o in snap.nodes
+    )
 
 
 def _resolve(snap: Snapshot, target: UINode) -> UINode | None:
