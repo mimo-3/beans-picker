@@ -17,6 +17,8 @@ from beans_picker.observe.types import Snapshot, TextNode, UINode
 type JevState = dict[str, JsonValue]
 
 NAMED_CONTROLS: Final = frozenset({"AXButton", "AXLink", "AXPopUpButton", "AXMenuButton"})
+CHANGED_TEXTS: Final = 6
+"""New texts a change names, at most."""
 """Controls a page can name with no text inside them (a file-name button in a table row)."""
 
 
@@ -222,7 +224,9 @@ def change_of(before: Snapshot, after: Snapshot) -> Change:
         if n.role in EDITABLE_ROLES and n.key in was and was[n.key] != _field_value(n)
     ][:4]
     before_texts = {t.value for t in before.texts}
-    texts = [truncate(t, 60) for t in dict.fromkeys(t.value for t in after.texts) if t not in before_texts][:6]
+    texts = [truncate(t, 60) for t in dict.fromkeys(t.value for t in after.texts) if t not in before_texts][
+        :CHANGED_TEXTS
+    ]
     out: Change = {
         "appeared": [x for x in b if x not in a][:12],
         "disappeared": [x for x in a if x not in b][:12],

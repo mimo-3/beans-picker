@@ -14,16 +14,16 @@ from beans_picker.candidates.describe import describe
 from beans_picker.candidates.prune import in_shard_order
 from beans_picker.candidates.types import TEXT_KINDS, ActionCandidate
 from beans_picker.driver.mcp import Driver
-from beans_picker.errors import ForegroundViolation, ToolError, failure
+from beans_picker.errors import DriverError, DriverTimeout, ForegroundViolation, ToolError, failure
 from beans_picker.jev.client import JevUsageOut
 from beans_picker.jev.questions import action_question, action_question_forced
 from beans_picker.jev.rank import Ambiguous, NotFound, Pick, RankSpec, gate, rank
-from beans_picker.jev.state import Change, bare_role, build_state, change_of
+from beans_picker.jev.state import CHANGED_TEXTS, Change, bare_role, build_state, change_of, screen_text
 from beans_picker.observe.snapshot import in_web_area
 from beans_picker.observe.types import Snapshot
 from beans_picker.observe.visual import Shot, capture_window, region_change
 from beans_picker.tools.args import ActArgs, Modifier, Step
-from beans_picker.tools.present import ShownCandidate, ShownWindow, show_candidate, show_window
+from beans_picker.tools.present import SCREEN_LINES, ShownCandidate, ShownWindow, show_candidate, show_window
 from beans_picker.tools.session import Target, ToolSession
 from beans_picker.verify.effect import EffectVerdict, VerifyEffect, verify_effect
 
@@ -44,6 +44,10 @@ STATUS: Final[dict[VerifyEffect, ActStatus]] = {
     "none": "no_effect",
 }
 _REFUSED: Final = "cua-driver refused the action"
+_SETTLED_AT_ONCE: Final = frozenset({"set_value", "type_into", "append", "keypad", "toggle"})
+"""Kinds whose effect is the control's own value: once it shows, there is nothing more to wait for."""
+SETTLE_RETAKES: Final = 4
+"""How many more snapshots act takes, at most, while the window's controls keep changing after the effect showed."""
 
 
 class ShownAction(ShownCandidate):
@@ -71,7 +75,9 @@ class ActOutput(TypedDict):
     verification: NotRequired[Verification]
     change: NotRequired[Change]
     candidates: NotRequired[list[ShownCandidate]]
+    screenText: NotRequired[list[str]]
     newCandidates: NotRequired[list[ShownCandidate]]
+    newTotal: NotRequired[int]
     pick: NotRequired[PickOut]
     jev: NotRequired[JevUsageOut]
     steps: NotRequired[list[ActOutput]]
@@ -119,21 +125,28 @@ async def act_tool(session: ToolSession, args: ActArgs) -> ActOutput:
 def _with_new_candidates(
     session: ToolSession, t: Target, out: ActOutput, before: Snapshot, after: Snapshot
 ) -> ActOutput:
-    """The controls the action brought up (a dialog's fields, a menu's items), with their ids, so the
-    next step can use them without another observe."""
+    """What the action brought up (a dialog, a menu, the next page): its texts and its controls with their ids, so
+    the next step can use them without another observe."""
     if after is before or out["status"] not in CARRY_ON:
         return out
     opts = BuildOptions(list_text_kinds=True, learned=session.menu_keys.table_for(t.pid))
     had = {c.key for c in build_candidates(before, opts)}
-    new = [
-        show_candidate(c) for c in build_candidates(after, opts) if c.key not in had and c.kind not in ("menu", "key")
-    ][:NEW_CANDIDATES]
+    now = build_candidates(after, opts)
+    new = [c for c in now if c.key not in had and c.kind not in ("menu", "key")]
+    gone = len(had - {c.key for c in now})
+    # More new texts than `change` names: the page's content changed, so its text is shown too.
+    was = {x.value for x in before.texts}
+    if new or gone or sum(x.value not in was for x in after.texts) > CHANGED_TEXTS:
+        out["screenText"] = screen_text(after, SCREEN_LINES)
     if new:
-        out["newCandidates"] = new
+        out["newCandidates"] = [show_candidate(c) for c in new[:NEW_CANDIDATES]]
+        if len(new) > NEW_CANDIDATES:
+            out["newTotal"] = len(new)
     return out
 
 
-NEW_CANDIDATES: Final = 20
+NEW_CANDIDATES: Final = 80
+"""As many as a plain observe lists, so a step that opens a new page needs no observe."""
 
 
 def _without_window(out: ActOutput) -> ActOutput:
@@ -300,12 +313,12 @@ async def _execute(
         if chosen.kind == "toggle" and target is not None and target.exact is not True and target.frame is not None
         else None
     )
-    # This app's pages already ignored an AXValue write once: type straight away rather than write and wait.
+    # A web page's own copy of a field's value (a React form's state) follows typing, not an AXValue write: the write
+    # shows in the field, yet the page saves what it had.
     retype = _retypeable(chosen, before)
-    type_first = retype and t.pid in session.types_into_web_fields
     res = (
         await executor.retype_field(chosen, before)
-        if type_first
+        if retype
         else await executor.execute(chosen, before, modifiers, allow_destructive=allow_destructive)
     )
     action = _shown_action(chosen)
@@ -327,8 +340,8 @@ async def _execute(
     pixels = _toggled_pixels(session, driver, t, shot, chosen) if shot is not None else None
     verdict, after, snapshots = await _judge(chosen, before, snapshot, pixels)
     seen.after = after
-    if not type_first and retype and verdict.effect in ("wrong", "none"):
-        # The page kept its own copy of the value and ignored the AXValue write (or put it back): type it instead.
+    if retype and verdict.effect in ("wrong", "none"):
+        # A keystroke delivered in the background can be dropped: type the text once more.
         again = await executor.retype_field(chosen, after)
         action["route"] = [*action.get("route", []), *again.route]
         if not again.ok:
@@ -338,8 +351,6 @@ async def _execute(
         verdict, after, more = await _judge(chosen, before, snapshot)
         seen.after = after
         snapshots += more
-        if verdict.effect == "ok":
-            session.types_into_web_fields.add(t.pid)
     # A row's selection is often not in the accessibility tree: an unchanged window does not show it was not selected.
     if (
         verdict.effect == "none"
@@ -367,12 +378,10 @@ async def _execute(
 
 def _retypeable(c: ActionCandidate, snap: Snapshot) -> bool:
     target = c.target
-    return (
-        c.kind == "set_value"
-        and target is not None
-        and target.role in ("AXTextField", "AXSearchField")
-        and in_web_area(snap, target)
-    )
+    if c.kind != "set_value" or target is None or not in_web_area(snap, target):
+        return False
+    # A typed line break is a Return, which submits a form or sends a message: text with one is written instead.
+    return target.role in ("AXTextField", "AXSearchField", "AXTextArea") and "\n" not in (c.text or "")
 
 
 async def _judge(
@@ -381,7 +390,8 @@ async def _judge(
     snapshot: Callable[[], Awaitable[Snapshot]],
     pixels: Callable[[], Awaitable[EffectVerdict | None]] | None = None,
 ) -> tuple[EffectVerdict, Snapshot, int]:
-    """Retakes snapshots until the effect shows; the count decides, not a wait."""
+    """Retakes snapshots until the effect shows, then until the window's controls stop changing; the count decides,
+    not a wait."""
     retakes = config.effect_retakes()
     after = await snapshot()
     n = 1
@@ -392,9 +402,34 @@ async def _judge(
             if seen is not None:
                 verdict = seen
         if verdict.effect in ("ok", "unverified") or n >= retakes:
-            return verdict, after, n
+            break
         after = await snapshot()
         n += 1
+    if verdict.effect != "ok" or c.kind in _SETTLED_AT_ONCE:
+        return verdict, after, n
+    # A page may still be loading what the step brought up: wait until two snapshots offer the same controls. Their
+    # values and texts are left out, so a clock or a spinner does not keep the wait going.
+    for _ in range(SETTLE_RETAKES):
+        try:
+            later = await snapshot()
+        except (ToolError, DriverError, DriverTimeout):
+            # The step already ran and its effect showed: a snapshot that fails now only ends the wait.
+            break
+        n += 1
+        same = _controls(later) == _controls(after)
+        after = later
+        if same:
+            break
+    again = verify_effect(c, before, after)
+    # A chosen option is judged by its value, which the page may have put back meanwhile; a click by any change,
+    # which a passing notice may have taken away again.
+    return (again if again.effect == "ok" or c.kind in TEXT_KINDS else verdict), after, n
+
+
+def _controls(snap: Snapshot) -> list[tuple[str, str]]:
+    """Roles and names only: a look-alike's key can carry the page's state, which a spinner keeps changing."""
+    modal = [(snap.modal.role, snap.modal.label)] if snap.modal is not None else []
+    return modal + [(n.role, n.label) for n in snap.nodes]
 
 
 def _toggled_pixels(

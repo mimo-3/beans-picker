@@ -46,6 +46,8 @@ INSTRUCTIONS: Final = "\n".join(
         "  status: done | unverified (the field changed but its exact text could not be read) | no_effect | mismatch "
         "(something changed, not what was asked) | ambiguous (choose a candidateId) | needs_confirmation "
         "(irreversible: repeat with allowDestructive) | not_found | failed.",
+        "  When a step brings up something new (a menu, a dialog, another page), the result carries its screenText "
+        "and newCandidates with their ids: act on those directly instead of observing again.",
         "- extract: returns the text or value of the element Jev picks, exactly as read; a table or list comes back "
         "row by row.",
         "Rows scrolled out of view are not on the window until a scroll candidate brings them in.",
@@ -55,6 +57,11 @@ INSTRUCTIONS: Final = "\n".join(
         "handle, Space, arrows, Space.",
         "Speed: observe without an instruction and act with a candidateId make no Jev call. Name the step with an "
         "instruction when the id is not in hand or several controls look alike.",
+        "Fewest replies: observe once, then put every step you can already name in one act with `then`; a step "
+        "whose control appears only after an earlier one takes an instruction and no candidateId. A done step is "
+        "already verified, so do not observe or reopen anything to check it.",
+        "Return and Space press whatever has focus, so they ask for confirmation: pass allowDestructive: true only "
+        "when committing that field or control is what the task asks.",
         "Plan the steps yourself and read each step's status.",
     ]
 )

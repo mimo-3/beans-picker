@@ -149,7 +149,7 @@ class Executor:
         return self._result(out, route, t0)
 
     async def retype_field(self, c: ActionCandidate, snap: Snapshot) -> ActResult:
-        """Retypes a web page's text field as a person would, for when an AXValue write did not reach the page."""
+        """Types a web page's text field as a person would, so the page's own copy of the value follows."""
         t0 = self._clock()
         route: list[str] = []
         out = await self._retype(c, snap, route)
@@ -461,7 +461,13 @@ class Executor:
                 ),
             )
 
-        for k, mods in (("end", ()), ("home", ("shift",))):
+        # Select the whole text: End then Shift+Home in a one-line field, Cmd+Down then Shift+Cmd+Up in a text area.
+        keys = (
+            (("down", ("cmd",)), ("up", ("shift", "cmd")))
+            if target.role == "AXTextArea"
+            else (("end", ()), ("home", ("shift",)))
+        )
+        for k, mods in keys:
             r = await key(k, mods)
             if not r.ok:
                 return r

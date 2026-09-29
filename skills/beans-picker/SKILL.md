@@ -53,9 +53,10 @@ message at the end.
    opens, a dialog's button) goes in `then` too, with an `instruction` and no `candidateId`: Jev
    picks it on the window as it is by then. Opening a menu and choosing its item is one call.
 3. **Read the status** of the last step (and `steps` when it stopped early). Do not observe to see
-   what happened: `change` says what changed, and when the action brought up new controls (a dialog,
-   a menu, the next step of a form) `newCandidates` lists them with their ids, so act on those
-   directly. Observe again only when what you need is in neither.
+   what happened: `change` says what changed, and when the step brought up something new (a menu, a
+   dialog, another page) the result carries its `screenText` and, in `newCandidates`, its controls
+   with their ids. Act on those directly. Observe again only when what you need is in neither (when
+   `newTotal` says more controls came up than were listed, observe with an instruction).
 4. Name a step with an `instruction` (Jev) only when the id is not in hand or several controls look
    alike.
 5. Check once, at the end (see "Before you report success"), not after every step.
@@ -126,9 +127,10 @@ it). Finish it or dismiss it with Escape before going back to the page.
 
 ## Before you report success
 
-- The last action that commits the task (Save, Submit, Issue refund, Request review) returned
-  `done`.
-- A confirmation is visible: `extract` or observe the message ("Saved", "Refund of $34.00
-  issued"), or the list now shows the new state.
-- For tasks with several parts (several tabs, several items), check every part, not only the last.
+- The step that commits the task (Save, Submit, Archive) returned `done`, and its `change` or
+  `screenText` shows the result: a "Saved" message, the new value, the row in its new state. That
+  is the check. Do not reopen an editor or reload the page to look again.
+- If the result does not show there, one `extract` (or one observe) of it is enough.
+- For tasks with several parts (several tabs, several items), every part's step returned `done` and its
+  result shows that part; a part that is only `unverified` still needs its one check.
 - If you could not confirm it, say so. An honest "not done" beats a false "done".

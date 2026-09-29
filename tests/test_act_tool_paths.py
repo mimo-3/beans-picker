@@ -5,11 +5,11 @@ from pathlib import Path
 from beans_picker._json import JsonValue
 from beans_picker.candidates.build import BuildOptions, build_candidates
 from beans_picker.driver.types import Activation, ToolOk, ToolRefused, ToolResult
-from beans_picker.errors import ForegroundViolation
+from beans_picker.errors import ForegroundViolation, ToolError
 from beans_picker.observe.png import Rgba
 from beans_picker.observe.snapshot import build_snapshot
 from beans_picker.observe.types import Snapshot
-from beans_picker.tools.act import act_tool
+from beans_picker.tools.act import NEW_CANDIDATES, SETTLE_RETAKES, act_tool
 from tests.fakes import FakeDriver
 from tests.helpers import blank, encode_png, paint, snap_fixture
 from tests.test_act import first, popup_window, row_window, text_window
@@ -224,24 +224,18 @@ async def test_a_rows_unchanged_click_is_unverified_not_no_effect(tmp_path: Path
     assert out["verification"] == {"snapshots": 5}
 
 
-async def test_the_retype_after_an_ignored_write_is_judged_against_the_first_before(tmp_path: Path) -> None:
-    value = "120"
-
+async def test_a_field_that_stays_wrong_after_a_second_typing_is_judged_against_the_first_before(
+    tmp_path: Path,
+) -> None:
     def on_call(tool: str, args: dict[str, object]) -> ToolResult:
-        nonlocal value
-        if tool == "set_value":
-            value = "120"
-        if tool == "type_text":
-            value = "wrong"
         return _ok()
 
-    session = FakeSession(lambda: text_window(value), driver=FakeDriver(on_call), cache=tmp_path)
+    windows = iter([text_window("120"), text_window("120"), *[text_window("9x")] * 20])
+    session = FakeSession(lambda: next(windows), driver=FakeDriver(on_call), cache=tmp_path)
     set_value = first(build_candidates(text_window("120"), BuildOptions(list_text_kinds=True, text="9")), "set_value")
     out = await act_tool(session, {"pid": 1, "instruction": "seats 9", "candidateId": set_value.id, "text": "9"})
     assert out["status"] == "mismatch"
-    assert out["verification"]["snapshots"] == 10
-    assert out["action"]["route"] == ["set_value", "press_key", "press_key", "type_text"]
-    assert 1 not in session.types_into_web_fields
+    assert out["action"]["route"] == ["press_key", "press_key", "type_text", "press_key", "press_key", "type_text"]
 
 
 async def test_a_failed_retype_reports_the_window_it_left(tmp_path: Path) -> None:
@@ -255,8 +249,7 @@ async def test_a_failed_retype_reports_the_window_it_left(tmp_path: Path) -> Non
     out = await act_tool(session, {"pid": 1, "instruction": "seats 9", "candidateId": set_value.id, "text": "9"})
     assert list(out) == ["status", "code", "window", "message", "action"]
     assert (out["status"], out["code"], out["message"]) == ("failed", "key_refused", "no keys today")
-    assert out["action"]["route"] == ["set_value", "press_key"]
-    assert session.snapshots == 6
+    assert out["action"]["route"] == ["press_key"]
 
 
 def _checkbox_window(value: str | None) -> Snapshot:
@@ -302,9 +295,13 @@ async def test_a_popup_choice_via_jev_enters_the_text(tmp_path: Path) -> None:
     assert session._jev.states[0]["text"] == "Large"
 
 
-def _dialog_window(open_: bool) -> Snapshot:
+def _dialog_window(open_: bool, *, loading: bool = False) -> Snapshot:
     elements: list[JsonValue] = [el(0, "AXWindow", title="Tags"), el(1, "AXButton", 0, 1, label="Manage tags")]
     md = ['- [0] AXWindow "Tags"', '  - [1] AXButton "Manage tags"']
+    if loading:
+        # Placeholders for what is still loading.
+        elements += [el(i, "AXGroup", 0, 1) for i in range(10, 15)]
+        md += [f"  - [{i}] AXGroup" for i in range(10, 15)]
     if open_:
         elements += [el(2, "AXTextField", 0, 1, label="Tag name"), el(3, "AXButton", 0, 1, label="Add tag")]
         md += ['  - [2] AXTextField "Tag name"', '  - [3] AXButton "Add tag"']
@@ -323,3 +320,81 @@ async def test_an_act_that_brings_up_controls_hands_back_their_ids(tmp_path: Pat
     assert any("Add tag" in d for d in new.values())
     assert any("Tag name" in d for d in new.values())
     assert not any("Manage tags" in d for d in new.values())
+    assert "screenText" in out
+    assert "newTotal" not in out
+    assert out["verification"] == {"snapshots": 2}
+
+
+async def test_a_click_waits_while_the_page_is_still_loading_and_reports_where_it_landed(tmp_path: Path) -> None:
+    closed, loading, opened = _dialog_window(False), _dialog_window(False, loading=True), _dialog_window(True)
+    manage = next(c for c in build_candidates(closed) if "Manage tags" in c.summary)
+    session = FakeSession([closed, loading, opened, opened, closed], cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "open tag management", "candidateId": manage.id})
+    assert out["status"] == "done"
+    assert out["verification"] == {"snapshots": 3}
+    assert any("Add tag" in x for x in out["change"]["appeared"])
+    assert any("Tag name" in c["does"] for c in out["newCandidates"])
+
+
+async def test_a_field_entry_does_not_wait_for_the_window_to_settle(tmp_path: Path) -> None:
+    before = text_window("")
+    field = first(build_candidates(before, BuildOptions(list_text_kinds=True, text="Ada")), "set_value")
+    session = FakeSession([before, text_window("Ada"), text_window("Ada!")], cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "name", "candidateId": field.id, "text": "Ada"})
+    assert out["status"] == "done"
+    assert out["verification"]["snapshots"] == 1
+    assert "screenText" not in out
+
+
+def _page_window(buttons: int) -> Snapshot:
+    elements: list[JsonValue] = [el(0, "AXWindow", title="Shop"), el(1, "AXButton", 0, 1, label="Next page")]
+    md = ['- [0] AXWindow "Shop"', '  - [1] AXButton "Next page"']
+    for i in range(2, buttons + 2):
+        elements.append(el(i, "AXButton", 0, 1, label=f"Item {i}"))
+        md.append(f'  - [{i}] AXButton "Item {i}"')
+    return build_snapshot({"elements": elements, "tree_markdown": "\n".join(md), "window_title": "Shop"}, 1, 1)
+
+
+async def test_a_step_that_opens_a_long_page_lists_as_many_new_ids_as_an_observe_and_counts_the_rest(
+    tmp_path: Path,
+) -> None:
+    before, after = _page_window(0), _page_window(NEW_CANDIDATES + 5)
+    nxt = next(c for c in build_candidates(before) if "Next page" in c.summary)
+    session = FakeSession([before, after], cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "next page", "candidateId": nxt.id})
+    assert len(out["newCandidates"]) == NEW_CANDIDATES
+    assert out["newTotal"] == NEW_CANDIDATES + 5
+
+
+async def test_a_page_whose_controls_keep_changing_ends_the_wait_after_a_few_snapshots(tmp_path: Path) -> None:
+    closed = _dialog_window(False)
+    manage = next(c for c in build_candidates(closed) if "Manage tags" in c.summary)
+    frames = [closed, *[_dialog_window(True, loading=i % 2 == 0) for i in range(20)]]
+    session = FakeSession(frames, cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "open tag management", "candidateId": manage.id})
+    assert out["status"] == "done"
+    assert out["verification"] == {"snapshots": 1 + SETTLE_RETAKES}
+
+
+async def test_a_choice_the_page_puts_back_while_it_settles_is_not_reported_done(tmp_path: Path) -> None:
+    closed, is_open, chosen = popup_window("Small", False), popup_window("Small", True), popup_window("Large", False)
+    session = FakeSession([closed, is_open, chosen, chosen, closed], jev_picking("PopUpButton"), cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "size large", "text": "Large"})
+    assert out["status"] != "done"
+
+
+async def test_a_snapshot_that_fails_while_the_page_settles_keeps_the_step_done(tmp_path: Path) -> None:
+    closed, opened = _dialog_window(False), _dialog_window(True)
+    manage = next(c for c in build_candidates(closed) if "Manage tags" in c.summary)
+    frames = iter([closed, closed, opened])  # the first finds the target
+
+    def snap() -> Snapshot:
+        frame = next(frames, None)
+        if frame is None:
+            raise ToolError("window_not_found", "pid 1 has no window 1")
+        return frame
+
+    session = FakeSession(snap, cache=tmp_path)
+    out = await act_tool(session, {"pid": 1, "instruction": "open tag management", "candidateId": manage.id})
+    assert out["status"] == "done"
+    assert out["verification"] == {"snapshots": 1}

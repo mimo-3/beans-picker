@@ -23,7 +23,9 @@ from beans_picker.menus.menukeys import MenuKeys
 from beans_picker.observe.exacttext import ExactText
 from beans_picker.observe.helpers import Helpers
 from beans_picker.observe.snapshot import observe
+from beans_picker.observe.swatch import name_swatches, swatches
 from beans_picker.observe.types import Snapshot
+from beans_picker.observe.visual import capture_window
 from beans_picker.paths import Paths
 from beans_picker.tools.args import TargetArgs
 
@@ -48,9 +50,6 @@ class Target:
 
 class ToolSession(Protocol):
     """What the tools use of a Session."""
-
-    types_into_web_fields: set[int]
-    """Apps whose web pages ignored an AXValue write to a text field: their fields are typed into."""
 
     @property
     def paths(self) -> Paths: ...
@@ -88,7 +87,6 @@ class Session:
         self._jev_factory: Callable[[], JevLike] = jev_factory if jev_factory is not None else JevClient
         self._runner = runner
         self._sleep = sleep
-        self.types_into_web_fields: set[int] = set()
         self._paths = paths if paths is not None else Paths.default()
         self.helpers = Helpers(self._paths, runner=runner)
         self.exact_text = ExactText(self.helpers, self._paths, runner=runner, clock=clock)
@@ -180,16 +178,32 @@ class Session:
         raise ToolError("bad_target", "give app, pid or windowId")
 
     async def snapshot(self, t: Target) -> Snapshot:
-        """A fresh snapshot of the target window, with the app's menu shortcuts learned."""
+        """A fresh snapshot of the target window, with the app's menu shortcuts learned and its colour swatches
+        named."""
         driver = await self.driver()
         await self._menu_keys.learn(t.pid)
-        return await observe(
-            driver,
-            t.pid,
-            t.window_id,
-            front_pid=functools.partial(front_pid, runner=self._runner),
-            read_exact=self.exact_text.read_fields,
-        )
+
+        def look() -> Awaitable[Snapshot]:
+            return observe(
+                driver,
+                t.pid,
+                t.window_id,
+                front_pid=functools.partial(front_pid, runner=self._runner),
+                read_exact=self.exact_text.read_fields,
+            )
+
+        snap = await look()
+        seen = {n.frame for n in swatches(snap)}
+        if not seen:
+            return snap
+        shot = await capture_window(driver, t.pid, t.window_id, paths=self._paths)
+        # A capture leaves cua-driver holding only one element of the window, so the next element token would miss:
+        # observe once more to fill it again.
+        snap = await look()
+        if shot is not None:
+            # Only swatches still where the capture saw them: a palette that moved meanwhile would get another's colour.
+            name_swatches([n for n in swatches(snap) if n.frame in seen], shot)
+        return snap
 
     async def close(self) -> None:
         """Ends the session: cancels queued and running work, then closes the sentinel, driver and Jev client."""

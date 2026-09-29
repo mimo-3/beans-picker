@@ -197,13 +197,11 @@ async def test_closes_the_popup_again_and_lists_its_items_when_none_has_the_titl
     assert session.fake_driver.tools == ["click", "press_key"]
 
 
-async def test_retypes_a_web_text_field_whose_page_ignored_the_axvalue_write(tmp_path: Path) -> None:
+async def test_types_into_a_web_text_field_so_the_pages_own_copy_follows(tmp_path: Path) -> None:
     value = "120"
 
     def on_call(tool: str, args: dict[str, object]) -> ToolResult:
         nonlocal value
-        if tool == "set_value":
-            value = ""
         if tool == "type_text":
             text = args.get("text")
             value = text if isinstance(text, str) else ""
@@ -214,15 +212,51 @@ async def test_retypes_a_web_text_field_whose_page_ignored_the_axvalue_write(tmp
     out = await act_tool(
         session, {"pid": 1, "instruction": "set seats to 210", "candidateId": set_value.id, "text": "210"}
     )
-    assert session.fake_driver.tools == ["set_value", "press_key", "press_key", "type_text"]
+    assert session.fake_driver.tools == ["press_key", "press_key", "type_text"]
     assert out["status"] == "done"
     assert '"210"' in out["message"]
-    session.calls.clear()
-    again = await act_tool(
-        session, {"pid": 1, "instruction": "set seats to 12", "candidateId": set_value.id, "text": "12"}
-    )
-    assert session.fake_driver.tools == ["press_key", "press_key", "type_text"]
-    assert again["status"] == "done"
+
+
+async def test_selects_a_whole_text_area_before_typing_over_it(tmp_path: Path) -> None:
+    value = "old\nnotes"
+
+    def on_call(tool: str, args: dict[str, object]) -> ToolResult:
+        nonlocal value
+        if tool == "type_text":
+            text = args.get("text")
+            value = text if isinstance(text, str) else ""
+        return _confirmed()
+
+    def window() -> Snapshot:
+        return _field_window("Notes", "AXTextArea", "Memo", value, f"memo:{value}")
+
+    session = FakeSession(window, driver=FakeDriver(on_call), cache=tmp_path)
+    memo = first(build_candidates(window(), BuildOptions(list_text_kinds=True, text="new")), "set_value")
+    out = await act_tool(session, {"pid": 1, "instruction": "memo", "candidateId": memo.id, "text": "new notes"})
+    assert out["status"] == "done"
+    keys = [(a["key"], a["modifiers"]) for t, a in session.calls if t == "press_key"]
+    assert keys == [("down", ["cmd"]), ("up", ["shift", "cmd"])]
+
+
+@pytest.mark.parametrize("role", ["AXTextField", "AXTextArea"])
+async def test_writes_text_with_a_line_break_rather_than_pressing_return(tmp_path: Path, role: str) -> None:
+    value = ""
+
+    def on_call(tool: str, args: dict[str, object]) -> ToolResult:
+        nonlocal value
+        v = args.get("value")
+        if tool == "set_value" and isinstance(v, str):
+            value = v
+        return _confirmed()
+
+    def window() -> Snapshot:
+        return _field_window("Chat", role, "Message", value, f"msg:{value}")
+
+    session = FakeSession(window, driver=FakeDriver(on_call), cache=tmp_path)
+    field = first(build_candidates(window(), BuildOptions(list_text_kinds=True, text="a")), "set_value")
+    await act_tool(session, {"pid": 1, "instruction": "message", "candidateId": field.id, "text": "a\nb"})
+    assert "type_text" not in session.fake_driver.tools
+    assert "set_value" in session.fake_driver.tools
 
 
 async def test_opens_a_rows_context_menu_with_axshowmenu_in_the_background(tmp_path: Path) -> None:
@@ -248,7 +282,8 @@ async def test_runs_the_steps_in_then_on_the_window_each_step_left_and_stops_at_
 
     def on_call(tool: str, args: dict[str, object]) -> ToolResult:
         nonlocal value
-        v = args.get("value")
+        # A web field is typed into; an AXValue write would carry `value` instead.
+        v = args.get("text", args.get("value"))
         if isinstance(v, str) and v != "stuck":
             value = v
         return _confirmed()
@@ -290,7 +325,7 @@ async def test_a_step_that_raises_keeps_the_steps_before_it(tmp_path: Path) -> N
 
     def on_call(tool: str, args: dict[str, object]) -> ToolResult:
         nonlocal value
-        v = args.get("value")
+        v = args.get("text", args.get("value"))
         if isinstance(v, str):
             value = v
         return _confirmed()

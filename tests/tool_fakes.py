@@ -107,7 +107,6 @@ class FakeSession:
         self._paths = Paths(cache=cache if cache is not None else Path("/nonexistent/beans-picker-test-cache"))
         self._menu_keys = MenuKeys(Helpers(self._paths), self._paths)
         self._target = target
-        self.types_into_web_fields: set[int] = set()
         self.snapshots = 0
         self.jev_calls = 0
 
