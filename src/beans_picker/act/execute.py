@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Literal, NotRequired, Protocol, TypedDict, assert_never
 
+from beans_picker import config
 from beans_picker._aio import Clock
 from beans_picker._json import quote
 from beans_picker._numbers import round_half_up
@@ -282,6 +283,13 @@ class Executor:
         self, node: UINode, snap: Snapshot, modifiers: Sequence[str], route: list[str]
     ) -> _Outcome:
         # AX actions carry no modifiers, so a modified click is a pixel click posted to the pid.
+        if not config.pixel_clicks():
+            return _Outcome(
+                ok=False,
+                code="pixel_disabled",
+                detail="a click with modifier keys is a pixel click, and pixel clicks are turned off "
+                "(BEANS_PICKER_PIXEL=off)",
+            )
         pt = await self._pixels.point(snap, node)
         if pt is None:
             return _Outcome(
