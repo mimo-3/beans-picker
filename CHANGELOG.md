@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `beans-picker record --app <app> --out <file.mp4>` records one window on its own until Ctrl-C
+  (macOS 15 or later), so a demo video does not show the app coming to the front or a window
+  covering it.
+- `BEANS_PICKER_PIXEL=off` sends no pixel clicks: every click is an accessibility press, and a click
+  with modifier keys returns `failed` with the new code `pixel_disabled`.
+- When the app under test comes to the front during `act`, or takes the front while it is launched,
+  the app that was in front before is put back.
+
+### Changed
+
+- The `foreground_violation` message ends with whether the app in front before was put back.
+- A window smaller than 100 × 50 points is passed over when the app has another: macOS puts such a
+  control on a window while it is being recorded, and it was picked as the app's window.
+
 ## [0.4.0] - 2026-09-29
 
 ### Added
