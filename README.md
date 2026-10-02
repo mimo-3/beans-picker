@@ -86,6 +86,7 @@ The agent skill in `skills/beans-picker` tells a model how to use these tools we
 | `JEV_CONNECT_TIMEOUT` | Seconds to wait for a connection to Jev (default 10). |
 | `JEV_READ_TIMEOUT` | Seconds to wait for Jev's answer to one request (default 120). |
 | `BEANS_PICKER_EFFECT_RETAKES` | Fresh snapshots taken to see an effect (default 5). |
+| `BEANS_PICKER_PIXEL` | `off` sends no pixel clicks: every click is an accessibility press (see Recording a demo). |
 | `BEANS_PICKER_LOG_LEVEL` | Level of the server's log on stderr (default `WARNING`). |
 | `TYPESAFE_BASE_URL` | The Jev endpoint (default `https://api.typesafe.ai`); HTTPS only, without URL credentials, query or fragment. Redirects are refused. |
 
@@ -93,11 +94,21 @@ Variables are read from the environment first, then from `.env.local` and `.env`
 
 ## Rules the server keeps
 
-- **Background only.** `bring_to_front`, `invoke_menu`, `move_cursor` and `delivery_mode: "foreground"` are refused before they reach cua-driver. Menu commands run as their keyboard shortcut sent to the app's pid; a command without a known shortcut returns `failed` / `foreground_required`. During `act`, the frontmost app is sampled continuously; if the target app comes to the front, the call stops with `foreground_violation`.
+- **Background only.** `bring_to_front`, `invoke_menu`, `move_cursor` and `delivery_mode: "foreground"` are refused before they reach cua-driver. Menu commands run as their keyboard shortcut sent to the app's pid; a command without a known shortcut returns `failed` / `foreground_required`. During `act`, the frontmost app is sampled continuously; if the target app comes to the front, the call stops with `foreground_violation` and the app that was in front before is put back.
 - **Time limits.** Every request to cua-driver and to Jev has a generous limit (see Configuration), so one that stalls ends its call with `driver_timeout` or `jev_unavailable` instead of blocking the queue. An action whose answer timed out may still have happened: observe before repeating it. At shutdown, the final `end_session` gets 5 seconds.
 - **Screen lock.** While `CGSSessionScreenIsLocked` is set, every tool refuses with `screen_locked` and does nothing. A failed or unreadable lock check refuses with `screen_lock_unavailable`.
 - **One call at a time.** Tool calls are queued, so two actions never interleave on the desktop.
 - **Destructive actions** are marked, not hidden: `act` returns `needs_confirmation` unless `allowDestructive` is set, whoever picked the action. Return and Space also require confirmation because they can activate a focused button. Pop-up options are checked again after opening. This label-based check is a precaution, not an authorization boundary: apps can mislabel controls, and a checkbox can have irreversible side effects.
+
+## Recording a demo
+
+A recording of the whole display shows every moment an app comes to the front. Three things keep it out of the video:
+
+- **Record the window, not the display.** `beans-picker record --app Calculator --out demo.mp4` records the app's window on its own until Ctrl-C (macOS 15 or later, H.264). The picture is the same whether the window is covered or in front. The terminal or agent that runs the command needs the Screen Recording permission.
+- **Launch the app before recording starts.** An app can take the front for a moment while it starts. beans-picker puts the app that was in front back, but the moment can still be seen on a display recording.
+- **`BEANS_PICKER_PIXEL=off`** when an app comes forward on a pixel click. Every click is then an accessibility press (about 2.5 s each instead of 0.2 s), and a click with modifier keys returns `failed` / `pixel_disabled`.
+
+An app that activates itself (a new window, a dialog) cannot be stopped from outside. beans-picker sees it within about 80 ms and puts the previous app back; the `act` call still reports `foreground_violation`, and its message says whether the app was put back.
 
 ## How `act` works
 
