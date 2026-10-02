@@ -99,6 +99,14 @@ class PixelMapper:
             return None
         return Point(round_half_up((cx - g.bounds.x) * g.scale), round_half_up((cy - g.bounds.y) * g.scale))
 
+    async def visible(self, snap: Snapshot, point: Point) -> bool:
+        """Whether a screenshot pixel is inside the window and not covered by another window of the app."""
+        g = await self._geometry_of(snap)
+        if g is None or not (0 <= point.x < g.bounds.width * g.scale and 0 <= point.y < g.bounds.height * g.scale):
+            return False
+        x, y = g.bounds.x + point.x / g.scale, g.bounds.y + point.y / g.scale
+        return not any(_covers(w, g, x, y) for w in g.others)
+
     async def _geometry_of(self, snap: Snapshot) -> _Geometry | None:
         # Sheets or new windows can cover the point, so the cache holds only while the window set is unchanged.
         shape = window_shape(snap)
