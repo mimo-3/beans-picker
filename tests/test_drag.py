@@ -6,11 +6,12 @@ import pytest
 
 from beans_picker._json import JsonObject, JsonValue
 from beans_picker.candidates.build import build_candidates
+from beans_picker.driver.app import WINDOW_CHECK_INTERVAL_S
 from beans_picker.observe.types import Snapshot
-from beans_picker.tools.act import act_tool
+from beans_picker.tools.act import _judge, act_tool
 from beans_picker.tools.args import ActArgs, act_args, check_arguments
-from tests.act_support import frame, geometry_driver, node, snap, window
-from tests.fakes import FakeDriver
+from tests.act_support import cand, frame, geometry_driver, node, snap, window
+from tests.fakes import FakeClock, FakeDriver
 from tests.tool_fakes import FakeSession, shown
 
 
@@ -95,7 +96,7 @@ async def test_drag_by_offset_adds_pixels_without_scaling_the_offset() -> None:
 async def test_drag_in_then_uses_the_previous_steps_fresh_source_frame() -> None:
     before = _window()
     moved = snap([replace(before.nodes[0], frame=frame(200, 150)), before.nodes[1]], signature="moved")
-    session = _session(before, moved, moved, shown(moved, "Dropped"))
+    session = _session(before, moved, moved, moved, moved, shown(moved, "Dropped"))
     args = _args(before, {"dx": 100, "dy": 100})
     args["then"] = [_args(before)]
 
@@ -423,6 +424,63 @@ async def test_a_drag_that_moves_then_snaps_back_reports_no_effect() -> None:
     assert out["status"] == "no_effect"
     assert session.snapshots >= 3
     assert session.fake_driver.tools.count("drag") == 1
+
+
+async def test_a_drag_that_snaps_back_after_two_equal_reads_reports_no_effect() -> None:
+    before = _window()
+    before.nodes.insert(0, node(0, "AXWindow", frame=frame(100, 50, 400, 300)))
+    moved = snap([before.nodes[0], replace(before.nodes[1], frame=frame(300, 200)), before.nodes[2]])
+    session = _session(before, moved, moved, before)
+
+    out = await act_tool(session, _args(before))
+
+    assert out["status"] == "no_effect"
+    assert session.snapshots >= 4
+    assert session.fake_driver.tools.count("drag") == 1
+
+
+async def test_a_drag_waits_for_a_quiet_interval_before_accepting_its_effect() -> None:
+    before = _window()
+    before.nodes.insert(0, node(0, "AXWindow", frame=frame(100, 50, 400, 300)))
+    moved = snap([before.nodes[0], replace(before.nodes[1], frame=frame(300, 200)), before.nodes[2]])
+    clock = FakeClock()
+    reads: list[float] = []
+
+    async def snapshot() -> Snapshot:
+        reads.append(clock())
+        return moved
+
+    async def sleep(seconds: float) -> None:
+        clock.advance(seconds)
+
+    verdict, after, count = await _judge(cand("drag", before.nodes[1]), before, snapshot, clock=clock, sleep=sleep)
+
+    assert verdict.effect == "ok"
+    assert after is moved
+    assert count == len(reads)
+    assert reads[-1] - reads[0] >= 2 * WINDOW_CHECK_INTERVAL_S
+
+
+async def test_a_continuously_moving_drag_stops_waiting_without_confirming_an_unsettled_effect() -> None:
+    before = _window()
+    before.nodes.insert(0, node(0, "AXWindow", frame=frame(100, 50, 400, 300)))
+    clock = FakeClock()
+    reads = 0
+
+    async def snapshot() -> Snapshot:
+        nonlocal reads
+        reads += 1
+        assert reads <= 6
+        return snap([before.nodes[0], replace(before.nodes[1], frame=frame(160 + reads, 100)), before.nodes[2]])
+
+    async def sleep(seconds: float) -> None:
+        clock.advance(seconds)
+
+    verdict, _, count = await _judge(cand("drag", before.nodes[1]), before, snapshot, clock=clock, sleep=sleep)
+
+    assert verdict.effect == "unverified"
+    assert count == reads
+    assert clock() <= 5 * WINDOW_CHECK_INTERVAL_S
 
 
 async def test_enabling_submit_without_moving_the_source_verifies_a_drag() -> None:

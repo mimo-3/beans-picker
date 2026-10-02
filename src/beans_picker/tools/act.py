@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from typing import Final, Literal, NotRequired, TypedDict, cast
 
 from beans_picker import config
+from beans_picker._aio import Clock, Sleep
 from beans_picker._numbers import fixed, round3
 from beans_picker.act.execute import Executor
 from beans_picker.candidates.build import BuildOptions, build_candidates, describe_short
@@ -15,6 +18,7 @@ from beans_picker.candidates.describe import describe
 from beans_picker.candidates.prune import in_shard_order
 from beans_picker.candidates.safety import control_context, is_destructive_control
 from beans_picker.candidates.types import TEXT_KINDS, ActionCandidate
+from beans_picker.driver.app import WINDOW_CHECK_INTERVAL_S
 from beans_picker.driver.mcp import Driver
 from beans_picker.errors import DriverError, DriverTimeout, ForegroundViolation, ToolError, failure
 from beans_picker.jev.client import JevUsageOut
@@ -50,6 +54,7 @@ _SETTLED_AT_ONCE: Final = frozenset({"set_value", "type_into", "append", "keypad
 """Kinds whose effect is the control's own value: once it shows, there is nothing more to wait for."""
 SETTLE_RETAKES: Final = 4
 """How many more snapshots act takes, at most, while the window's controls keep changing after the effect showed."""
+DRAG_QUIET_S: Final = 2 * WINDOW_CHECK_INTERVAL_S
 
 
 class ShownAction(ShownCandidate):
@@ -435,9 +440,11 @@ async def _judge(
     before: Snapshot,
     snapshot: Callable[[], Awaitable[Snapshot]],
     pixels: Callable[[], Awaitable[EffectVerdict | None]] | None = None,
+    *,
+    clock: Clock = time.monotonic,
+    sleep: Sleep = asyncio.sleep,
 ) -> tuple[EffectVerdict, Snapshot, int]:
-    """Retakes snapshots until the effect shows, then until the window's controls stop changing; the count decides,
-    not a wait."""
+    """Retake until an effect shows, then settle within a bounded snapshot budget."""
     retakes = config.effect_retakes()
     after = await snapshot()
     n = 1
@@ -453,6 +460,8 @@ async def _judge(
         n += 1
     if verdict.effect != "ok" or c.kind in _SETTLED_AT_ONCE:
         return verdict, after, n
+    if c.kind == "drag":
+        return await _settle_drag(c, before, after, snapshot, n, clock=clock, sleep=sleep)
     # A page may still be loading what the step brought up: wait until two snapshots offer the same controls. Their
     # values and texts are left out, so a clock or a spinner does not keep the wait going.
     for _ in range(SETTLE_RETAKES):
@@ -463,15 +472,47 @@ async def _judge(
             break
         n += 1
         same = _controls(later) == _controls(after)
-        if c.kind == "drag":
-            same = same and drag_state(later) == drag_state(after)
         after = later
         if same:
             break
     again = verify_effect(c, before, after)
     # A chosen option is judged by its value, which the page may have put back meanwhile; a click by any change,
     # which a passing notice may have taken away again.
-    return (again if again.effect == "ok" or c.kind in TEXT_KINDS or c.kind == "drag" else verdict), after, n
+    return (again if again.effect == "ok" or c.kind in TEXT_KINDS else verdict), after, n
+
+
+async def _settle_drag(
+    c: ActionCandidate,
+    before: Snapshot,
+    after: Snapshot,
+    snapshot: Callable[[], Awaitable[Snapshot]],
+    n: int,
+    *,
+    clock: Clock,
+    sleep: Sleep,
+) -> tuple[EffectVerdict, Snapshot, int]:
+    quiet_since = clock()
+    for _ in range(SETTLE_RETAKES):
+        await sleep(WINDOW_CHECK_INTERVAL_S)
+        try:
+            later = await snapshot()
+        except (ToolError, DriverError, DriverTimeout):
+            break
+        n += 1
+        if (
+            later.signature != after.signature
+            or _controls(later) != _controls(after)
+            or drag_state(later) != drag_state(after)
+        ):
+            quiet_since = clock()
+        after = later
+        if clock() - quiet_since >= DRAG_QUIET_S:
+            return verify_effect(c, before, after), after, n
+    return (
+        EffectVerdict(effect="unverified", detail="the drag did not reach a quiet state before verification ended"),
+        after,
+        n,
+    )
 
 
 def _controls(snap: Snapshot) -> list[tuple[str, str]]:
