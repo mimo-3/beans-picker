@@ -40,7 +40,7 @@
     },
     {
       "name": "act",
-      "description": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given. With dragTo ({candidateId} or {dx, dy} in screenshot pixels), drag that source control in the background; destructive controls at either endpoint (including offsets) require allowDestructive. Verify settled window-relative movement or state changes, including enabled controls; snapbacks are no_effect.",
+      "description": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given. With dragTo ({candidateId} or {dx, dy} in screenshot pixels), drag that source control in the background; destructive controls under either actual endpoint require allowDestructive for both destination forms. Verify window-relative movement or state changes after a 0.3-second quiet interval within four settling snapshots; snapbacks are no_effect, unsettled results are unverified.",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
