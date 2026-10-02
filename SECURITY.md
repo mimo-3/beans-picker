@@ -85,13 +85,26 @@ It makes no Jev call and bypasses candidate selection, effect verification and d
 confirmation. Its caller is responsible for choosing and checking the action. Raw results can
 include screen text that the normal snapshot processing would exclude.
 
-Calls still run through the serialized, screen-lock-checked wrapper and background-only guard.
-Foreground calls, unknown tools, app termination, configuration changes, session lifecycle,
-recording, replay, installation, updates and agent-cursor configuration are refused. Screenshot
-output is confined to a private capture directory; paths outside it and unsafe files are refused.
-Completed calls remove their `shots/dragpt-capture-*` directories; after a crash, remove stale ones
-only when no beans-picker process is using them. Other filesystem paths in raw results are omitted.
-Errors follow the same sanitizing and logging rules as the other tools.
+Calls run through the serialized, screen-lock-checked wrapper. The allowlist is: `click`,
+`double_click`, `right_click`, `drag`, `scroll`, `type_text`, `press_key`, `hotkey`, `set_value`,
+`zoom`, `move_cursor`, `page`, `launch_app`, `get_window_state`, `list_windows`, `list_apps`,
+`get_screen_size`, `get_cursor_position` and `get_accessibility_tree`. A tool missing from the
+loaded schemas returns `unknown_driver_tool`; any other tool outside the allowlist returns
+`driver_tool_disallowed`, including future tools, desktop capture and administrative tools.
+
+Desktop scope and foreground delivery are refused. The existing focus guard still refuses
+`move_cursor`. Input calls (`click`, `double_click`, `right_click`, `drag`, `scroll`, `type_text`,
+`press_key`, `hotkey`, `set_value`, `page`) require an integer `pid` and watch the target with the
+same activation sentinel as `act`. The `page` action `enable_javascript_apple_events` is refused
+because it changes browser preferences and relaunches the browser.
+
+`screenshot_out_file` is redirected into an owner-only `shots/capture-*` directory. Unsafe captures
+and other file-output arguments (including `debug_image_out` and path/file/directory arguments)
+are refused. Completed, failed and cancelled calls clean up their captures; after a crash, remove
+stale directories only when no beans-picker process is using them. Result values under path-like
+keys are omitted. Text and string values have occurrences of this session's cache/capture paths
+replaced; all other text, including ordinary slashes, URLs and unrelated paths, is kept as read.
+Driver failures return only an error code and fixed message, without driver text, data or images.
 
 ## Reporting a vulnerability
 

@@ -25,16 +25,28 @@ To drag, give the source's `candidateId` and either `dragTo: {"candidateId": "<t
 or `dragTo: {"dx": 120, "dy": -30}`. The gesture starts at the source control's centre;
 offsets are window-local screenshot pixels, not screen points. Both endpoints must be visible
 inside the same window. `instruction` is still required; omit `text` and `modifiers`.
-The same fields work in a `then` step. Either destructive endpoint requires `allowDestructive: true`.
+The same fields work in a `then` step. Either destructive endpoint, including controls under an offset
+endpoint, requires `allowDestructive: true`.
 Stale ids return `not_found`, and missing frames, covered controls or off-window endpoints return
-`failed` / `not_visible`. Fresh snapshots check for a changed window or movement of the source;
-an unchanged window returns `no_effect`.
+`failed` / `not_visible`. The settled snapshot must show a state change (including enabled controls) or movement of the source
+relative to its window. Moving the whole window or snapping back does not count; no observable
+change returns `no_effect`.
 
 The optional `driver` tool covers calls such as `double_click` and `zoom`:
 `{"tool": "double_click", "arguments": {"pid": 123, "window_id": 456, "x": 100, "y": 80}}`.
-It refuses foreground delivery, unknown tools, session/configuration changes, recording, replay,
-updates and app termination. Screenshot files are handled only inside a private capture directory;
-unsafe captures are refused and filesystem paths are omitted from results.
+Only these app-control tools are allowlisted: `click`, `double_click`, `right_click`, `drag`,
+`scroll`, `type_text`, `press_key`, `hotkey`, `set_value`, `zoom`, `move_cursor`, `page`, `launch_app`,
+`get_window_state`, `list_windows`, `list_apps`, `get_screen_size`, `get_cursor_position` and
+`get_accessibility_tree`. Tools absent from the loaded driver schemas return `unknown_driver_tool`;
+other tools outside the allowlist return `driver_tool_disallowed`.
+
+Input calls (clicks, drag, scroll, typing, keys, set_value and page) require an integer `pid` and
+watch that target for activation. Desktop scope, foreground delivery and focus-stealing tools
+(including `move_cursor`) remain refused. `page` cannot run `enable_javascript_apple_events`.
+`screenshot_out_file` is redirected into private `shots/capture-*` storage and returned as an image;
+other file-output arguments, such as `debug_image_out`, are refused. Failures return only a code
+and fixed message. Values under path-like keys and occurrences of this session's cache directory
+in strings are omitted; other text, including slashes and URLs, is preserved.
 See [SECURITY.md](SECURITY.md) for the passthrough boundary.
 
 `act` returns a `status`:
@@ -111,7 +123,7 @@ Variables are read from the environment first, then from `.env.local` and `.env`
 
 ## Rules the server keeps
 
-- **Background only.** `bring_to_front`, `invoke_menu`, `move_cursor` and `delivery_mode: "foreground"` are refused before they reach cua-driver. Menu commands run as their keyboard shortcut sent to the app's pid; a command without a known shortcut returns `failed` / `foreground_required`. During `act`, the frontmost app is sampled continuously; if the target app comes to the front, the call stops with `foreground_violation`.
+- **Background only.** `bring_to_front`, `invoke_menu`, `move_cursor` and `delivery_mode: "foreground"` are refused before they reach cua-driver. Menu commands run as their keyboard shortcut sent to the app's pid; a command without a known shortcut returns `failed` / `foreground_required`. During `act` and raw input calls, the frontmost app is sampled continuously; if the target app comes to the front, the call stops with `foreground_violation`.
 - **Time limits.** Every request to cua-driver and to Jev has a generous limit (see Configuration), so one that stalls ends its call with `driver_timeout` or `jev_unavailable` instead of blocking the queue. An action whose answer timed out may still have happened: observe before repeating it. At shutdown, the final `end_session` gets 5 seconds.
 - **Screen lock.** While `CGSSessionScreenIsLocked` is set, every tool refuses with `screen_locked` and does nothing. A failed or unreadable lock check refuses with `screen_lock_unavailable`.
 - **One call at a time.** Tool calls are queued, so two actions never interleave on the desktop.
