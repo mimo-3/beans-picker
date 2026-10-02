@@ -18,7 +18,12 @@ BUILD_SH = ROOT / "bench/fixture-app/build.sh"
 
 @pytest.mark.parametrize(
     ("name", "usage"),
-    [("axtext.m", "Usage: axtext <pid> [<output file>]"), ("menukeys.m", "menukeys <App.app path> [--nib <name>]")],
+    [
+        ("axtext.m", "Usage: axtext <pid> [<output file>]"),
+        ("menukeys.m", "menukeys <App.app path> [--nib <name>]"),
+        ("activate.m", "Usage: activate <pid>"),
+        ("winrec.m", "Usage: winrec <window id> <out.mp4>"),
+    ],
 )
 def test_helper_sources_are_package_data(name: str, usage: str) -> None:
     source = resources.files("beans_picker.native").joinpath(name)

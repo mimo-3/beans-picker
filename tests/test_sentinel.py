@@ -8,7 +8,7 @@ import pytest
 
 from beans_picker._proc import Completed
 from beans_picker.driver.sentinel import ActivationSentinel, front_pid
-from tests.fakes import fake_runner
+from tests.fakes import RecordingSleep, fake_runner
 
 AT = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\Z")
 
@@ -268,3 +268,138 @@ async def test_a_probe_from_a_stopped_watch_does_not_reach_the_next_one() -> Non
         await asyncio.sleep(0)
     assert s.violation is None
     s.stop()
+
+
+class Restore:
+    """Puts `pid` in front of `front` when it works."""
+
+    def __init__(self, front: Front, *, works: bool = True, moves: bool = True) -> None:
+        self.front = front
+        self.works = works
+        self.moves = moves
+        self.pids: list[int] = []
+
+    async def __call__(self, pid: int) -> bool:
+        self.pids.append(pid)
+        if self.works and self.moves:
+            self.front.pid = pid
+        return self.works
+
+
+async def test_the_app_in_front_before_is_put_back_once() -> None:
+    front = Front(1)
+    restore = Restore(front)
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    front.pid = 5
+    v = await s.sample()
+    assert v is not None
+    assert (v.pid, v.restored) == (5, True)
+    assert await s.sample() is v
+    assert restore.pids == [1]
+    assert front.pid == 1
+
+
+@pytest.mark.parametrize(("works", "moves"), [(False, False), (True, False)])
+async def test_an_app_that_is_still_behind_is_not_reported_as_put_back(works: bool, moves: bool) -> None:
+    front = Front(1)
+    restore = Restore(front, works=works, moves=moves)
+    waits = RecordingSleep()
+    s = ActivationSentinel(front, sleep=never, restore=restore, restore_sleep=waits)
+    await s.watch(5)
+    front.pid = 5
+    v = await s.sample()
+    assert v is not None
+    assert v.restored is False
+    assert restore.pids == [1]
+    assert waits.delays == ([0.05] * 6 if works else [])
+
+
+async def test_a_restore_that_raises_is_not_put_back() -> None:
+    front = Front(1)
+
+    async def restore(pid: int) -> bool:
+        raise OSError("no helper")
+
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    front.pid = 5
+    v = await s.sample()
+    assert v is not None
+    assert v.restored is False
+
+
+async def test_nothing_is_put_back_without_a_restorer_or_a_known_front_app() -> None:
+    front = Front(1)
+    s = ActivationSentinel(front, sleep=never)
+    await s.watch(5)
+    front.pid = 5
+    v = await s.sample()
+    assert v is not None
+    assert v.restored is False
+    s.stop()
+
+    # The app in front during an earlier watch is forgotten.
+    restore = Restore(front)
+    s.restore = restore
+    front.pid = None
+    await s.watch(5)
+    front.pid = 5
+    v = await s.sample()
+    assert v is not None
+    assert v.restored is False
+    assert restore.pids == []
+
+
+async def test_a_sample_during_a_restore_waits_for_how_it_ended() -> None:
+    front = Front(1)
+    gate = asyncio.Event()
+
+    async def restore(pid: int) -> bool:
+        await gate.wait()
+        front.pid = pid
+        return True
+
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    front.pid = 5
+    first = asyncio.create_task(s.sample())
+    await until(lambda: s.violation is not None)
+    second = asyncio.create_task(s.sample())
+    await asyncio.sleep(0)
+    assert not second.done()
+    gate.set()
+    a, b = await first, await second
+    assert a is not None
+    assert a.restored is True
+    assert b is a
+
+
+async def test_the_app_put_back_is_the_last_one_seen_in_front() -> None:
+    front = Front(1)
+    restore = Restore(front)
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    front.pid = 2
+    assert await s.sample() is None
+    front.pid = 5
+    v = await s.sample()
+    assert v is not None
+    assert v.restored is True
+    assert restore.pids == [2]
+
+
+async def test_a_watched_app_is_never_brought_forward() -> None:
+    front = Front(1)
+    restore = Restore(front)
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    front.pid = 9
+    await s.watch(1)
+    front.pid = 1
+    await s.watch(9)
+    front.pid = 5
+    v = await s.sample()
+    assert v is not None
+    assert v.restored is False
+    assert restore.pids == []

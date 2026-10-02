@@ -310,6 +310,22 @@ async def test_a_modifier_click_is_a_pixel_click_holding_the_keys() -> None:
     assert driver.calls[-1] == ("click", {"pid": 1, "window_id": 1, "x": 120, "y": 120, "modifier": ["shift", "cmd"]})
 
 
+async def test_a_modifier_click_is_refused_when_pixel_clicks_are_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BEANS_PICKER_PIXEL", "off")
+    target = node(1, "AXRow", "Draft", frame=frame(150, 100))
+    driver = geometry_driver()
+    ex, _ = executor(driver)
+    r = await ex.execute(cand("click", target), snap([target]), ["shift"])
+    assert outcome(r) == (
+        False,
+        "pixel_disabled",
+        None,
+        "a click with modifier keys is a pixel click, and pixel clicks are turned off (BEANS_PICKER_PIXEL=off)",
+    )
+    assert r.route == []
+    assert driver.calls == []
+
+
 SEVEN = node(7, "AXButton", "7", frame=frame(150, 100))
 EIGHT = node(8, "AXButton", "8")
 PAD = snap([SEVEN, EIGHT])

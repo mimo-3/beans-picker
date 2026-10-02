@@ -24,7 +24,10 @@ def test_foreground_violation_message() -> None:
     err = ForegroundViolation(a)
     assert str(err) == (
         "foreground_violation: the app under test (pid 42) came to the front during after click at 12:34:56.789"
+        "; the app in front before was not put back"
     )
+    restored = ForegroundViolation(Activation(pid=42, during="after click", at="12:34:56.789", restored=True))
+    assert str(restored).endswith("at 12:34:56.789; the app in front before was put back")
     assert err.activation is a
 
 

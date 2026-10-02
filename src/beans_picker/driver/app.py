@@ -12,7 +12,7 @@ from beans_picker._aio import Sleep
 from beans_picker._proc import Runner, run
 from beans_picker._text import WORD_CLASS_BODY, WS_CLASS_BODY
 from beans_picker.config import APP_BUNDLES
-from beans_picker.driver.sentinel import PID_LINE
+from beans_picker.driver.sentinel import PID_LINE, FrontSampler, Restorer
 from beans_picker.driver.types import LaunchAppArgs, ListWindowsArgs, Window, get_int, get_str, windows_of
 from beans_picker.errors import AppLaunchError
 
@@ -24,6 +24,9 @@ _ASN: Final = re.compile(f'ASN:[^{WS_CLASS_BODY}:"]+')
 
 WINDOW_CHECKS: Final = 34
 WINDOW_CHECK_INTERVAL_S: Final = 0.15
+MIN_WINDOW_WIDTH: Final = 100
+MIN_WINDOW_HEIGHT: Final = 50
+"""Smaller than any window a person works in."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -66,13 +69,22 @@ async def running_pid(target: AppTarget, *, runner: Runner = run) -> int | None:
 
 
 def pick_window(windows: Sequence[Window], title: str | None = None) -> Window | None:
-    """The window matching the title hint, else the front-most on-screen layer-0 window."""
+    """The window matching the title hint, else the front-most on-screen layer-0 window.
+
+    A window too small to work in (the control macOS puts on a window while it is being recorded) is
+    passed over when there is another.
+    """
     usable = [w for w in windows if (w.layer if w.layer is not None else 0) == 0]
     if title:
         return next((w for w in usable if title in (w.title or "")), None)
     shown = [w for w in usable if w.is_on_screen is not False]
+    shown = [w for w in shown if not _tiny(w)] or shown
     shown.sort(key=lambda w: (not w.title, -(w.z_index if w.z_index is not None else -1)))
     return shown[0] if shown else None
+
+
+def _tiny(w: Window) -> bool:
+    return w.bounds is not None and (w.bounds.width < MIN_WINDOW_WIDTH or w.bounds.height < MIN_WINDOW_HEIGHT)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,8 +100,13 @@ async def ensure_app(
     *,
     runner: Runner = run,
     sleep: Sleep = asyncio.sleep,
+    front: FrontSampler | None = None,
+    restore: Restorer | None = None,
 ) -> AppContext:
-    """The target app's pid and window, launching it in the background when needed."""
+    """The target app's pid and window, launching it in the background when needed.
+
+    With `front` and `restore`, an app that took the front while starting is put behind the app that was there.
+    """
     running = await running_pid(target, runner=runner)
     launched: _Launched | None = None
     # launch_app costs ~3 s even for a running app; skip it when the app already shows a usable window.
@@ -98,7 +115,10 @@ async def ensure_app(
         if pick_window(windows) is not None:
             launched = _Launched(running, None, windows)
     # launch_app starts the app in the background and undoes any activation the app requests itself.
+    front_before: int | None = None
     if launched is None:
+        if front is not None:
+            front_before = await front()
         args: LaunchAppArgs = {}
         if target.bundle_id:
             args["bundle_id"] = target.bundle_id
@@ -117,6 +137,14 @@ async def ensure_app(
     win = await _wait_for_window(driver, launched.pid, launched.windows, sleep)
     if win is None:
         raise AppLaunchError(f"no window for pid {launched.pid}")
+    if (
+        front is not None
+        and restore is not None
+        and front_before is not None
+        and front_before != launched.pid
+        and await front() == launched.pid
+    ):
+        await restore(front_before)
     name = next((n for n in (launched.name, win.app_name, target.name) if n is not None), "")
     return AppContext(pid=launched.pid, window_id=win.window_id, app_name=name, launched_by_us=running is None)
 

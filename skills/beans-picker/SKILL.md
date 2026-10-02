@@ -125,6 +125,11 @@ element's value or rows, so read them from there.
 **Dialogs and sheets.** While one is open, only its own controls are offered (`window.modal` names
 it). Finish it or dismiss it with Escape before going back to the page.
 
+**Recording a demo.** Record the window, not the display: `beans-picker record --app <app> --out
+demo.mp4` (stop it with SIGINT). Launch the app before the recording starts. If the app still comes
+forward on clicks, run the server with `BEANS_PICKER_PIXEL=off` (slower: every click is an
+accessibility press).
+
 ## Before you report success
 
 - The step that commits the task (Save, Submit, Archive) returned `done`, and its `change` or

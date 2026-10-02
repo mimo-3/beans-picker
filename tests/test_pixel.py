@@ -137,3 +137,10 @@ def test_window_shape_names_title_modal_and_other_windows() -> None:
     assert window_shape(snap(title="Doc")) == "Doc\x01-"
     shaped = snap(title="Doc", modal=Modal(role="AXSheet", label="Save", index=3), app_windows=["A", "B"])
     assert window_shape(shaped) == "Doc\x01AXSheet:Save\x01A\x01B"
+
+
+async def test_no_point_and_no_driver_call_when_pixel_clicks_are_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BEANS_PICKER_PIXEL", "off")
+    driver = geometry_driver()
+    assert await PixelMapper(driver).point(WIN, node(1, "AXButton", frame=frame(150, 100))) is None
+    assert driver.calls == []

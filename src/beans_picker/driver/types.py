@@ -364,3 +364,5 @@ class Activation:
     pid: int
     during: str
     at: str
+    restored: bool = False
+    """Whether the app that was in front before was put back."""

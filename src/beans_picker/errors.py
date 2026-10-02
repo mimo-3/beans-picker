@@ -49,7 +49,8 @@ class ForegroundViolation(BeansPickerError):
     def __init__(self, activation: Activation) -> None:
         super().__init__(
             f"foreground_violation: the app under test (pid {activation.pid}) came to the front "
-            f"during {activation.during} at {activation.at}"
+            f"during {activation.during} at {activation.at}; the app in front before was "
+            f"{'put back' if activation.restored else 'not put back'}"
         )
         self.activation = activation
 

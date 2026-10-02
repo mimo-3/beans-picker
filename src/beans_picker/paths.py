@@ -29,3 +29,13 @@ class Paths:
     def menukeys(self) -> Path:
         """The menu key helper and the learned key tables."""
         return self.cache / "menukeys"
+
+    @property
+    def activate(self) -> Path:
+        """The helper that puts the app that was in front back in front."""
+        return self.cache / "activate"
+
+    @property
+    def winrec(self) -> Path:
+        """The window recorder."""
+        return self.cache / "winrec"
