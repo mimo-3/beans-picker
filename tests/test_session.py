@@ -338,3 +338,11 @@ async def test_close_cancels_menu_learning_in_progress(tmp_path: Path) -> None:
     assert stopped == [True]
     with pytest.raises(asyncio.CancelledError):
         await caller
+
+
+async def test_the_sentinel_of_a_connected_driver_can_put_the_previous_app_back(tmp_path: Path) -> None:
+    driver = FakeDriver()
+    s = session_with(driver, tmp_path)
+    assert driver.sentinel.restore is None
+    assert await s.driver() is driver
+    assert driver.sentinel.restore is not None
