@@ -136,6 +136,28 @@ async def test_allow_destructive_permits_either_drag_endpoint(source: str, targe
     assert session.fake_driver.tools[-1] == "drag"
 
 
+async def test_an_offset_onto_a_destructive_control_requires_confirmation() -> None:
+    before = _window(target="Delete item")
+    session = _session(before)
+
+    out = await act_tool(session, _args(before, {"dx": 300, "dy": 200}))
+
+    assert out["status"] == "needs_confirmation"
+    assert "drag" not in session.fake_driver.tools
+
+
+async def test_allow_destructive_permits_an_offset_onto_a_destructive_control() -> None:
+    before = _window(target="Delete item")
+    session = _session(before, shown(before, "Moved"))
+    args = _args(before, {"dx": 300, "dy": 200})
+    args["allowDestructive"] = True
+
+    out = await act_tool(session, args)
+
+    assert out["status"] == "done"
+    assert session.fake_driver.tools[-1] == "drag"
+
+
 @pytest.mark.parametrize("index", [0, 1])
 async def test_drag_refuses_an_endpoint_without_a_frame(index: int) -> None:
     before = _window()
@@ -203,6 +225,41 @@ async def test_drag_refuses_either_endpoint_covered_by_a_web_control(x: int, y: 
 
     assert (out["status"], out["code"]) == ("failed", "not_visible")
     assert session.calls == []
+
+
+async def test_drag_refuses_an_offset_covered_by_a_web_control() -> None:
+    before = _window()
+    before.nodes.insert(0, node(0, "AXWebArea", frame=frame(100, 50, 400, 300)))
+    before.nodes.append(node(3, "AXButton", "Overlay", parent=0, frame=frame(290, 190, 50, 50)))
+    session = _session(before)
+
+    out = await act_tool(session, _args(before, {"dx": 300, "dy": 200}))
+
+    assert (out["status"], out["code"]) == ("failed", "not_visible")
+    assert "drag" not in session.fake_driver.tools
+
+
+async def test_drag_by_offset_onto_an_uncovered_web_control_is_allowed() -> None:
+    before = _window()
+    before.nodes.insert(0, node(0, "AXWebArea", frame=frame(100, 50, 400, 300)))
+    session = _session(before, shown(before, "Moved"))
+
+    out = await act_tool(session, _args(before, {"dx": 300, "dy": 200}))
+
+    assert out["status"] == "done"
+    assert session.fake_driver.tools.count("drag") == 1
+
+
+async def test_drag_refuses_an_offset_covered_at_the_target_edge_but_not_its_centre() -> None:
+    before = _window()
+    before.nodes.insert(0, node(0, "AXWebArea", frame=frame(100, 50, 400, 300)))
+    before.nodes.append(node(3, "AXButton", "Overlay", parent=0, frame=frame(298, 198, 5, 5)))
+    session = _session(before)
+
+    out = await act_tool(session, _args(before, {"dx": 282, "dy": 182}))
+
+    assert (out["status"], out["code"]) == ("failed", "not_visible")
+    assert "drag" not in session.fake_driver.tools
 
 
 @pytest.mark.parametrize("source", [True, False])
@@ -279,7 +336,63 @@ async def test_an_unchanged_row_drag_reports_no_effect() -> None:
 
 async def test_a_source_frame_change_verifies_a_drag_even_when_the_signature_is_unchanged() -> None:
     before = _window()
+    before.nodes.insert(0, node(0, "AXWindow", frame=frame(100, 50, 400, 300)))
+    after = snap([before.nodes[0], replace(before.nodes[1], frame=frame(300, 200)), before.nodes[2]])
+    session = _session(before, after)
+
+    out = await act_tool(session, _args(before))
+
+    assert out["status"] == "done"
+    assert session.fake_driver.tools.count("drag") == 1
+
+
+async def test_a_frame_change_without_window_origin_does_not_verify_a_drag() -> None:
+    before = _window()
     after = snap([replace(before.nodes[0], frame=frame(300, 200)), before.nodes[1]])
+    session = _session(before, after)
+
+    out = await act_tool(session, _args(before))
+
+    assert out["status"] == "no_effect"
+    assert session.fake_driver.tools.count("drag") == 1
+
+
+async def test_moving_the_whole_window_does_not_verify_a_drag() -> None:
+    before = _window()
+    before.nodes.insert(0, node(0, "AXWindow", frame=frame(100, 50, 400, 300)))
+    after = snap(
+        [
+            replace(before.nodes[0], frame=frame(150, 100, 400, 300)),
+            replace(before.nodes[1], frame=frame(200, 150)),
+            replace(before.nodes[2], frame=frame(350, 250)),
+        ]
+    )
+    session = _session(before, after)
+
+    out = await act_tool(session, _args(before))
+
+    assert out["status"] == "no_effect"
+    assert session.fake_driver.tools.count("drag") == 1
+
+
+async def test_a_drag_that_moves_then_snaps_back_reports_no_effect() -> None:
+    before = _window()
+    before.nodes.insert(0, node(0, "AXWindow", frame=frame(100, 50, 400, 300)))
+    moved = snap([before.nodes[0], replace(before.nodes[1], frame=frame(300, 200)), before.nodes[2]])
+    session = _session(before, moved, before)
+
+    out = await act_tool(session, _args(before))
+
+    assert out["status"] == "no_effect"
+    assert session.snapshots >= 3
+    assert session.fake_driver.tools.count("drag") == 1
+
+
+async def test_enabling_submit_without_moving_the_source_verifies_a_drag() -> None:
+    before = _window()
+    submit = node(3, "AXButton", "Submit", frame=frame(400, 250))
+    before.nodes.append(replace(submit, enabled=False))
+    after = snap([*before.nodes[:2], submit])
     session = _session(before, after)
 
     out = await act_tool(session, _args(before))
