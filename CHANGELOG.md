@@ -10,11 +10,15 @@ All notable changes to this project are documented here. The format follows
 
 - `act` accepts `dragTo` with a destination `candidateId` or a `dx`/`dy` pixel offset, including
   in `then`. Drags use background delivery, check both endpoints, require confirmation for
-  destructive controls and verify their effect on fresh snapshots.
+  destructive controls (including offset destinations) and verify their effect on settled snapshots.
+  Movement is window-relative; snapbacks do not count, while enabled-state changes do.
 - The opt-in `driver` tool (`BEANS_PICKER_RAW_DRIVER=1`) forwards cua-driver calls without Jev,
   effect verification or destructive confirmation. Screen-lock, background-only and safe capture
-  checks still apply; unknown tools and session, configuration, recording and maintenance calls
-  are refused.
+  checks still apply. Only allowlisted app-control tools are accepted; input calls require an integer
+  `pid` and an activation watch. Desktop scope, browser-preference changes through `page`, and
+  file-output arguments other than redirected `screenshot_out_file` are refused. Captures use
+  `shots/capture-*`. Failures are sanitized; path-key values and owned cache paths are redacted,
+  preserving other text and URLs.
 
 ## [0.4.0] - 2026-09-29
 

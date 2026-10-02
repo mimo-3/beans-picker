@@ -39,8 +39,17 @@ as `failed` with `foreground_required`).
 
 When enabled with `BEANS_PICKER_RAW_DRIVER=1`, beans-picker's `driver` tool forwards
 `{tool, arguments}` for calls such as `double_click` and `zoom`. It makes no Jev call, does not
-verify effects and asks for no destructive confirmation. Check the result yourself. Foreground,
-unknown and administrative tools are refused; it is absent by default.
+verify effects and asks for no destructive confirmation. Check the result yourself. Its allowlist is
+`click`, `double_click`, `right_click`, `drag`, `scroll`, `type_text`, `press_key`, `hotkey`, `set_value`,
+`zoom`, `move_cursor`, `page`, `launch_app`, `get_window_state`, `list_windows`, `list_apps`,
+`get_screen_size`, `get_cursor_position` and `get_accessibility_tree`. Other loaded tools return
+`driver_tool_disallowed`; absent tools return `unknown_driver_tool`. Input calls (clicks, drag,
+scroll, typing, keys, set_value and page) need an integer `pid` and are watched for activation.
+Desktop scope, foreground delivery, `move_cursor` and `page.enable_javascript_apple_events` are
+refused. `screenshot_out_file` is redirected to private `shots/capture-*` storage; other file-output
+arguments such as `debug_image_out` are refused. Path-key values and this session's cache/capture
+paths are redacted; other text and URLs are unchanged. Failures return only a code and fixed
+message. The tool is absent by default.
 
 ## The fast loop
 
@@ -119,8 +128,10 @@ tree, so check the selection count or the next step instead of clicking again.
 `dragTo: {"candidateId": "<target id>"}` to drag centre to centre, or
 `dragTo: {"dx": 120, "dy": -30}` for an offset in window screenshot pixels. Keep `instruction`,
 omit `text` and `modifiers`; this also works in `then`. Both endpoints must be visible in the
-same window. A destructive source or destination needs `allowDestructive: true`. Read the fresh
-snapshot verdict as for any other action; `not_visible` means an endpoint is missing, covered or
+same window. A destructive source or destination, including any control under an offset endpoint,
+needs `allowDestructive: true`. Verification uses the settled snapshot: source movement relative
+to the window or a state change (including enabled controls) counts. A whole-window move or a
+source that snaps back does not count. Read the verdict as for any other action; `not_visible` means an endpoint is missing, covered or
 off-window, and `not_found` means an id needs a new observe.
 
 **Long lists and tables.** Rows outside the visible area are not in the tree at all (virtualized
