@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `act` accepts `dragTo` with a destination `candidateId` or a `dx`/`dy` pixel offset, including
+  in `then`. Drags use background delivery, check both endpoints, require confirmation for
+  destructive controls and verify their effect on fresh snapshots.
+- The opt-in `driver` tool (`BEANS_PICKER_RAW_DRIVER=1`) forwards cua-driver calls without Jev,
+  effect verification or destructive confirmation. Screen-lock, background-only and safe capture
+  checks still apply; unknown tools and session, configuration, recording and maintenance calls
+  are refused.
+
 ## [0.4.0] - 2026-09-29
 
 ### Added

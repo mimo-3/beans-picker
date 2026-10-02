@@ -5,7 +5,7 @@ description: Operate a macOS app window (native apps or pages in Chrome) in the 
 
 # Driving a Mac window with beans-picker
 
-beans-picker works on the accessibility tree, never on pixels you choose, and never brings the app to
+beans-picker picks controls from the accessibility tree and never brings the app to
 the front. Every `act` step is checked on fresh snapshots: did the effect asked for happen? Text is
 entered as given and checked by exact equality.
 
@@ -33,9 +33,14 @@ is known only by its content; decoys (two people with one name, a stale duplicat
 value out of a busy page.
 
 **Use cua-driver instead** (screenshots and pixel clicks) when the UI has no accessibility tree to
-speak of: a canvas, a game, custom-drawn widgets. Also for mouse drags, for anything you must *see*
+speak of: a canvas, a game, custom-drawn widgets. Also for anything you must *see*
 (an image, a layout), and for a menu-bar command that has no keyboard shortcut (beans-picker reports it
 as `failed` with `foreground_required`).
+
+When enabled with `BEANS_PICKER_RAW_DRIVER=1`, beans-picker's `driver` tool forwards
+`{tool, arguments}` for calls such as `double_click` and `zoom`. It makes no Jev call, does not
+verify effects and asks for no destructive confirmation. Check the result yourself. Foreground,
+unknown and administrative tools are refused; it is absent by default.
 
 ## The fast loop
 
@@ -109,6 +114,14 @@ after selecting the item. The menu's items then appear as candidates; press the 
 the item's click or toggle candidate with `modifiers: ["shift"]` (or `["cmd"]`). The item must be
 visible on the window. A row click can report `unverified`: its selection is often not in the
 tree, so check the selection count or the next step instead of clicking again.
+
+**Mouse drags.** Give the source control's `candidateId` and
+`dragTo: {"candidateId": "<target id>"}` to drag centre to centre, or
+`dragTo: {"dx": 120, "dy": -30}` for an offset in window screenshot pixels. Keep `instruction`,
+omit `text` and `modifiers`; this also works in `then`. Both endpoints must be visible in the
+same window. A destructive source or destination needs `allowDestructive: true`. Read the fresh
+snapshot verdict as for any other action; `not_visible` means an endpoint is missing, covered or
+off-window, and `not_found` means an id needs a new observe.
 
 **Long lists and tables.** Rows outside the visible area are not in the tree at all (virtualized
 grids). Narrow the list first: use the search field, a filter, or a sort header (sort by amount to
