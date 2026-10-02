@@ -13,7 +13,7 @@ from types import MappingProxyType
 from typing import Final
 
 from beans_picker._numbers import parse_number
-from beans_picker._text import NOT_LINE_END, WS
+from beans_picker._text import NOT_LINE_END, WS, trim
 
 ENV_FILES: Final[tuple[str, ...]] = (".env.local", ".env")
 
@@ -137,6 +137,11 @@ def log_level() -> str:
     """`BEANS_PICKER_LOG_LEVEL` if set and not empty, else `WARNING`."""
     value = os.environ.get("BEANS_PICKER_LOG_LEVEL")
     return value if value else DEFAULT_LOG_LEVEL
+
+
+def raw_driver() -> bool:
+    """Whether the raw driver tool is enabled: `BEANS_PICKER_RAW_DRIVER`, default false."""
+    return trim(os.environ.get("BEANS_PICKER_RAW_DRIVER", "")).lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
