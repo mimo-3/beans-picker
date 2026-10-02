@@ -45,6 +45,17 @@ def verify_effect(c: ActionCandidate, before: Snapshot, after: Snapshot) -> Effe
     moved = before.signature != after.signature or changed(diff)
     if c.kind in TEXT_ENTRY:
         return _verify_text(c, before, after, moved)
+    if c.kind == "drag":
+        target = c.target
+        node = _by_key(after, target)
+        if (
+            target is not None
+            and target.frame is not None
+            and node is not None
+            and node.frame is not None
+            and (target.frame.x, target.frame.y) != (node.frame.x, node.frame.y)
+        ):
+            return EffectVerdict(effect="ok", detail="the dragged control moved")
     if c.kind == "toggle":
         target = c.target
         node = _by_key(after, target)
