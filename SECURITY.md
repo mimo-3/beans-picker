@@ -68,6 +68,9 @@ supplementation. Identical controls can still limit what accessibility metadata 
 The MCP client is trusted to authorize its own actions. `allowDestructive` is supplied by that client,
 not proof of human approval. Label-based destructive detection cannot establish what an arbitrary app
 will do. Return and Space require confirmation, and pop-up items are checked before they are pressed.
+For drags, destructive controls under both actual endpoints require confirmation for candidate
+and offset destinations. Verification requires a 0.3-second quiet interval within four settling
+snapshots; a drag that cannot settle remains `unverified`.
 Indistinguishable controls are bound to their current tokens; an obsolete target is refused rather
 than rebound to a different identical control. A lock-check failure also refuses the tool call.
 
@@ -77,6 +80,38 @@ Local helper/system subprocesses do not inherit `JEV_API_KEY` or `TYPESAFE_API_K
 a sandbox: those processes still have ordinary filesystem access, including to user-owned files.
 The menu helper loads the selected application's nib; use trusted applications and keep the cache
 and executables writable only by their owner. These are distinct from the temporary-file protections.
+
+## Raw driver passthrough
+
+`BEANS_PICKER_RAW_DRIVER=1` opts into the `driver` tool; otherwise it is neither listed nor callable.
+It makes no Jev call and bypasses candidate selection, effect verification and destructive
+confirmation. Its caller is responsible for choosing and checking the action. Raw results can
+include screen text that the normal snapshot processing would exclude.
+
+Calls run through the serialized, screen-lock-checked wrapper. The allowlist is: `click`,
+`double_click`, `right_click`, `drag`, `scroll`, `type_text`, `press_key`, `hotkey`, `set_value`,
+`zoom`, `move_cursor`, `page`, `get_window_state`, `list_windows`, `list_apps`,
+`get_screen_size`, `get_cursor_position` and `get_accessibility_tree`. A tool missing from the
+loaded schemas returns `unknown_driver_tool`; any other tool outside the allowlist returns
+`driver_tool_disallowed`, including `launch_app`, future tools, desktop capture and administrative tools.
+
+Desktop scope and foreground delivery are refused. The existing focus guard still refuses
+`move_cursor`. Input calls (`click`, `double_click`, `right_click`, `drag`, `scroll`, `type_text`,
+`press_key`, `hotkey`, `set_value`, `page`) require an integer `pid` and watch the target with the
+same activation sentinel as `act`. The `page` action `enable_javascript_apple_events` is refused
+because it changes browser preferences and relaunches the browser. The per-tool refused-arguments
+table rejects `page.cdp_port` and `page.bundle_id` with `driver_argument_disallowed`, so they cannot
+select a process other than the watched `pid`. Raw `launch_app` is refused because it can leave
+the app in the foreground when self-activation suppression fails.
+
+`screenshot_out_file` is redirected into an owner-only `shots/capture-*` directory. Unsafe captures
+and other file-output arguments (including `debug_image_out` and path/file/directory arguments)
+are refused. Completed, failed and cancelled calls clean up their captures; after a crash, remove
+stale directories only when no beans-picker process is using them. Result values under path-like
+keys are omitted. Text and string values have occurrences of this session's cache/capture paths
+replaced only at directory boundaries; sibling paths sharing a prefix and unrelated URLs are
+kept as read.
+Driver failures return only an error code and fixed message, without driver text, data or images.
 
 ## Reporting a vulnerability
 

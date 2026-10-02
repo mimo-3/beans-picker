@@ -11,7 +11,8 @@ from typing import TYPE_CHECKING, Final, Literal, NotRequired, Protocol, TypedDi
 from beans_picker._aio import Clock
 from beans_picker._json import quote
 from beans_picker._numbers import round_half_up
-from beans_picker.act.pixel import PixelMapper, ToolCaller
+from beans_picker.act.pixel import PixelMapper, Point, ToolCaller
+from beans_picker.candidates.build import build_candidates
 from beans_picker.candidates.safety import control_context, is_destructive_control, is_destructive_label
 from beans_picker.menus.keyequiv import key_equivalent
 from beans_picker.observe.identity import is_ambiguous_key
@@ -65,6 +66,16 @@ class _PointArgs(TypedDict):
     x: int
     y: int
     modifier: NotRequired[list[str]]
+
+
+class _DragArgs(TypedDict):
+    pid: int
+    window_id: int
+    from_x: int
+    from_y: int
+    to_x: int
+    to_y: int
+    delivery_mode: Literal["background"]
 
 
 class _WindowElementArgs(TypedDict):
@@ -164,6 +175,8 @@ class Executor:
     ) -> _Outcome:
         pid, window_id = snap.pid, snap.window_id
         match c.kind:
+            case "drag":
+                return await self._drag(c, snap, route, allow_destructive=allow_destructive)
             case "click":
                 target = _target(c)
                 if in_popup_menu(snap, target):
@@ -221,6 +234,55 @@ class Executor:
                 return await self._key(c, snap, route)
             case _:
                 assert_never(c.kind)
+
+    async def _drag(self, c: ActionCandidate, snap: Snapshot, route: list[str], *, allow_destructive: bool) -> _Outcome:
+        source, target = _target(c), c.drag_target
+        nodes = [source] if target is None else [source, target]
+        start = await self._pixels.point(snap, source)
+        end = await self._pixels.point(snap, target) if target is not None else None
+        if start is not None and c.drag_offset is not None:
+            dx, dy = c.drag_offset
+            end = Point(start.x + dx, start.y + dy)
+        if (
+            start is None
+            or end is None
+            or not await self._pixels.visible(snap, start)
+            or not await self._pixels.visible(snap, end)
+        ):
+            return _Outcome(
+                ok=False, code="not_visible", detail="both drag endpoints must be visible inside the window"
+            )
+        destructive = {
+            candidate.target.index
+            for candidate in build_candidates(snap)
+            if candidate.destructive and candidate.target is not None
+        }
+        covered = any(in_web_area(snap, n) and not uncovered(snap, n) for n in nodes)
+        for endpoint in (start, end):
+            point = await self._pixels.screen_point(snap, endpoint)
+            if point is None:
+                return _Outcome(ok=False, code="not_visible", detail="the drag endpoint could not be located")
+            under = [n for n in snap.nodes if _contains(n, *point)]
+            if not allow_destructive and any(n.index in destructive for n in under):
+                return _confirmation()
+            covered = covered or any(in_web_area(snap, n) and not uncovered(snap, n, point) for n in under)
+        if covered:
+            return _Outcome(ok=False, code="not_visible", detail="a drag endpoint is covered by another control")
+        route.append("drag")
+        return to_act(
+            await self._driver.call(
+                "drag",
+                _DragArgs(
+                    pid=snap.pid,
+                    window_id=snap.window_id,
+                    from_x=start.x,
+                    from_y=start.y,
+                    to_x=end.x,
+                    to_y=end.y,
+                    delivery_mode="background",
+                ),
+            )
+        )
 
     async def _key(self, c: ActionCandidate, snap: Snapshot, route: list[str]) -> _Outcome:
         keys = c.keys
@@ -530,14 +592,14 @@ _CONTAINERS: Final = frozenset(
 )
 
 
-def uncovered(snap: Snapshot, node: UINode) -> bool:
+def uncovered(snap: Snapshot, node: UINode, point: tuple[float, float] | None = None) -> bool:
     """Whether nothing but `node`'s own content and its containers lies over its centre: no element after
     it in the tree (a popover, a toast), and no control or text anywhere else in the tree, since the
     tree's order is not always the order the page paints in."""
     f = node.frame
     if f is None:
         return False
-    cx, cy = f.x + f.w / 2, f.y + f.h / 2
+    cx, cy = point if point is not None else (f.x + f.w / 2, f.y + f.h / 2)
     by_index = {n.index: n for n in snap.nodes}
 
     def inside_node(n: UINode) -> bool:
@@ -561,6 +623,11 @@ def uncovered(snap: Snapshot, node: UINode) -> bool:
         and not inside_node(o)
         for o in snap.nodes
     )
+
+
+def _contains(node: UINode, x: float, y: float) -> bool:
+    f = node.frame
+    return f is not None and f.x <= x <= f.x + f.w and f.y <= y <= f.y + f.h
 
 
 def _chain(by_index: Mapping[int, UINode], index: int | None) -> Iterator[UINode]:

@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import replace
 from typing import Final, Literal, NotRequired, TypedDict, cast
 
 from beans_picker import config
+from beans_picker._aio import Clock, Sleep
 from beans_picker._numbers import fixed, round3
 from beans_picker.act.execute import Executor
-from beans_picker.candidates.build import BuildOptions, build_candidates
+from beans_picker.candidates.build import BuildOptions, build_candidates, describe_short
 from beans_picker.candidates.describe import describe
 from beans_picker.candidates.prune import in_shard_order
+from beans_picker.candidates.safety import control_context, is_destructive_control
 from beans_picker.candidates.types import TEXT_KINDS, ActionCandidate
+from beans_picker.driver.app import WINDOW_CHECK_INTERVAL_S
 from beans_picker.driver.mcp import Driver
 from beans_picker.errors import DriverError, DriverTimeout, ForegroundViolation, ToolError, failure
 from beans_picker.jev.client import JevUsageOut
@@ -22,10 +28,10 @@ from beans_picker.jev.state import CHANGED_TEXTS, Change, bare_role, build_state
 from beans_picker.observe.snapshot import in_web_area
 from beans_picker.observe.types import Snapshot
 from beans_picker.observe.visual import Shot, capture_window, region_change
-from beans_picker.tools.args import ActArgs, Modifier, Step
+from beans_picker.tools.args import ActArgs, DragCandidate, DragTo, Modifier, Step
 from beans_picker.tools.present import SCREEN_LINES, ShownCandidate, ShownWindow, show_candidate, show_window
 from beans_picker.tools.session import Target, ToolSession
-from beans_picker.verify.effect import EffectVerdict, VerifyEffect, verify_effect
+from beans_picker.verify.effect import EffectVerdict, VerifyEffect, drag_state, verify_effect
 
 _log = logging.getLogger(__name__)
 
@@ -48,6 +54,7 @@ _SETTLED_AT_ONCE: Final = frozenset({"set_value", "type_into", "append", "keypad
 """Kinds whose effect is the control's own value: once it shows, there is nothing more to wait for."""
 SETTLE_RETAKES: Final = 4
 """How many more snapshots act takes, at most, while the window's controls keep changing after the effect showed."""
+DRAG_QUIET_S: Final = 2 * WINDOW_CHECK_INTERVAL_S
 
 
 class ShownAction(ShownCandidate):
@@ -181,6 +188,9 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
     learned = session.menu_keys.table_for(t.pid)
     text = args.get("text")
     candidate_id = args.get("candidateId")
+    drag = args.get("dragTo")
+    if drag is not None and candidate_id is None:
+        return {"status": "failed", "code": "candidate_required", "message": "dragTo needs a source candidateId"}
     cands = build_candidates(
         before, BuildOptions(instruction=args["instruction"], text=text, list_text_kinds=True, learned=learned)
     )
@@ -196,6 +206,17 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
         if chosen is None:
             message = f"candidate {candidate_id} is not on the window now; call observe for current ids"
             return {"status": "not_found", "window": window, "message": message}
+        if drag is not None:
+            if text is not None:
+                return _failed(
+                    "text_not_used", window, "a drag enters no text; leave `text` out", _shown_action(chosen)
+                )
+            try:
+                chosen = _drag_candidate(chosen, drag, cands, before, args["instruction"])
+            except ToolError as err:
+                if err.code == "target_gone":
+                    return {"status": "not_found", "window": window, "message": err.message}
+                return _failed(err.code, window, err.message, _shown_action(chosen))
         if chosen.kind in TEXT_KINDS and text is None:
             return _failed("text_required", window, f"{chosen.kind} needs `text`", _shown_action(chosen))
         if chosen.kind not in TEXT_KINDS and text is not None:
@@ -293,6 +314,36 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
         driver.sentinel.stop()
 
 
+def _drag_candidate(
+    source: ActionCandidate, drag: DragTo, cands: Sequence[ActionCandidate], snap: Snapshot, instruction: str
+) -> ActionCandidate:
+    if source.target is None:
+        raise ToolError("drag_not_supported", "the source candidate has no control to drag")
+    target = None
+    offset = None
+    dangerous = source.destructive
+    if "candidateId" in drag:
+        destination_id = cast("DragCandidate", drag)["candidateId"]
+        destination = next((c for c in cands if c.id == destination_id), None)
+        if destination is None:
+            raise ToolError(
+                "target_gone", "the drag destination is not on the window now; call observe for current ids"
+            )
+        target = destination.target
+        if target is None:
+            raise ToolError("drag_not_supported", "the destination candidate has no control to drop onto")
+        dangerous = dangerous or destination.destructive
+        summary = f"drag {describe_short(source.target)} onto {describe_short(target)}"
+    else:
+        offset = (drag["dx"], drag["dy"])
+        summary = f"drag {describe_short(source.target)} by ({offset[0]}, {offset[1]}) pixels"
+    ctx = control_context(snap, instruction)
+    dangerous = dangerous or any(is_destructive_control(n, ctx) for n in (source.target, target) if n is not None)
+    return replace(
+        source, kind="drag", summary=summary, destructive=dangerous, drag_target=target, drag_offset=offset, text=None
+    )
+
+
 async def _execute(
     session: ToolSession,
     t: Target,
@@ -329,7 +380,7 @@ async def _execute(
                 "status": "needs_confirmation",
                 "window": window,
                 "action": action,
-                "message": "the selected option may be destructive; repeat with allowDestructive: true if intended",
+                "message": "the action may be destructive; repeat with allowDestructive: true if intended",
             }
         code = res.code if res.code is not None else "failed"
         return _failed(code, window, res.detail if res.detail is not None else _REFUSED, action)
@@ -389,9 +440,11 @@ async def _judge(
     before: Snapshot,
     snapshot: Callable[[], Awaitable[Snapshot]],
     pixels: Callable[[], Awaitable[EffectVerdict | None]] | None = None,
+    *,
+    clock: Clock = time.monotonic,
+    sleep: Sleep = asyncio.sleep,
 ) -> tuple[EffectVerdict, Snapshot, int]:
-    """Retakes snapshots until the effect shows, then until the window's controls stop changing; the count decides,
-    not a wait."""
+    """Retake until an effect shows, then settle within a bounded snapshot budget."""
     retakes = config.effect_retakes()
     after = await snapshot()
     n = 1
@@ -407,6 +460,8 @@ async def _judge(
         n += 1
     if verdict.effect != "ok" or c.kind in _SETTLED_AT_ONCE:
         return verdict, after, n
+    if c.kind == "drag":
+        return await _settle_drag(c, before, after, snapshot, n, clock=clock, sleep=sleep)
     # A page may still be loading what the step brought up: wait until two snapshots offer the same controls. Their
     # values and texts are left out, so a clock or a spinner does not keep the wait going.
     for _ in range(SETTLE_RETAKES):
@@ -424,6 +479,40 @@ async def _judge(
     # A chosen option is judged by its value, which the page may have put back meanwhile; a click by any change,
     # which a passing notice may have taken away again.
     return (again if again.effect == "ok" or c.kind in TEXT_KINDS else verdict), after, n
+
+
+async def _settle_drag(
+    c: ActionCandidate,
+    before: Snapshot,
+    after: Snapshot,
+    snapshot: Callable[[], Awaitable[Snapshot]],
+    n: int,
+    *,
+    clock: Clock,
+    sleep: Sleep,
+) -> tuple[EffectVerdict, Snapshot, int]:
+    quiet_since = clock()
+    for _ in range(SETTLE_RETAKES):
+        await sleep(WINDOW_CHECK_INTERVAL_S)
+        try:
+            later = await snapshot()
+        except (ToolError, DriverError, DriverTimeout):
+            break
+        n += 1
+        if (
+            later.signature != after.signature
+            or _controls(later) != _controls(after)
+            or drag_state(later) != drag_state(after)
+        ):
+            quiet_since = clock()
+        after = later
+        if clock() - quiet_since >= DRAG_QUIET_S:
+            return verify_effect(c, before, after), after, n
+    return (
+        EffectVerdict(effect="unverified", detail="the drag did not reach a quiet state before verification ended"),
+        after,
+        n,
+    )
 
 
 def _controls(snap: Snapshot) -> list[tuple[str, str]]:

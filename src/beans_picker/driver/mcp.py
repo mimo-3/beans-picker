@@ -15,7 +15,7 @@ from typing import Final, Protocol, TextIO
 
 import anyio
 from mcp import ClientSession, MCPError, StdioServerParameters, stdio_client
-from mcp.types import CONNECTION_CLOSED, CallToolResult, Implementation, TextContent
+from mcp.types import CONNECTION_CLOSED, CallToolResult, ImageContent, Implementation, TextContent
 
 from beans_picker import __version__, config
 from beans_picker._json import JsonObject
@@ -219,6 +219,7 @@ class CuaDriver:
         self.session = f"{session}-{os.getpid()}-{_base36(time.time_ns() // 1_000_000)}"
         self.sentinel = ActivationSentinel()
         self.session_tools: frozenset[str] = frozenset()
+        self.tool_schemas: dict[str, JsonObject] = {}
         self.generation = 0
         """Bumped by every reconnect."""
 
@@ -249,14 +250,17 @@ class CuaDriver:
         return driver
 
     async def load_schemas(self) -> None:
-        """Read `tools/list`: the tools whose input schema has a `session` property."""
+        """Read input schemas and the tools that take a session label."""
         listed = await self._conn.session().list_tools()
         names: set[str] = set()
+        schemas: dict[str, JsonObject] = {}
         for tool in listed.tools:
+            schemas[tool.name] = tool.input_schema
             props = as_obj(tool.input_schema.get("properties"))
             if props is not None and "session" in props:
                 names.add(tool.name)
         self.session_tools = frozenset(names)
+        self.tool_schemas = schemas
 
     async def call(self, tool: str, args: Mapping[str, object] | None = None) -> ToolResult:
         """Call a tool."""
@@ -352,6 +356,7 @@ class CuaDriver:
             ) from err
         ms = round_half_up((time.perf_counter() - t0) * 1000)
         text = "\n".join(c.text if isinstance(c, TextContent) else "" for c in res.content)
+        images = tuple(c for c in res.content if isinstance(c, ImageContent))
         data: JsonObject = res.structured_content if res.structured_content is not None else {}
         if res.is_error:
             refusal = get_obj(data, "refusal") or {}
@@ -364,9 +369,10 @@ class CuaDriver:
                 data=data,
                 text=text,
                 ms=ms,
+                images=images,
             )
         _log.debug("%s ok in %d ms", tool, ms)
-        return ToolOk(data=data, text=text, ms=ms)
+        return ToolOk(data=data, text=text, ms=ms, images=images)
 
 
 def _retrieve(task: asyncio.Task[None]) -> None:
