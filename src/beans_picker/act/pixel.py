@@ -107,6 +107,13 @@ class PixelMapper:
         x, y = g.bounds.x + point.x / g.scale, g.bounds.y + point.y / g.scale
         return not any(_covers(w, g, x, y) for w in g.others)
 
+    async def screen_point(self, snap: Snapshot, point: Point) -> tuple[float, float] | None:
+        """Convert a screenshot pixel to the screen points used by AX frames."""
+        g = await self._geometry_of(snap)
+        if g is None:
+            return None
+        return g.bounds.x + point.x / g.scale, g.bounds.y + point.y / g.scale
+
     async def _geometry_of(self, snap: Snapshot) -> _Geometry | None:
         # Sheets or new windows can cover the point, so the cache holds only while the window set is unchanged.
         shape = window_shape(snap)
