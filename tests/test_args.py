@@ -100,8 +100,8 @@ def test_validation_text() -> None:
     assert text == "MCP error -32602: Input validation error: Invalid arguments for tool observe: A at pid\nB"
 
 
-def test_schemas_are_the_three_tools_in_order() -> None:
-    assert list(INPUT_SCHEMAS) == ["observe", "act", "extract"]
+def test_schemas_include_the_opt_in_driver_after_the_three_tools() -> None:
+    assert list(INPUT_SCHEMAS) == ["observe", "act", "extract", "driver"]
     assert INPUT_SCHEMAS["act"]["required"] == ["instruction"]
     assert "required" not in INPUT_SCHEMAS["observe"]
 

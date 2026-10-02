@@ -12,7 +12,7 @@ from pathlib import Path
 import anyio
 import pytest
 from mcp import MCPError
-from mcp.types import CONNECTION_CLOSED
+from mcp.types import CONNECTION_CLOSED, ImageContent
 
 from beans_picker.driver import mcp as mcp_module
 from beans_picker.driver.mcp import (
@@ -178,6 +178,31 @@ async def test_output_schemas_are_not_enforced(driver: CuaDriver) -> None:
     assert r.data == {"snapshot_id": "s1", "launch": 1}
     assert r.text == "state"
     assert r.ms >= 0
+
+
+async def test_loaded_tool_schemas_identify_supported_raw_calls(driver: CuaDriver) -> None:
+    assert set(driver.tool_schemas) == {
+        "list_windows",
+        "get_window_state",
+        "click",
+        "end_session",
+        "echo",
+        "refuse",
+        "fail_plain",
+        "mixed",
+        "whoami",
+    }
+    assert driver.tool_schemas["click"] == {
+        "type": "object",
+        "properties": {"pid": {"type": "integer"}, "session": {"type": "string"}},
+    }
+
+
+async def test_driver_keeps_inline_images_alongside_text(driver: CuaDriver) -> None:
+    result = await driver.call("mixed")
+    assert isinstance(result, ToolOk)
+    assert result.images == (ImageContent(type="image", data="AAAA", mime_type="image/png"),)
+    assert result.text == "a\n\nb"
 
 
 async def test_refusals_carry_the_drivers_code_and_message(driver: CuaDriver) -> None:
