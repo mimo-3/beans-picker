@@ -160,6 +160,33 @@ async def test_allow_destructive_permits_an_offset_onto_a_destructive_control() 
 
 
 @pytest.mark.parametrize("offset", [False, True])
+async def test_drag_in_a_window_titled_shared_files_is_allowed(offset: bool) -> None:
+    before = _window()
+    before.window_title = "Shared files"
+    before.nodes.insert(0, replace(node(0, "AXWindow", "Shared files", frame=frame(100, 50, 400, 300)), actions=[]))
+    session = _session(before, shown(before, "Moved"))
+
+    out = await act_tool(session, _args(before, {"dx": 300, "dy": 200} if offset else None))
+
+    assert out["status"] == "done"
+    assert session.fake_driver.tools.count("drag") == 1
+
+
+@pytest.mark.parametrize("offset", [False, True])
+@pytest.mark.parametrize("source", [False, True])
+async def test_an_inert_group_titled_delete_report_at_either_drag_point_is_allowed(offset: bool, source: bool) -> None:
+    before = _window()
+    x, y = (150, 100) if source else (300, 200)
+    before.nodes.append(replace(node(3, "AXGroup", "Delete report", frame=frame(x, y)), actions=[]))
+    session = _session(before, shown(before, "Moved"))
+
+    out = await act_tool(session, _args(before, {"dx": 300, "dy": 200} if offset else None))
+
+    assert out["status"] == "done"
+    assert session.fake_driver.tools.count("drag") == 1
+
+
+@pytest.mark.parametrize("offset", [False, True])
 @pytest.mark.parametrize("source", [False, True])
 @pytest.mark.parametrize("web", [False, True])
 async def test_a_destructive_control_covering_either_drag_point_requires_confirmation(

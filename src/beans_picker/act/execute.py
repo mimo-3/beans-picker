@@ -12,6 +12,7 @@ from beans_picker._aio import Clock
 from beans_picker._json import quote
 from beans_picker._numbers import round_half_up
 from beans_picker.act.pixel import PixelMapper, Point, ToolCaller
+from beans_picker.candidates.build import build_candidates
 from beans_picker.candidates.safety import control_context, is_destructive_control, is_destructive_label
 from beans_picker.menus.keyequiv import key_equivalent
 from beans_picker.observe.identity import is_ambiguous_key
@@ -251,14 +252,18 @@ class Executor:
             return _Outcome(
                 ok=False, code="not_visible", detail="both drag endpoints must be visible inside the window"
             )
-        ctx = control_context(snap)
+        destructive = {
+            candidate.target.index
+            for candidate in build_candidates(snap)
+            if candidate.destructive and candidate.target is not None
+        }
         covered = any(in_web_area(snap, n) and not uncovered(snap, n) for n in nodes)
         for endpoint in (start, end):
             point = await self._pixels.screen_point(snap, endpoint)
             if point is None:
                 return _Outcome(ok=False, code="not_visible", detail="the drag endpoint could not be located")
             under = [n for n in snap.nodes if _contains(n, *point)]
-            if not allow_destructive and any(is_destructive_control(n, ctx) for n in under):
+            if not allow_destructive and any(n.index in destructive for n in under):
                 return _confirmation()
             covered = covered or any(in_web_area(snap, n) and not uncovered(snap, n, point) for n in under)
         if covered:
