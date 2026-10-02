@@ -1,4 +1,4 @@
-"""The MCP server: observe, act and extract over one background cua-driver session."""
+"""The MCP server over one background cua-driver session."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from mcp import MCPError
 from mcp.server import NotificationOptions, Server, ServerRequestContext
 from mcp.server.models import InitializationOptions
 
-from beans_picker import __version__, _json
+from beans_picker import __version__, _json, config
 from beans_picker._json import JsonObject
 from beans_picker.driver import lock
 from beans_picker.errors import BeansPickerError, ToolError, failure
@@ -23,10 +23,12 @@ from beans_picker.tools.args import (
     INPUT_SCHEMAS,
     act_args,
     check_arguments,
+    driver_args,
     extract_args,
     observe_args,
     validation_text,
 )
+from beans_picker.tools.driver import driver_tool
 from beans_picker.tools.extract import extract_tool
 from beans_picker.tools.observe import observe_tool
 from beans_picker.tools.session import Session
@@ -42,14 +44,17 @@ INSTRUCTIONS: Final = "\n".join(
         "- act: performs one action, picked by Jev from the instruction or given as candidateId, then checks the "
         "effect on fresh snapshots. Steps you already know (fill these fields, tick these boxes, then press Save) go "
         "in one call with `then`: they run in order and stop at the first that is neither done nor unverified. "
-        "Text is entered exactly as given in `text` and verified by exact equality.",
+        "Text is entered exactly as given in `text` and verified by exact equality. "
+        "For a mouse drag, give source candidateId and dragTo: {candidateId} or {dx, dy} in window screenshot "
+        "pixels; both endpoints must be visible. This also works in then, with no text or modifiers.",
         "  status: done | unverified (the field changed but its exact text could not be read) | no_effect | mismatch "
         "(something changed, not what was asked) | ambiguous (choose a candidateId) | needs_confirmation "
         "(irreversible: repeat with allowDestructive) | not_found | failed.",
         "  When a step brings up something new (a menu, a dialog, another page), the result carries its screenText "
         "and newCandidates with their ids: act on those directly instead of observing again.",
         "- extract: returns the text or value of the element Jev picks, exactly as read; a table or list comes back "
-        "row by row.",
+        "row by row. When BEANS_PICKER_RAW_DRIVER is enabled, driver forwards raw background app-control calls "
+        "without Jev, effect verification or destructive confirmation.",
         "Rows scrolled out of view are not on the window until a scroll candidate brings them in.",
         'Commands that live only in a right-click menu (rename, star, move to trash) are reached with an "open the '
         'context menu" candidate; its items are then pressed like any other.',
@@ -71,9 +76,14 @@ DESCRIPTIONS: Final[Mapping[str, str]] = MappingProxyType(
         "observe": "List the candidate actions on a window (id, kind, what it does). With `instruction`, Jev ranks "
         "them and the most likely come first with their probability `p`.",
         "act": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev "
-        "picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given.",
+        "picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given. "
+        "With dragTo ({candidateId} or {dx, dy} in screenshot pixels), drag that source control in the background; "
+        "either destructive endpoint requires allowDestructive.",
         "extract": "Return the text or value of the element Jev picks for `instruction` (e.g. 'the result shown on "
         "the display'), exactly as read from accessibility. A table or list is returned as `rows`.",
+        "driver": "Forward one raw cua-driver app-control call. Opt-in via BEANS_PICKER_RAW_DRIVER; background "
+        "only. Does not call Jev, verify effects or ask for destructive confirmation. Management and "
+        "focus-stealing tools are refused. File paths are omitted; owned screenshots are returned as images.",
     }
 )
 
@@ -104,7 +114,10 @@ async def run(
             if await screen_locked():
                 verb = "done" if acts else "read"
                 return error("screen_locked", f"the screen is locked; nothing was {verb}. Unlock it and call again")
-            return types.CallToolResult(content=[types.TextContent(type="text", text=_json.dumps(await fn()))])
+            result = await fn()
+            if isinstance(result, types.CallToolResult):
+                return result
+            return types.CallToolResult(content=[types.TextContent(type="text", text=_json.dumps(result))])
         except Exception as err:
             code, message = failure(err)
             if not isinstance(err, ToolError):
@@ -142,6 +155,7 @@ def _tools() -> list[types.Tool]:
             execution=types.ToolExecution(task_support="forbidden"),
         )
         for name, schema in INPUT_SCHEMAS.items()
+        if name != "driver" or config.raw_driver()
     ]
 
 
@@ -170,13 +184,16 @@ def create_server(
         ctx: ServerRequestContext[Session], params: types.CallToolRequestParams
     ) -> types.CallToolResult:
         name = params.name
-        if name not in INPUT_SCHEMAS:
+        if name not in INPUT_SCHEMAS or (name == "driver" and not config.raw_driver()):
             raise MCPError(types.INVALID_PARAMS, f"Tool {name} not found")
         checked, issues = check_arguments(name, params.arguments)
         if issues:
             return _protocol_error(validation_text(name, issues))
         return await run(
-            the_session, _handler(the_session, name, checked), acts=name == "act", screen_locked=screen_locked
+            the_session,
+            _handler(the_session, name, checked),
+            acts=name in {"act", "driver"},
+            screen_locked=screen_locked,
         )
 
     return _Server(
@@ -195,5 +212,7 @@ def _handler(session: Session, name: str, arguments: JsonObject) -> Callable[[],
             return lambda: observe_tool(session, observe_args(arguments))
         case "act":
             return lambda: act_tool(session, act_args(arguments))
+        case "driver":
+            return lambda: driver_tool(session, driver_args(arguments))
         case _:
             return lambda: extract_tool(session, extract_args(arguments))
