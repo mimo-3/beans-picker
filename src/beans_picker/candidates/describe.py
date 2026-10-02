@@ -14,6 +14,7 @@ from beans_picker.observe.normalize import truncate
 from beans_picker.observe.types import Snapshot
 
 _EFFECT_HINT: Final[Mapping[ActionKind, str]] = {
+    "drag": "drags this control to the given destination",
     "click": "presses this control",
     "toggle": "switches this control to the other state",
     "choose_option": "selects the option named `text` in this pop-up",

@@ -20,6 +20,7 @@ type ActionKind = Literal[
     "key",
     "scroll",
     "context_menu",
+    "drag",
 ]
 type ScrollDirection = Literal["up", "down"]
 
@@ -53,6 +54,8 @@ class ActionCandidate:
     lexical: int = 0
     """Deterministic lexical relevance to the instruction."""
     target: UINode | None = None
+    drag_target: UINode | None = None
+    drag_offset: tuple[int, int] | None = None
     menu: MenuItem | None = None
     text: str | None = None
     """The caller's text, for the kinds in TEXT_KINDS. Entered as given, never trimmed."""
