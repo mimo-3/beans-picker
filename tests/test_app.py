@@ -17,7 +17,7 @@ from beans_picker.driver.app import (
     resolve_bundle,
     running_pid,
 )
-from beans_picker.driver.types import ToolOk, ToolRefused, ToolResult, Window
+from beans_picker.driver.types import ToolOk, ToolRefused, ToolResult, Window, WindowBounds
 from beans_picker.errors import AppLaunchError, DriverError, ProcessError
 from tests.fakes import FakeDriver, RecordingSleep, fake_runner
 
@@ -292,3 +292,61 @@ async def test_a_window_list_without_windows_raises() -> None:
     driver = FakeDriver(lambda tool, args: ok({}))
     with pytest.raises(AppLaunchError, match="no window list"):
         await ensure_app(driver, CALC, runner=SeqRunner(found(42)), sleep=RecordingSleep())
+
+
+def test_pick_window_passes_over_the_control_on_a_window_being_recorded() -> None:
+    main = Window(
+        window_id=1, pid=1, title="Calculator", z_index=5, bounds=WindowBounds(x=0, y=0, width=230, height=408)
+    )
+    control = Window(
+        window_id=2, pid=1, title="Window", z_index=9, bounds=WindowBounds(x=16, y=16, width=66, height=20)
+    )
+    narrow = Window(window_id=3, pid=1, title="Strip", z_index=9, bounds=WindowBounds(x=0, y=0, width=40, height=400))
+    assert pick_window([control, narrow, main]) is main
+    assert pick_window([control]) is control
+
+
+class Fronts:
+    def __init__(self, *pids: int | None) -> None:
+        self.pids = list(pids)
+
+    async def __call__(self) -> int | None:
+        return self.pids.pop(0)
+
+
+class Restored:
+    def __init__(self) -> None:
+        self.pids: list[int] = []
+
+    async def __call__(self, pid: int) -> bool:
+        self.pids.append(pid)
+        return True
+
+
+def _launching() -> FakeDriver:
+    return FakeDriver(lambda tool, args: ok({"pid": 7, "name": "Calc", "windows": [win(pid=7)]}))
+
+
+async def test_an_app_that_took_the_front_while_starting_is_put_behind_the_app_that_was_there() -> None:
+    restore = Restored()
+    await ensure_app(
+        _launching(), CALC, runner=SeqRunner(NOT_FOUND), sleep=RecordingSleep(), front=Fronts(3, 7), restore=restore
+    )
+    assert restore.pids == [3]
+
+
+@pytest.mark.parametrize("fronts", [(3, 3), (None, 7), (7, 7)])
+async def test_a_launch_that_left_the_front_alone_restores_nothing(fronts: tuple[int | None, int]) -> None:
+    restore = Restored()
+    await ensure_app(
+        _launching(), CALC, runner=SeqRunner(NOT_FOUND), sleep=RecordingSleep(), front=Fronts(*fronts), restore=restore
+    )
+    assert restore.pids == []
+
+
+async def test_a_running_app_is_never_restored_over() -> None:
+    driver = FakeDriver(lambda tool, args: ok({"windows": [win(app_name="Calculator")]}))
+    restore = Restored()
+    front = Fronts()
+    await ensure_app(driver, CALC, runner=SeqRunner(found(42)), sleep=RecordingSleep(), front=front, restore=restore)
+    assert restore.pids == []
