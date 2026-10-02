@@ -25,37 +25,41 @@ To drag, give the source's `candidateId` and either `dragTo: {"candidateId": "<t
 or `dragTo: {"dx": 120, "dy": -30}`. The gesture starts at the source control's centre;
 offsets are window-local screenshot pixels, not screen points. Both endpoints must be visible
 inside the same window. `instruction` is still required; omit `text` and `modifiers`.
-The same fields work in a `then` step. Either destructive endpoint, including controls under an offset
-endpoint, requires `allowDestructive: true`.
+The same fields work in a `then` step. Destructive controls under either actual endpoint, for both candidate and offset
+destinations, require `allowDestructive: true`.
 Stale ids return `not_found`, and missing frames, covered controls or off-window endpoints return
 `failed` / `not_visible`. The settled snapshot must show a state change (including enabled controls) or movement of the source
 relative to its window. Moving the whole window or snapping back does not count; no observable
-change returns `no_effect`.
+change returns `no_effect`. After an effect appears, drag verification requires 0.3 seconds of
+unchanged state, sampled every 0.15 seconds for at most four more snapshots. An unsettled or
+unreadable result is `unverified`.
 
 The optional `driver` tool covers calls such as `double_click` and `zoom`:
 `{"tool": "double_click", "arguments": {"pid": 123, "window_id": 456, "x": 100, "y": 80}}`.
 Only these app-control tools are allowlisted: `click`, `double_click`, `right_click`, `drag`,
-`scroll`, `type_text`, `press_key`, `hotkey`, `set_value`, `zoom`, `move_cursor`, `page`, `launch_app`,
+`scroll`, `type_text`, `press_key`, `hotkey`, `set_value`, `zoom`, `move_cursor`, `page`,
 `get_window_state`, `list_windows`, `list_apps`, `get_screen_size`, `get_cursor_position` and
 `get_accessibility_tree`. Tools absent from the loaded driver schemas return `unknown_driver_tool`;
-other tools outside the allowlist return `driver_tool_disallowed`.
+other tools outside the allowlist, including `launch_app`, return `driver_tool_disallowed`.
 
 Input calls (clicks, drag, scroll, typing, keys, set_value and page) require an integer `pid` and
 watch that target for activation. Desktop scope, foreground delivery and focus-stealing tools
-(including `move_cursor`) remain refused. `page` cannot run `enable_javascript_apple_events`.
+(including `move_cursor`) remain refused. `page` cannot run `enable_javascript_apple_events`. Its `cdp_port` and `bundle_id` arguments
+are refused with `driver_argument_disallowed` because they can select another process.
 `screenshot_out_file` is redirected into private `shots/capture-*` storage and returned as an image;
 other file-output arguments, such as `debug_image_out`, are refused. Failures return only a code
 and fixed message. Values under path-like keys and occurrences of this session's cache directory
-in strings are omitted; other text, including slashes and URLs, is preserved.
+in strings are omitted at directory boundaries; sibling paths sharing the prefix and unrelated
+URLs are preserved.
 See [SECURITY.md](SECURITY.md) for the passthrough boundary.
 
 `act` returns a `status`:
 
 | status | meaning |
 |---|---|
-| `done` | The effect asked for is observed. For text, the field reads **exactly** the expected text (see "Exact checks"). |
-| `unverified` | The field changed, but its exact text could not be read (the helper has no Accessibility permission). |
-| `no_effect` | The window's signature did not change over `BEANS_PICKER_EFFECT_RETAKES` fresh snapshots (default 5). Decided by count, not by waiting. |
+| `done` | The effect asked for is observed. Drags also pass the bounded quiet window. For text, the field reads **exactly** the expected text (see "Exact checks"). |
+| `unverified` | The field changed, but its exact text could not be read, or a drag could not reach a quiet state within the settling budget. |
+| `no_effect` | The window's signature did not change over `BEANS_PICKER_EFFECT_RETAKES` fresh snapshots (default 5). A drag whose settled state returns to its starting state also reports no_effect. |
 | `mismatch` | Something changed, but not what was asked (for example the text landed in another field, or a trailing space was lost). |
 | `ambiguous` | Jev had no clear leader. The top candidates are returned; call `act` again with the right `candidateId`. |
 | `needs_confirmation` | The action may not be undoable (delete, close, send, quit …). Call again with `candidateId` and `allowDestructive: true`. |
@@ -139,7 +143,7 @@ snapshot ─► candidates ─► Jev picks (or candidateId) ─► gate ─► 
 2. **Candidates** (`src/beans_picker/candidates`). Clicks, toggles, text entry (`set_value`, `type_into` at the caret, `append` at the end), pop-up choices, an on-screen keypad sequence for `text` ("12×7="), menu commands with their background shortcut, one step up or down on a slider or number field (an arrow key sent to it), the options of a web list box (a combo box's suggestions), a page down or up on a scroll view, table, list or web page, a named row's, link's or image's context menu (AXShowMenu, which a web page receives as a right-click), and Return / Escape / Tab / Space / the arrow keys / Shift+F10. With `text`, only the actions that enter text are in the running.
 3. **Jev** (`src/beans_picker/jev`). One `system_one` request asks two choice questions over the same candidates: one with a `none` option, one forced. More than 60 candidates are sharded (best lexical match first), and the leaders of each shard go to a runoff. The gate acts on a leader at p ≥ 0.8, or at p ≥ 0.5 when the forced question agrees and the leader has twice the runner-up's probability. Otherwise the result is `ambiguous` (or `not_found` when `none` dominates).
 4. **cua-driver** (`src/beans_picker/act`). AX press, pixel clicks for keypads, a pop-up pressed open and then its item pressed (a menu left open over the page, as Chrome's is, is closed with Escape), `set_value` / `type_text` (a web page keeps its own copy of a field's value, which follows typing but not an AXValue write, so a web page's text and number fields are typed into: End, ⇧Home (⌘↓, ⇧⌘↑ in a text area), then `type_text`, once more if a keystroke was dropped; text with a line break is written instead, since a typed Return would submit a form or send a message), ⌘↓ then `type_text` for `append`, a wheel event at the area for a scroll, and the menu shortcut as a pid-targeted hotkey. Stale element tokens are rebound by stable key.
-5. **Effect** (`src/beans_picker/verify/effect.py`). Fresh snapshots are taken, up to the retake count, until the effect shows.
+5. **Effect** (`src/beans_picker/verify/effect.py`). Fresh snapshots are taken, up to the retake count, until the effect shows. Drags then require a bounded quiet interval before the final verdict.
 
 ## Exact checks
 
