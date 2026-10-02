@@ -237,23 +237,11 @@ class Executor:
     async def _drag(self, c: ActionCandidate, snap: Snapshot, route: list[str], *, allow_destructive: bool) -> _Outcome:
         source, target = _target(c), c.drag_target
         nodes = [source] if target is None else [source, target]
-        if any(in_web_area(snap, n) and not uncovered(snap, n) for n in nodes):
-            return _Outcome(ok=False, code="not_visible", detail="a drag endpoint is covered by another control")
         start = await self._pixels.point(snap, source)
         end = await self._pixels.point(snap, target) if target is not None else None
         if start is not None and c.drag_offset is not None:
             dx, dy = c.drag_offset
             end = Point(start.x + dx, start.y + dy)
-            point = await self._pixels.screen_point(snap, end)
-            if point is not None:
-                under = [n for n in snap.nodes if _contains(n, *point)]
-                ctx = control_context(snap)
-                if not allow_destructive and any(is_destructive_control(n, ctx) for n in under):
-                    return _confirmation()
-                if any(in_web_area(snap, n) and not uncovered(snap, n, point) for n in under):
-                    return _Outcome(
-                        ok=False, code="not_visible", detail="a drag endpoint is covered by another control"
-                    )
         if (
             start is None
             or end is None
@@ -263,6 +251,18 @@ class Executor:
             return _Outcome(
                 ok=False, code="not_visible", detail="both drag endpoints must be visible inside the window"
             )
+        ctx = control_context(snap)
+        covered = any(in_web_area(snap, n) and not uncovered(snap, n) for n in nodes)
+        for endpoint in (start, end):
+            point = await self._pixels.screen_point(snap, endpoint)
+            if point is None:
+                return _Outcome(ok=False, code="not_visible", detail="the drag endpoint could not be located")
+            under = [n for n in snap.nodes if _contains(n, *point)]
+            if not allow_destructive and any(is_destructive_control(n, ctx) for n in under):
+                return _confirmation()
+            covered = covered or any(in_web_area(snap, n) and not uncovered(snap, n, point) for n in under)
+        if covered:
+            return _Outcome(ok=False, code="not_visible", detail="a drag endpoint is covered by another control")
         route.append("drag")
         return to_act(
             await self._driver.call(

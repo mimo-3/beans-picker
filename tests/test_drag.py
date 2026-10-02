@@ -158,6 +158,43 @@ async def test_allow_destructive_permits_an_offset_onto_a_destructive_control() 
     assert session.fake_driver.tools[-1] == "drag"
 
 
+@pytest.mark.parametrize("offset", [False, True])
+@pytest.mark.parametrize("source", [False, True])
+@pytest.mark.parametrize("web", [False, True])
+async def test_a_destructive_control_covering_either_drag_point_requires_confirmation(
+    offset: bool, source: bool, web: bool
+) -> None:
+    before = _window()
+    before.nodes[1] = replace(before.nodes[1], role="AXRow", key="AXRow:Target")
+    x, y = (150, 100) if source else (300, 200)
+    before.nodes.append(node(3, "AXButton", "Delete item", parent=0, frame=frame(x, y)))
+    if web:
+        before.nodes.insert(0, node(0, "AXWebArea", frame=frame(100, 50, 400, 300)))
+    session = _session(before)
+
+    out = await act_tool(session, _args(before, {"dx": 300, "dy": 200} if offset else None))
+
+    assert out["status"] == "needs_confirmation"
+    assert "drag" not in session.fake_driver.tools
+
+
+@pytest.mark.parametrize("offset", [False, True])
+@pytest.mark.parametrize("source", [False, True])
+async def test_allow_destructive_permits_a_control_covering_either_drag_point(offset: bool, source: bool) -> None:
+    before = _window()
+    before.nodes[1] = replace(before.nodes[1], role="AXRow", key="AXRow:Target")
+    x, y = (150, 100) if source else (300, 200)
+    before.nodes.append(node(3, "AXButton", "Delete item", frame=frame(x, y)))
+    session = _session(before, shown(before, "Moved"))
+    args = _args(before, {"dx": 300, "dy": 200} if offset else None)
+    args["allowDestructive"] = True
+
+    out = await act_tool(session, args)
+
+    assert out["status"] == "done"
+    assert session.fake_driver.tools.count("drag") == 1
+
+
 @pytest.mark.parametrize("index", [0, 1])
 async def test_drag_refuses_an_endpoint_without_a_frame(index: int) -> None:
     before = _window()
@@ -224,7 +261,7 @@ async def test_drag_refuses_either_endpoint_covered_by_a_web_control(x: int, y: 
     out = await act_tool(session, _args(before))
 
     assert (out["status"], out["code"]) == ("failed", "not_visible")
-    assert session.calls == []
+    assert "drag" not in session.fake_driver.tools
 
 
 async def test_drag_refuses_an_offset_covered_by_a_web_control() -> None:
