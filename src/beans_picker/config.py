@@ -112,6 +112,11 @@ def effect_retakes() -> int:
     return DEFAULT_EFFECT_RETAKES
 
 
+def pixel_clicks() -> bool:
+    """Whether a click may go by pixel; `BEANS_PICKER_PIXEL=off` leaves accessibility presses only."""
+    return os.environ.get("BEANS_PICKER_PIXEL") != "off"
+
+
 def _seconds(name: str, default: float) -> float:
     raw = os.environ.get(name)
     n = parse_number(raw) if raw is not None else math.nan

@@ -206,3 +206,11 @@ def test_constants() -> None:
         "stickies": "com.apple.Stickies",
         "notes": "com.apple.Notes",
     }
+
+
+@pytest.mark.parametrize(("raw", "want"), [(None, True), ("off", False), ("on", True), ("", True), ("OFF", True)])
+def test_pixel_clicks(monkeypatch: pytest.MonkeyPatch, raw: str | None, want: bool) -> None:
+    monkeypatch.delenv("BEANS_PICKER_PIXEL", raising=False)
+    if raw is not None:
+        monkeypatch.setenv("BEANS_PICKER_PIXEL", raw)
+    assert config.pixel_clicks() is want
