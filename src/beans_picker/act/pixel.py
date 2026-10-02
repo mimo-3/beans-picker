@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final, Protocol, TypedDict
 
+from beans_picker import config
 from beans_picker._aio import Clock
 from beans_picker._numbers import round_half_up
 
@@ -85,6 +86,8 @@ class PixelMapper:
 
     async def point(self, snap: Snapshot, node: UINode) -> Point | None:
         """The window-local pixel of the node's centre, or None when the pixel path is unsafe."""
+        if not config.pixel_clicks():
+            return None
         f = node.frame
         if f is None or f.w <= 1 or f.h <= 1:
             return None
