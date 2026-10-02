@@ -40,9 +40,10 @@ mypy runs in strict mode over `src`, `tests` and `bench`, and coverage must stay
 
 ## Native helpers
 
-`src/beans_picker/native/*.m` are compiled on the user's machine, on first use. Keep them small,
-read-only and free of dependencies beyond the macOS SDK. A change to either file changes its
-cache key, so the next run rebuilds it.
+`src/beans_picker/native/*.m` are compiled on the user's machine, on first use. Keep them small
+and free of dependencies beyond the macOS SDK. The ones that read an app (`axtext`, `menukeys`)
+stay read-only; `activate` only brings an app to the front, and `winrec` only writes the video it
+was asked for. A change to a file changes its cache key, so the next run rebuilds it.
 
 ## Benchmark
 
