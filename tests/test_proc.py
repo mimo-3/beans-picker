@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import sys
 from pathlib import Path
 
 import pytest
 
-from beans_picker._proc import Completed, Runner, run
+from beans_picker._proc import Completed, Runner, run, run_until
 from beans_picker.errors import ProcessError
 from tests.fakes import fake_runner
 
@@ -108,3 +109,68 @@ async def test_fake_runner_matches_the_real_contract() -> None:
         await runner(["boom"])
     with pytest.raises(ProcessError):
         await runner(["unknown"])
+
+
+WAITS_FOR_SIGINT = (
+    "import signal, sys, time\n"
+    "signal.signal(signal.SIGINT, lambda *_: sys.exit(7))\n"
+    "open(sys.argv[1], 'w').close()\n"
+    "time.sleep(30)\n"
+)
+
+
+def _is_up(marker: Path) -> bool:
+    return marker.exists()
+
+
+async def _started(marker: Path) -> None:
+    for _ in range(500):
+        if _is_up(marker):
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("the child never started")
+
+
+async def test_run_until_interrupts_the_child_when_asked_and_returns_its_code(tmp_path: Path) -> None:
+    stop = asyncio.Event()
+    marker = tmp_path / "started"
+    task = asyncio.create_task(run_until([PY, "-c", WAITS_FOR_SIGINT, str(marker)], stop))
+    await _started(marker)
+    assert not task.done()
+    stop.set()
+    assert await task == 7
+
+
+async def test_run_until_returns_when_the_child_exits_on_its_own() -> None:
+    assert await run_until([PY, "-c", "import sys; sys.exit(3)"], asyncio.Event()) == 3
+
+
+async def test_run_until_spawn_failures_raise(tmp_path: Path) -> None:
+    with pytest.raises(ProcessError, match="empty command"):
+        await run_until([], asyncio.Event())
+    with pytest.raises(ProcessError, match="could not start"):
+        await run_until([str(tmp_path / "missing")], asyncio.Event())
+
+
+async def test_run_until_kills_the_child_when_cancelled(tmp_path: Path) -> None:
+    marker = tmp_path / "started"
+    task = asyncio.create_task(run_until([PY, "-c", WAITS_FOR_SIGINT, str(marker)], asyncio.Event()))
+    await _started(marker)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
+async def test_run_until_kills_a_child_that_does_not_stop_in_time(tmp_path: Path) -> None:
+    code = (
+        "import signal, sys, time\n"
+        "signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+        "open(sys.argv[1], 'w').close()\n"
+        "time.sleep(30)\n"
+    )
+    stop = asyncio.Event()
+    marker = tmp_path / "started"
+    task = asyncio.create_task(run_until([PY, "-c", code, str(marker)], stop, grace=0.1))
+    await _started(marker)
+    stop.set()
+    assert await task == -signal.SIGKILL
