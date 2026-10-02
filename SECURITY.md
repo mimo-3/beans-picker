@@ -78,6 +78,21 @@ a sandbox: those processes still have ordinary filesystem access, including to u
 The menu helper loads the selected application's nib; use trusted applications and keep the cache
 and executables writable only by their owner. These are distinct from the temporary-file protections.
 
+## Raw driver passthrough
+
+`BEANS_PICKER_RAW_DRIVER=1` opts into the `driver` tool; otherwise it is neither listed nor callable.
+It makes no Jev call and bypasses candidate selection, effect verification and destructive
+confirmation. Its caller is responsible for choosing and checking the action. Raw results can
+include screen text that the normal snapshot processing would exclude.
+
+Calls still run through the serialized, screen-lock-checked wrapper and background-only guard.
+Foreground calls, unknown tools, app termination, configuration changes, session lifecycle,
+recording, replay, installation, updates and agent-cursor configuration are refused. Screenshot
+output is confined to a private capture directory; paths outside it and unsafe files are refused.
+Completed calls remove their `shots/dragpt-capture-*` directories; after a crash, remove stale ones
+only when no beans-picker process is using them. Other filesystem paths in raw results are omitted.
+Errors follow the same sanitizing and logging rules as the other tools.
+
 ## Reporting a vulnerability
 
 Please report vulnerabilities privately through GitHub:

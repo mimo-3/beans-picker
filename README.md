@@ -17,8 +17,25 @@ The server itself never calls a generative model (no `claude -p`, no LLM API).
 | tool | input | what it does |
 |---|---|---|
 | `observe` | `app` \| `pid`, `windowId?`, `instruction?`, `limit?` | Lists the window's candidate actions (`id`, `kind`, what it does). With `instruction`, Jev ranks them and each comes with its probability `p`. |
-| `act` | `app` \| `pid`, `windowId?`, `instruction`, `text?`, `candidateId?`, `allowDestructive?`, `modifiers?`, `then?` | Performs one action and checks its effect, then each step in `then` (same fields, up to 12) the same way, stopping at the first that is not `done` or `unverified`; each step's result is in `steps`. Jev picks the action for `instruction`, unless `candidateId` is given. `text` is entered exactly as given. `modifiers` (`shift`, `cmd`, `option`, `ctrl`) are held during a click or toggle, as a pixel click on a control visible on the window. |
+| `act` | `app` \| `pid`, `windowId?`, `instruction`, `text?`, `candidateId?`, `dragTo?`, `allowDestructive?`, `modifiers?`, `then?` | Performs one action and checks its effect, then each step in `then` (same fields, up to 12) the same way, stopping at the first that is not `done` or `unverified`; each step's result is in `steps`. Jev picks the action for `instruction`, unless `candidateId` is given. `text` is entered exactly as given. `modifiers` (`shift`, `cmd`, `option`, `ctrl`) are held during a click or toggle, as a pixel click on a control visible on the window. `dragTo` drags the source `candidateId` to another control or by a pixel offset. |
 | `extract` | `app` \| `pid`, `windowId?`, `instruction` | Returns the text or value of the element Jev picks, exactly as read. A table or list with no value of its own comes back as `rows` (each row's texts), any other container as `text`. Its `status` is `done`, `ambiguous` (the shortlist comes back with each element's value) or `not_found`. |
+| `driver` (opt-in) | `tool`, `arguments` | Forwards one cua-driver call and returns its structured data, text and images. No Jev, effect verification or destructive confirmation. Available only with `BEANS_PICKER_RAW_DRIVER=1`; background and security restrictions still apply. |
+
+To drag, give the source's `candidateId` and either `dragTo: {"candidateId": "<target id>"}`
+or `dragTo: {"dx": 120, "dy": -30}`. The gesture starts at the source control's centre;
+offsets are window-local screenshot pixels, not screen points. Both endpoints must be visible
+inside the same window. `instruction` is still required; omit `text` and `modifiers`.
+The same fields work in a `then` step. Either destructive endpoint requires `allowDestructive: true`.
+Stale ids return `not_found`, and missing frames, covered controls or off-window endpoints return
+`failed` / `not_visible`. Fresh snapshots check for a changed window or movement of the source;
+an unchanged window returns `no_effect`.
+
+The optional `driver` tool covers calls such as `double_click` and `zoom`:
+`{"tool": "double_click", "arguments": {"pid": 123, "window_id": 456, "x": 100, "y": 80}}`.
+It refuses foreground delivery, unknown tools, session/configuration changes, recording, replay,
+updates and app termination. Screenshot files are handled only inside a private capture directory;
+unsafe captures are refused and filesystem paths are omitted from results.
+See [SECURITY.md](SECURITY.md) for the passthrough boundary.
 
 `act` returns a `status`:
 
@@ -86,6 +103,7 @@ The agent skill in `skills/beans-picker` tells a model how to use these tools we
 | `JEV_CONNECT_TIMEOUT` | Seconds to wait for a connection to Jev (default 10). |
 | `JEV_READ_TIMEOUT` | Seconds to wait for Jev's answer to one request (default 120). |
 | `BEANS_PICKER_EFFECT_RETAKES` | Fresh snapshots taken to see an effect (default 5). |
+| `BEANS_PICKER_RAW_DRIVER` | Enable the raw `driver` tool: `1`, `true`, `yes` or `on` (case-insensitive). Off by default. |
 | `BEANS_PICKER_LOG_LEVEL` | Level of the server's log on stderr (default `WARNING`). |
 | `TYPESAFE_BASE_URL` | The Jev endpoint (default `https://api.typesafe.ai`); HTTPS only, without URL credentials, query or fragment. Redirects are refused. |
 
