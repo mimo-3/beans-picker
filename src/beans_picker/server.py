@@ -46,7 +46,9 @@ INSTRUCTIONS: Final = "\n".join(
         "in one call with `then`: they run in order and stop at the first that is neither done nor unverified. "
         "Text is entered exactly as given in `text` and verified by exact equality. "
         "For a mouse drag, give source candidateId and dragTo: {candidateId} or {dx, dy} in window screenshot "
-        "pixels; both endpoints must be visible. This also works in then, with no text or modifiers.",
+        "pixels; both endpoints must be visible, and destructive controls under either endpoint require "
+        "allowDestructive. Drags are judged on settled state and window-relative movement. "
+        "This also works in then, with no text or modifiers.",
         "  status: done | unverified (the field changed but its exact text could not be read) | no_effect | mismatch "
         "(something changed, not what was asked) | ambiguous (choose a candidateId) | needs_confirmation "
         "(irreversible: repeat with allowDestructive) | not_found | failed.",
@@ -54,7 +56,10 @@ INSTRUCTIONS: Final = "\n".join(
         "and newCandidates with their ids: act on those directly instead of observing again.",
         "- extract: returns the text or value of the element Jev picks, exactly as read; a table or list comes back "
         "row by row. When BEANS_PICKER_RAW_DRIVER is enabled, driver forwards raw background app-control calls "
-        "without Jev, effect verification or destructive confirmation.",
+        "without Jev, effect verification or destructive confirmation. It uses an app-control allowlist; input "
+        "calls require an integer pid and an activation watch. Desktop scope, foreground calls, browser-preference "
+        "changes and file-output arguments other than screenshot_out_file are refused. Path-key values and owned "
+        "cache paths are redacted; other text and URLs are preserved. Failures return a code and fixed message.",
         "Rows scrolled out of view are not on the window until a scroll candidate brings them in.",
         'Commands that live only in a right-click menu (rename, star, move to trash) are reached with an "open the '
         'context menu" candidate; its items are then pressed like any other.',
@@ -78,12 +83,20 @@ DESCRIPTIONS: Final[Mapping[str, str]] = MappingProxyType(
         "act": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev "
         "picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given. "
         "With dragTo ({candidateId} or {dx, dy} in screenshot pixels), drag that source control in the background; "
-        "either destructive endpoint requires allowDestructive.",
+        "destructive controls at either endpoint (including offsets) require allowDestructive. Verify settled "
+        "window-relative movement or state changes, including enabled controls; snapbacks are no_effect.",
         "extract": "Return the text or value of the element Jev picks for `instruction` (e.g. 'the result shown on "
         "the display'), exactly as read from accessibility. A table or list is returned as `rows`.",
         "driver": "Forward one raw cua-driver app-control call. Opt-in via BEANS_PICKER_RAW_DRIVER; background "
-        "only. Does not call Jev, verify effects or ask for destructive confirmation. Management and "
-        "focus-stealing tools are refused. File paths are omitted; owned screenshots are returned as images.",
+        "only. Does not call Jev, verify effects or ask for destructive confirmation. Allowlist: click, double_click, "
+        "right_click, drag, scroll, type_text, press_key, hotkey, set_value, zoom, move_cursor, page, launch_app, "
+        "get_window_state, list_windows, list_apps, get_screen_size, get_cursor_position, get_accessibility_tree. "
+        "Unknown schemas return unknown_driver_tool; other tools return driver_tool_disallowed. Input calls "
+        "(clicks, drag, scroll, typing, keys, set_value, page) require an integer pid and watch for activation. "
+        "Desktop scope, focus-stealing calls (including move_cursor) and page.enable_javascript_apple_events are "
+        "refused. screenshot_out_file is redirected into private shots/capture-* storage and returned as an image; "
+        "other file-output arguments, including debug_image_out, are refused. Path-key values and owned cache "
+        "paths are redacted; other text and URLs are preserved. Failures return only a code and fixed message.",
     }
 )
 
