@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import replace
 from typing import Final, Literal, NotRequired, TypedDict, cast
 
 from beans_picker import config
 from beans_picker._numbers import fixed, round3
 from beans_picker.act.execute import Executor
-from beans_picker.candidates.build import BuildOptions, build_candidates
+from beans_picker.candidates.build import BuildOptions, build_candidates, describe_short
 from beans_picker.candidates.describe import describe
 from beans_picker.candidates.prune import in_shard_order
+from beans_picker.candidates.safety import control_context, is_destructive_control
 from beans_picker.candidates.types import TEXT_KINDS, ActionCandidate
 from beans_picker.driver.mcp import Driver
 from beans_picker.errors import DriverError, DriverTimeout, ForegroundViolation, ToolError, failure
@@ -22,7 +24,7 @@ from beans_picker.jev.state import CHANGED_TEXTS, Change, bare_role, build_state
 from beans_picker.observe.snapshot import in_web_area
 from beans_picker.observe.types import Snapshot
 from beans_picker.observe.visual import Shot, capture_window, region_change
-from beans_picker.tools.args import ActArgs, Modifier, Step
+from beans_picker.tools.args import ActArgs, DragCandidate, DragTo, Modifier, Step
 from beans_picker.tools.present import SCREEN_LINES, ShownCandidate, ShownWindow, show_candidate, show_window
 from beans_picker.tools.session import Target, ToolSession
 from beans_picker.verify.effect import EffectVerdict, VerifyEffect, verify_effect
@@ -181,6 +183,9 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
     learned = session.menu_keys.table_for(t.pid)
     text = args.get("text")
     candidate_id = args.get("candidateId")
+    drag = args.get("dragTo")
+    if drag is not None and candidate_id is None:
+        return {"status": "failed", "code": "candidate_required", "message": "dragTo needs a source candidateId"}
     cands = build_candidates(
         before, BuildOptions(instruction=args["instruction"], text=text, list_text_kinds=True, learned=learned)
     )
@@ -196,6 +201,17 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
         if chosen is None:
             message = f"candidate {candidate_id} is not on the window now; call observe for current ids"
             return {"status": "not_found", "window": window, "message": message}
+        if drag is not None:
+            if text is not None:
+                return _failed(
+                    "text_not_used", window, "a drag enters no text; leave `text` out", _shown_action(chosen)
+                )
+            try:
+                chosen = _drag_candidate(chosen, drag, cands, before, args["instruction"])
+            except ToolError as err:
+                if err.code == "target_gone":
+                    return {"status": "not_found", "window": window, "message": err.message}
+                return _failed(err.code, window, err.message, _shown_action(chosen))
         if chosen.kind in TEXT_KINDS and text is None:
             return _failed("text_required", window, f"{chosen.kind} needs `text`", _shown_action(chosen))
         if chosen.kind not in TEXT_KINDS and text is not None:
@@ -291,6 +307,36 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
         return with_usage(_failed("foreground_violation", window, str(err), _shown_action(chosen)))
     finally:
         driver.sentinel.stop()
+
+
+def _drag_candidate(
+    source: ActionCandidate, drag: DragTo, cands: Sequence[ActionCandidate], snap: Snapshot, instruction: str
+) -> ActionCandidate:
+    if source.target is None:
+        raise ToolError("drag_not_supported", "the source candidate has no control to drag")
+    target = None
+    offset = None
+    dangerous = source.destructive
+    if "candidateId" in drag:
+        destination_id = cast("DragCandidate", drag)["candidateId"]
+        destination = next((c for c in cands if c.id == destination_id), None)
+        if destination is None:
+            raise ToolError(
+                "target_gone", "the drag destination is not on the window now; call observe for current ids"
+            )
+        target = destination.target
+        if target is None:
+            raise ToolError("drag_not_supported", "the destination candidate has no control to drop onto")
+        dangerous = dangerous or destination.destructive
+        summary = f"drag {describe_short(source.target)} onto {describe_short(target)}"
+    else:
+        offset = (drag["dx"], drag["dy"])
+        summary = f"drag {describe_short(source.target)} by ({offset[0]}, {offset[1]}) pixels"
+    ctx = control_context(snap, instruction)
+    dangerous = dangerous or any(is_destructive_control(n, ctx) for n in (source.target, target) if n is not None)
+    return replace(
+        source, kind="drag", summary=summary, destructive=dangerous, drag_target=target, drag_offset=offset, text=None
+    )
 
 
 async def _execute(
