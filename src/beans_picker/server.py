@@ -47,9 +47,10 @@ INSTRUCTIONS: Final = "\n".join(
         "Text is entered exactly as given in `text` and verified by exact equality. "
         "For a mouse drag, give source candidateId and dragTo: {candidateId} or {dx, dy} in window screenshot "
         "pixels; both endpoints must be visible, and destructive controls under either endpoint require "
-        "allowDestructive. Drags are judged on settled state and window-relative movement. "
+        "allowDestructive for candidate and offset destinations. Drags require a 0.3-second quiet interval "
+        "within four settling snapshots; unsettled results are unverified. "
         "This also works in then, with no text or modifiers.",
-        "  status: done | unverified (the field changed but its exact text could not be read) | no_effect | mismatch "
+        "  status: done | unverified (exact text could not be read or a drag did not settle) | no_effect | mismatch "
         "(something changed, not what was asked) | ambiguous (choose a candidateId) | needs_confirmation "
         "(irreversible: repeat with allowDestructive) | not_found | failed.",
         "  When a step brings up something new (a menu, a dialog, another page), the result carries its screenText "
@@ -57,9 +58,11 @@ INSTRUCTIONS: Final = "\n".join(
         "- extract: returns the text or value of the element Jev picks, exactly as read; a table or list comes back "
         "row by row. When BEANS_PICKER_RAW_DRIVER is enabled, driver forwards raw background app-control calls "
         "without Jev, effect verification or destructive confirmation. It uses an app-control allowlist; input "
-        "calls require an integer pid and an activation watch. Desktop scope, foreground calls, browser-preference "
+        "calls require an integer pid and an activation watch. launch_app and page arguments cdp_port/bundle_id "
+        "are refused. Desktop scope, foreground calls, browser-preference "
         "changes and file-output arguments other than screenshot_out_file are refused. Path-key values and owned "
-        "cache paths are redacted; other text and URLs are preserved. Failures return a code and fixed message.",
+        "cache paths are redacted at directory boundaries; sibling paths and unrelated URLs are preserved. "
+        "Failures return a code and fixed message.",
         "Rows scrolled out of view are not on the window until a scroll candidate brings them in.",
         'Commands that live only in a right-click menu (rename, star, move to trash) are reached with an "open the '
         'context menu" candidate; its items are then pressed like any other.',
@@ -83,20 +86,23 @@ DESCRIPTIONS: Final[Mapping[str, str]] = MappingProxyType(
         "act": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev "
         "picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given. "
         "With dragTo ({candidateId} or {dx, dy} in screenshot pixels), drag that source control in the background; "
-        "destructive controls at either endpoint (including offsets) require allowDestructive. Verify settled "
-        "window-relative movement or state changes, including enabled controls; snapbacks are no_effect.",
+        "destructive controls under either actual endpoint require allowDestructive for both destination forms. "
+        "Verify window-relative movement or state changes after a 0.3-second quiet interval within four settling "
+        "snapshots; snapbacks are no_effect, unsettled results are unverified.",
         "extract": "Return the text or value of the element Jev picks for `instruction` (e.g. 'the result shown on "
         "the display'), exactly as read from accessibility. A table or list is returned as `rows`.",
         "driver": "Forward one raw cua-driver app-control call. Opt-in via BEANS_PICKER_RAW_DRIVER; background "
         "only. Does not call Jev, verify effects or ask for destructive confirmation. Allowlist: click, double_click, "
-        "right_click, drag, scroll, type_text, press_key, hotkey, set_value, zoom, move_cursor, page, launch_app, "
+        "right_click, drag, scroll, type_text, press_key, hotkey, set_value, zoom, move_cursor, page, "
         "get_window_state, list_windows, list_apps, get_screen_size, get_cursor_position, get_accessibility_tree. "
-        "Unknown schemas return unknown_driver_tool; other tools return driver_tool_disallowed. Input calls "
+        "Unknown schemas return unknown_driver_tool; other tools, including launch_app, return "
+        "driver_tool_disallowed. page arguments cdp_port/bundle_id return driver_argument_disallowed. Input calls "
         "(clicks, drag, scroll, typing, keys, set_value, page) require an integer pid and watch for activation. "
         "Desktop scope, focus-stealing calls (including move_cursor) and page.enable_javascript_apple_events are "
         "refused. screenshot_out_file is redirected into private shots/capture-* storage and returned as an image; "
         "other file-output arguments, including debug_image_out, are refused. Path-key values and owned cache "
-        "paths are redacted; other text and URLs are preserved. Failures return only a code and fixed message.",
+        "paths are redacted at directory boundaries; sibling paths and unrelated URLs are preserved. "
+        "Failures return only a code and fixed message.",
     }
 )
 
