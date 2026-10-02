@@ -27,7 +27,7 @@ from beans_picker.observe.visual import Shot, capture_window, region_change
 from beans_picker.tools.args import ActArgs, DragCandidate, DragTo, Modifier, Step
 from beans_picker.tools.present import SCREEN_LINES, ShownCandidate, ShownWindow, show_candidate, show_window
 from beans_picker.tools.session import Target, ToolSession
-from beans_picker.verify.effect import EffectVerdict, VerifyEffect, verify_effect
+from beans_picker.verify.effect import EffectVerdict, VerifyEffect, drag_state, verify_effect
 
 _log = logging.getLogger(__name__)
 
@@ -375,7 +375,7 @@ async def _execute(
                 "status": "needs_confirmation",
                 "window": window,
                 "action": action,
-                "message": "the selected option may be destructive; repeat with allowDestructive: true if intended",
+                "message": "the action may be destructive; repeat with allowDestructive: true if intended",
             }
         code = res.code if res.code is not None else "failed"
         return _failed(code, window, res.detail if res.detail is not None else _REFUSED, action)
@@ -463,13 +463,15 @@ async def _judge(
             break
         n += 1
         same = _controls(later) == _controls(after)
+        if c.kind == "drag":
+            same = same and drag_state(later) == drag_state(after)
         after = later
         if same:
             break
     again = verify_effect(c, before, after)
     # A chosen option is judged by its value, which the page may have put back meanwhile; a click by any change,
     # which a passing notice may have taken away again.
-    return (again if again.effect == "ok" or c.kind in TEXT_KINDS else verdict), after, n
+    return (again if again.effect == "ok" or c.kind in TEXT_KINDS or c.kind == "drag" else verdict), after, n
 
 
 def _controls(snap: Snapshot) -> list[tuple[str, str]]:

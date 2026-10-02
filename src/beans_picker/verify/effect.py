@@ -46,16 +46,13 @@ def verify_effect(c: ActionCandidate, before: Snapshot, after: Snapshot) -> Effe
     if c.kind in TEXT_ENTRY:
         return _verify_text(c, before, after, moved)
     if c.kind == "drag":
-        target = c.target
-        node = _by_key(after, target)
-        if (
-            target is not None
-            and target.frame is not None
-            and node is not None
-            and node.frame is not None
-            and (target.frame.x, target.frame.y) != (node.frame.x, node.frame.y)
-        ):
+        old = _position(before, _by_key(before, c.target))
+        new = _position(after, _by_key(after, c.target))
+        if old is not None and new is not None and old != new:
             return EffectVerdict(effect="ok", detail="the dragged control moved")
+        enabled = {n.key: n.enabled for n in before.nodes}
+        if any(n.key in enabled and n.enabled != enabled[n.key] for n in after.nodes):
+            return EffectVerdict(effect="ok", detail="a control's enabled state changed")
     if c.kind == "toggle":
         target = c.target
         node = _by_key(after, target)
@@ -72,6 +69,18 @@ def verify_effect(c: ActionCandidate, before: Snapshot, after: Snapshot) -> Effe
     if moved:
         return EffectVerdict(effect="ok", detail=summarize(diff))
     return EffectVerdict(effect="none", detail="unchanged")
+
+
+def _position(snap: Snapshot, node: UINode | None) -> tuple[float, float] | None:
+    origin = next((n.frame for n in snap.nodes if n.role == "AXWindow" and n.frame is not None), None)
+    if origin is None or node is None or node.frame is None:
+        return None
+    return node.frame.x - origin.x, node.frame.y - origin.y
+
+
+def drag_state(snap: Snapshot) -> list[tuple[str, bool, tuple[float, float] | None]]:
+    """Control states and window-relative positions used to wait for a drag to settle."""
+    return [(n.key, n.enabled, _position(snap, n)) for n in snap.nodes]
 
 
 def expected_text(kind: ActionKind, was: str, text: str) -> Callable[[str], bool] | None:
