@@ -157,6 +157,7 @@ async def test_focus_stealing_calls_are_refused_before_driver_call(
         "check_permissions",
         "future_driver_tool",
         "kill_app",
+        "launch_app",
         "set_config",
         "replay_trajectory",
         "start_recording",
@@ -418,7 +419,6 @@ async def test_input_calls_watch_the_target_pid_and_stop_after_return(tool: str,
     "tool",
     [
         "zoom",
-        "launch_app",
         "get_window_state",
         "list_windows",
         "list_apps",
@@ -455,6 +455,32 @@ async def test_page_cannot_enable_browser_javascript_preferences(tmp_path: Path)
         },
     )
     assert _failure(result)["code"] == "driver_action_disallowed"
+    assert driver.calls == []
+
+
+@pytest.mark.usefixtures("enabled")
+@pytest.mark.parametrize("cdp_port", [9222, 0, None])
+async def test_page_cannot_retarget_another_browser_with_cdp_port(cdp_port: JsonValue, tmp_path: Path) -> None:
+    driver = RawDriver(("page",))
+    result = await _call(
+        driver,
+        tmp_path / "raw-cache",
+        {"tool": "page", "arguments": {"pid": 3, "action": "execute_javascript", "cdp_port": cdp_port}},
+    )
+    assert _failure(result)["code"] == "driver_argument_disallowed"
+    assert driver.calls == []
+    assert not driver.sentinel.watching
+
+
+@pytest.mark.usefixtures("enabled")
+async def test_page_cannot_select_another_browser_by_bundle_id(tmp_path: Path) -> None:
+    driver = RawDriver(("page",))
+    result = await _call(
+        driver,
+        tmp_path / "raw-cache",
+        {"tool": "page", "arguments": {"pid": 3, "action": "get_text", "bundle_id": "com.example.Browser"}},
+    )
+    assert _failure(result)["code"] == "driver_argument_disallowed"
     assert driver.calls == []
 
 
@@ -551,6 +577,50 @@ async def test_capture_directory_is_redacted_even_after_a_colon(tmp_path: Path) 
     assert captured[0] not in result.model_dump_json()
     capture_directory = Path(captured[0])
     assert not await asyncio.to_thread(capture_directory.exists)
+
+
+@pytest.mark.usefixtures("enabled")
+@pytest.mark.parametrize("suffix", ["-backup/x", "extra"])
+@pytest.mark.parametrize("prefix", ["", "https://host"])
+async def test_cache_prefix_collisions_are_kept_in_text_and_data(prefix: str, suffix: str, tmp_path: Path) -> None:
+    cache = tmp_path / "raw-cache"
+    collision = f"{prefix}{cache}{suffix}"
+    driver = RawDriver(
+        ("list_apps",),
+        lambda _tool, _args: ToolOk(data={"label": collision, collision: [collision]}, text=collision, ms=1),
+    )
+
+    result = await _call(driver, cache, {"tool": "list_apps", "arguments": {}})
+
+    assert not result.is_error
+    assert result.content == [TextContent(type="text", text=collision)]
+    assert result.structured_content == {"label": collision, collision: [collision]}
+
+
+@pytest.mark.usefixtures("enabled")
+async def test_capture_sibling_keeps_its_name_and_a_url_sharing_the_capture_prefix_is_unchanged(tmp_path: Path) -> None:
+    cache = tmp_path / "raw-cache"
+    expected: dict[str, str] = {}
+
+    def capture(_tool: str, args: dict[str, object]) -> ToolResult:
+        raw = args["screenshot_out_file"]
+        assert isinstance(raw, str)
+        path = Path(raw)
+        path.write_bytes(encode_png(blank(2, 2)))
+        sibling = f"{path.parent}-backup/x"
+        url = f"https://host{path.parent}extra"
+        expected["sibling"] = f"[file omitted]/{path.parent.relative_to(cache)}-backup/x"
+        expected["url"] = url
+        return ToolOk(data={"sibling": sibling, "url": url}, text=f"{sibling}\n{url}", ms=1)
+
+    driver = RawDriver(("get_window_state",), capture)
+    result = await _call(
+        driver, cache, {"tool": "get_window_state", "arguments": {"screenshot_out_file": "ignored.png"}}
+    )
+
+    assert not result.is_error
+    assert result.structured_content == expected
+    assert result.content[0] == TextContent(type="text", text=f"{expected['sibling']}\n{expected['url']}")
 
 
 @pytest.mark.usefixtures("enabled")

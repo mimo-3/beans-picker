@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import os
+import re
 import stat
 from collections.abc import Mapping
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Final
 from mcp.types import CallToolResult, ImageContent, TextContent
 
 from beans_picker._json import JsonObject, JsonValue
+from beans_picker._text import WS_CLASS_BODY
 from beans_picker.driver.mcp import Driver, steals_focus
 from beans_picker.driver.types import ToolResult
 from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable, ForegroundViolation, ToolError
@@ -35,7 +37,6 @@ ALLOWED_TOOLS: Final = frozenset(
         "zoom",
         "move_cursor",
         "page",
-        "launch_app",
         "get_window_state",
         "list_windows",
         "list_apps",
@@ -48,6 +49,7 @@ INPUT_TOOLS: Final = frozenset(
     {"click", "double_click", "right_click", "drag", "scroll", "type_text", "press_key", "hotkey", "set_value", "page"}
 )
 REFUSED_ACTIONS: Final = {"page": frozenset({"enable_javascript_apple_events"})}
+REFUSED_ARGUMENTS: Final = {"page": frozenset({"cdp_port", "bundle_id"})}
 
 _PATH_KEYS: Final = frozenset({"path", "file", "directory", "dir"})
 _OMITTED: Final = "[file omitted]"
@@ -82,6 +84,8 @@ async def _driver_tool(session: ToolSession, args: DriverArgs) -> CallToolResult
     action = arguments.get("action")
     if isinstance(action, str) and action in REFUSED_ACTIONS.get(tool, ()):
         raise ToolError("driver_action_disallowed", "the driver action changes configuration and cannot be forwarded")
+    if any(key in arguments for key in REFUSED_ARGUMENTS.get(tool, ())):
+        raise ToolError("driver_argument_disallowed", "the driver argument can target a process other than pid")
     pid = arguments.get("pid")
     if tool in INPUT_TOOLS and (isinstance(pid, bool) or not isinstance(pid, int)):
         raise ToolError("driver_pid_required", "input calls require an integer target pid")
@@ -158,7 +162,10 @@ def _path_key(key: str) -> bool:
 
 def _safe_text(value: str, paths: tuple[str, ...]) -> str:
     for path in paths:
-        value = value.replace(path, _OMITTED)
+        start = rf"(?<![^{WS_CLASS_BODY}\"'\[({{=:])"
+        end = rf"(?=/|$|[{WS_CLASS_BODY}\"'\])}},;:])"
+        pattern = start + re.escape(path) + end
+        value = re.sub(pattern, lambda _: _OMITTED, value)
     return value
 
 
