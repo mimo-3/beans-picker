@@ -40,7 +40,7 @@
     },
     {
       "name": "act",
-      "description": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given.",
+      "description": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given. With dragTo ({candidateId} or {dx, dy} in screenshot pixels), drag that source control in the background; destructive controls under either actual endpoint require allowDestructive for both destination forms. Verify window-relative movement or state changes after a 0.3-second quiet interval within four settling snapshots; snapbacks are no_effect, unsettled results are unverified.",
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object",
@@ -72,6 +72,39 @@
           "candidateId": {
             "description": "Run this candidate instead of asking Jev.",
             "type": "string"
+          },
+          "dragTo": {
+            "description": "Drag candidateId to another candidate's centre, or by dx/dy window screenshot pixels.",
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "candidateId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "candidateId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "dx": {
+                    "type": "integer"
+                  },
+                  "dy": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "dx",
+                  "dy"
+                ],
+                "additionalProperties": false
+              }
+            ]
           },
           "allowDestructive": {
             "description": "Permit an action that may not be undoable (delete, close, send …).",
@@ -108,6 +141,39 @@
                 "candidateId": {
                   "description": "Run this candidate instead of asking Jev.",
                   "type": "string"
+                },
+                "dragTo": {
+                  "description": "Drag candidateId to another candidate's centre, or by dx/dy window screenshot pixels.",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "candidateId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "candidateId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "dx": {
+                          "type": "integer"
+                        },
+                        "dy": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "dx",
+                        "dy"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
                 },
                 "allowDestructive": {
                   "description": "Permit an action that may not be undoable (delete, close, send …).",

@@ -46,6 +46,23 @@ def _step() -> JsonObject:
             "type": "string",
         },
         "candidateId": {"description": "Run this candidate instead of asking Jev.", "type": "string"},
+        "dragTo": {
+            "description": "Drag candidateId to another candidate's centre, or by dx/dy window screenshot pixels.",
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {"candidateId": {"type": "string"}},
+                    "required": ["candidateId"],
+                    "additionalProperties": False,
+                },
+                {
+                    "type": "object",
+                    "properties": {"dx": {"type": "integer"}, "dy": {"type": "integer"}},
+                    "required": ["dx", "dy"],
+                    "additionalProperties": False,
+                },
+            ],
+        },
         "allowDestructive": {
             "description": "Permit an action that may not be undoable (delete, close, send \u2026).",
             "type": "boolean",
@@ -95,6 +112,10 @@ INPUT_SCHEMAS: Final[Mapping[str, JsonObject]] = MappingProxyType(
             ["instruction"],
         ),
         "extract": _object({**_target(), "instruction": {"type": "string"}}, ["instruction"]),
+        "driver": _object(
+            {"tool": {"type": "string"}, "arguments": {"type": "object", "additionalProperties": True}},
+            ["tool", "arguments"],
+        ),
     }
 )
 
@@ -111,6 +132,19 @@ class Step(TypedDict):
     candidateId: NotRequired[str]
     allowDestructive: NotRequired[bool]
     modifiers: NotRequired[list[Modifier]]
+    dragTo: NotRequired[DragTo]
+
+
+class DragCandidate(TypedDict):
+    candidateId: str
+
+
+class DragOffset(TypedDict):
+    dx: int
+    dy: int
+
+
+type DragTo = DragCandidate | DragOffset
 
 
 class ObserveArgs(TargetArgs, total=False):
@@ -124,6 +158,11 @@ class ActArgs(TargetArgs, Step, total=False):
 
 class ExtractArgs(TargetArgs):
     instruction: str
+
+
+class DriverArgs(TypedDict):
+    tool: str
+    arguments: JsonObject
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,9 +264,13 @@ def _object_value(schema: JsonObject, v: JsonValue | None, path: str, issues: li
     if not isinstance(v, dict):
         issues.append(_invalid_type(schema, v, path))
         return {}
+    if "properties" not in schema:
+        return v.copy()
     properties = _schema_object(schema["properties"])
     required = _schema_list(schema.get("required", []))
     out: JsonObject = {}
+    if schema.get("additionalProperties") is False and v.keys() - properties.keys():
+        issues.append(Issue("Invalid input: unexpected properties", path))
     for key, raw in properties.items():
         prop = _schema_object(raw)
         if key in v:
@@ -238,6 +281,17 @@ def _object_value(schema: JsonObject, v: JsonValue | None, path: str, issues: li
 
 
 def _value(schema: JsonObject, v: JsonValue, path: str, issues: list[Issue]) -> JsonValue:
+    if "oneOf" in schema:
+        matches: list[JsonValue] = []
+        for raw in _schema_list(schema["oneOf"]):
+            branch_issues: list[Issue] = []
+            checked = _value(_schema_object(raw), v, path, branch_issues)
+            if not branch_issues:
+                matches.append(checked)
+        if len(matches) == 1:
+            return matches[0]
+        issues.append(Issue("Invalid input: expected exactly one of the allowed shapes", path))
+        return v
     if "enum" in schema:
         return _enum_value(schema, v, path, issues)
     match schema["type"]:
@@ -305,6 +359,12 @@ def _put_step(a: JsonObject, out: Step) -> None:
     mods = a.get("modifiers")
     if isinstance(mods, list):
         out["modifiers"] = [m for m in map(_modifier, mods) if m is not None]
+    drag = a.get("dragTo")
+    if isinstance(drag, dict):
+        if (target := _str(drag, "candidateId")) is not None:
+            out["dragTo"] = {"candidateId": target}
+        elif (dx := _int(drag, "dx")) is not None and (dy := _int(drag, "dy")) is not None:
+            out["dragTo"] = {"dx": dx, "dy": dy}
 
 
 def _step_args(a: JsonObject) -> Step:
@@ -337,3 +397,8 @@ def extract_args(a: JsonObject) -> ExtractArgs:
     out: ExtractArgs = {"instruction": _str(a, "instruction") or ""}
     _put_target(a, out)
     return out
+
+
+def driver_args(a: JsonObject) -> DriverArgs:
+    arguments = a.get("arguments")
+    return {"tool": _str(a, "tool") or "", "arguments": arguments if isinstance(arguments, dict) else {}}

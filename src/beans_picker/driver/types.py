@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal, NotRequired, TypedDict
 
+from mcp.types import ImageContent
+
 from beans_picker._json import JsonObject
 
 
@@ -265,6 +267,7 @@ class ToolOk:
     data: JsonObject
     text: str
     ms: int
+    images: tuple[ImageContent, ...] = ()
     ok: Literal[True] = True
 
 
@@ -277,6 +280,7 @@ class ToolRefused:
     data: JsonObject
     text: str
     ms: int
+    images: tuple[ImageContent, ...] = ()
     ok: Literal[False] = False
 
 
