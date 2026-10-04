@@ -268,8 +268,9 @@ class CuaDriver:
         guarded = self.sentinel.watching and tool not in READ_TOOLS and tool != "end_session"
         if not guarded:
             return await self._call_guarded(tool, payload)
-        if self.sentinel.violation is not None:
-            raise ForegroundViolation(self.sentinel.violation)
+        # `sample` waits for a restore still under way, so the report says how it ended.
+        if self.sentinel.violation is not None and (seen := await self.sentinel.sample()) is not None:
+            raise ForegroundViolation(seen)
         self.sentinel.begin(tool)
         cancelled = False
         try:

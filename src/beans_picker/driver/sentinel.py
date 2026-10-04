@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import re
 from collections.abc import Awaitable, Callable
@@ -15,6 +16,11 @@ from beans_picker._text import DIGIT, WS, trim
 from beans_picker.driver.types import Activation
 
 type FrontSampler = Callable[[], Awaitable[int | None]]
+type Restorer = Callable[[int], Awaitable[bool]]
+"""Puts the app with this pid in front; False when it could not."""
+
+RESTORE_CHECKS: Final = 6
+RESTORE_CHECK_INTERVAL_S: Final = 0.05
 
 _log = logging.getLogger(__name__)
 
@@ -38,7 +44,7 @@ def _now_utc() -> str:
 
 
 class ActivationSentinel:
-    """Watches pids and records the first time one of them is seen in front."""
+    """Watches pids, records the first time one is seen in front, and puts the app in front before back once."""
 
     def __init__(
         self,
@@ -46,7 +52,11 @@ class ActivationSentinel:
         interval_ms: int = 80,
         *,
         sleep: Sleep = asyncio.sleep,
+        restore: Restorer | None = None,
+        restore_sleep: Sleep = asyncio.sleep,
     ) -> None:
+        self.restore = restore
+        self._restore_sleep = restore_sleep
         self._sample_front = sample_front
         self._interval_s = interval_ms / 1000
         self._sleep = sleep
@@ -58,6 +68,8 @@ class ActivationSentinel:
         # Bumped by `stop`, so a probe that started under an earlier watch never records anything.
         self._generation = 0
         self._current = "start"
+        # The last app seen in front that is not watched: the one to put back.
+        self._previous: int | None = None
         self.violation: Activation | None = None
 
     @property
@@ -68,8 +80,12 @@ class ActivationSentinel:
         """Start watching `pid`."""
         if not self._pids:
             self.violation = None
-        if await self._sample_front() == pid:
+            self._previous = None
+        front = await self._sample_front()
+        if front == pid:
             return
+        if front is not None and front not in self._pids:
+            self._previous = front
         self._pids.add(pid)
         if self._ticker is None:
             self._ticker = asyncio.create_task(self._tick())
@@ -96,12 +112,11 @@ class ActivationSentinel:
 
     async def sample(self) -> Activation | None:
         """Take one sample right now (on top of the periodic ones) and return the violation, if any."""
+        # A probe in flight: wait for it (and for its restore), then take a fresh one.
+        while (running := self._inflight) is not None and not running.done():
+            await asyncio.wait({running})
         if not self._pids or self.violation is not None:
             return self.violation
-        if self._inflight is not None:
-            await asyncio.wait({self._inflight})
-            if not self._pids or self.violation is not None:
-                return self.violation
         probe = asyncio.create_task(self._probe(self._current, self._generation))
         self._probes.add(probe)
         probe.add_done_callback(self._probe_done)
@@ -123,9 +138,31 @@ class ActivationSentinel:
         front = await self._sample_front()
         if generation != self._generation:
             return
+        if front is not None and front not in self._pids:
+            self._previous = front
         if front is not None and front in self._pids and self.violation is None:
-            self.violation = Activation(pid=front, during=during, at=_now_utc())
+            violation = Activation(pid=front, during=during, at=_now_utc())
+            self.violation = violation
             _log.debug("pid %d came to the front during %s", front, during)
+            if self._previous is not None and await self._put_back(self._previous) and self.violation is violation:
+                self.violation = dataclasses.replace(violation, restored=True)
+
+    async def _put_back(self, pid: int) -> bool:
+        """Activate `pid` and read the front app again: a request the system accepted is not yet an app in front."""
+        # An app that came under watch after it was seen in front is never brought forward.
+        if self.restore is None or pid in self._pids:
+            return False
+        try:
+            if not await self.restore(pid):
+                return False
+        except Exception as err:
+            _log.debug("putting the previous app back failed: %s", type(err).__name__)
+            return False
+        for _ in range(RESTORE_CHECKS):
+            if await self._sample_front() == pid:
+                return True
+            await self._restore_sleep(RESTORE_CHECK_INTERVAL_S)
+        return False
 
     async def _tick(self) -> None:
         while True:

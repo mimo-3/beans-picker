@@ -27,13 +27,19 @@ This cannot identify secrets displayed in ordinary text fields. Caller-supplied 
 
 - cua-driver (`CUA_DRIVER_BIN`, default `~/.local/bin/cua-driver`) is started as a subprocess and
   does the clicking and typing. It holds its own Accessibility and Screen Recording permissions.
-- Two small helpers are compiled from the Objective-C sources shipped in the package
-  (`beans_picker/native/axtext.m`, `beans_picker/native/menukeys.m`) with `clang`, on first use, into
-  `~/Library/Caches/beans-picker`. Nothing compiled is downloaded.
+- Four small helpers are compiled from the Objective-C sources shipped in the package
+  (`axtext.m`, `menukeys.m`, `activate.m` and `winrec.m` in `beans_picker/native`) with `clang`, on
+  first use, into `~/Library/Caches/beans-picker`. Nothing compiled is downloaded.
 - The `axtext` helper is a separate background app, "beans-picker axtext", that reads text fields and
   checkboxes read-only and skips secure (password) fields. It holds its own Accessibility grant (`beans-picker grant-ax`), so your
   terminal or agent needs none. The `menukeys` helper reads an app bundle's menu shortcuts from
   its nib and needs no permission.
+- The `activate` helper brings one app to the front by pid. beans-picker gives it only the app that
+  was in front before the app under test took its place, never the app under test, and it needs no
+  permission.
+- The `winrec` helper runs only for `beans-picker record`. It writes a video of one window to the
+  file you name, under the Screen Recording permission of the terminal or agent that started it. The
+  command refuses a file that already exists.
 
 ## Where secrets are read from
 

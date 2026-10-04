@@ -12,6 +12,7 @@ from typing import Protocol
 
 from beans_picker._aio import Clock, Sleep
 from beans_picker._proc import Runner, run
+from beans_picker.driver.activate import Activator
 from beans_picker.driver.app import AppTarget, ensure_app, pick_window, resolve_bundle
 from beans_picker.driver.mcp import CuaDriver, Driver
 from beans_picker.driver.sentinel import front_pid
@@ -91,6 +92,7 @@ class Session:
         self.helpers = Helpers(self._paths, runner=runner)
         self.exact_text = ExactText(self.helpers, self._paths, runner=runner, clock=clock)
         self._menu_keys = MenuKeys(self.helpers, self._paths, runner=runner)
+        self._activate = Activator(self.helpers, runner=runner)
         self._driver_task: asyncio.Task[Driver] | None = None
         self._jev: JevLike | None = None
         self._lock = asyncio.Lock()
@@ -139,7 +141,7 @@ class Session:
     async def driver(self) -> Driver:
         """The cua-driver connection, opened on first use; a failed open is retried by the next call."""
         if self._driver_task is None:
-            self._driver_task = asyncio.ensure_future(self._connect())
+            self._driver_task = asyncio.ensure_future(self._connected())
         task = self._driver_task
         try:
             return await task
@@ -147,6 +149,11 @@ class Session:
             if self._driver_task is task and task.done():
                 self._driver_task = None
             raise
+
+    async def _connected(self) -> Driver:
+        driver = await self._connect()
+        driver.sentinel.restore = self._activate
+        return driver
 
     def jev(self) -> JevLike:
         """The Jev client, created on first use; raises JevUnavailable when no key is configured."""
@@ -165,7 +172,14 @@ class Session:
             app = args["app"]
             bundle_id = resolve_bundle(app)
             app_target = AppTarget(bundle_id=bundle_id) if bundle_id else AppTarget(name=app)
-            ctx = await ensure_app(driver, app_target, runner=self._runner, sleep=self._sleep)
+            ctx = await ensure_app(
+                driver,
+                app_target,
+                runner=self._runner,
+                sleep=self._sleep,
+                front=functools.partial(front_pid, runner=self._runner),
+                restore=self._activate,
+            )
             if window_id is None:
                 return Target(ctx.pid, ctx.window_id)
             return Target(ctx.pid, await _window_of(driver, ctx.pid, window_id))

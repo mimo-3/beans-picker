@@ -1,8 +1,9 @@
-"""Builds of the two native helpers, compiled with clang into the cache on first use."""
+"""Builds of the native helpers, compiled with clang into the cache on first use."""
 
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import logging
 import os
@@ -22,9 +23,19 @@ _log = logging.getLogger(__name__)
 
 AXTEXT_SOURCE: Final = "axtext.m"
 MENUKEYS_SOURCE: Final = "menukeys.m"
+ACTIVATE_SOURCE: Final = "activate.m"
+WINREC_SOURCE: Final = "winrec.m"
 
 _AXTEXT_FLAGS: Final = ("-fobjc-arc", "-O2", "-framework", "ApplicationServices", "-framework", "Foundation")
 _MENUKEYS_FLAGS: Final = ("-fobjc-arc", "-O2", "-framework", "AppKit")
+_ACTIVATE_FLAGS: Final = ("-fobjc-arc", "-O2", "-framework", "AppKit")
+# SCRecordingOutput is new in macOS 15; an older SDK fails the build, and the caller says so.
+_WINREC_FLAGS: Final = (
+    "-fobjc-arc",
+    "-O2",
+    "-mmacosx-version-min=15.0",
+    *(arg for name in ("AppKit", "ScreenCaptureKit", "AVFoundation", "CoreMedia") for arg in ("-framework", name)),
+)
 
 AXTEXT_PLIST: Final = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -65,6 +76,8 @@ class Helpers:
         self._sources = sources if sources is not None else native_sources()
         self._axtext: asyncio.Task[Path | None] | None = None
         self._menukeys: asyncio.Task[Path | None] | None = None
+        self._activate: asyncio.Task[Path | None] | None = None
+        self._winrec: asyncio.Task[Path | None] | None = None
 
     async def axtext_app(self) -> Path | None:
         """The exact-text helper's app bundle, built on first use; `None` when it cannot be built."""
@@ -78,9 +91,24 @@ class Helpers:
             self._menukeys = asyncio.ensure_future(_or_none("menukeys", self._build_menukeys))
         return await _shared(self._menukeys)
 
+    async def activate_bin(self) -> Path | None:
+        """The executable that puts an app back in front, built on first use; `None` when it cannot be built."""
+        if self._activate is None:
+            build = functools.partial(self._build_plain, ACTIVATE_SOURCE, self._paths.activate, _ACTIVATE_FLAGS)
+            self._activate = asyncio.ensure_future(_or_none("activate", build))
+        return await _shared(self._activate)
+
+    async def winrec_bin(self) -> Path | None:
+        """The window recorder's executable, built on first use; `None` when it cannot be built."""
+        if self._winrec is None:
+            build = functools.partial(self._build_plain, WINREC_SOURCE, self._paths.winrec, _WINREC_FLAGS)
+            self._winrec = asyncio.ensure_future(_or_none("winrec", build))
+        return await _shared(self._winrec)
+
     async def close(self) -> None:
         """Cancels builds still running and waits for them to stop."""
-        running = [t for t in (self._axtext, self._menukeys) if t is not None and not t.done()]
+        tasks = (self._axtext, self._menukeys, self._activate, self._winrec)
+        running = [t for t in tasks if t is not None and not t.done()]
         for task in running:
             task.cancel()
         if running:
@@ -125,6 +153,27 @@ class Helpers:
             with resources.as_file(source) as path:
                 embed_plist = f"-Wl,-sectcreate,__TEXT,__info_plist,{plist}"
                 if not await self._compile(("clang", *_MENUKEYS_FLAGS, embed_plist, "-o", str(staged), str(path))):
+                    return None
+            staged.replace(binary)
+            return binary
+        finally:
+            shutil.rmtree(stage, ignore_errors=True)
+
+    async def _build_plain(self, source_name: str, directory: Path, flags: tuple[str, ...]) -> Path | None:
+        """One source file into one executable named after it and its hash."""
+        source = self._sources.joinpath(source_name)
+        if not source.is_file():
+            return None
+        name = source_name.removesuffix(".m")
+        binary = directory / f"{name}-{_source_hash(source)}"
+        if binary.exists():
+            return binary
+        stage = _staging_dir(directory, binary.name)
+        try:
+            staged = stage / binary.name
+            _log.warning("building the %s helper; the first call may take a few seconds", name)
+            with resources.as_file(source) as path:
+                if not await self._compile(("clang", *flags, "-o", str(staged), str(path))):
                     return None
             staged.replace(binary)
             return binary

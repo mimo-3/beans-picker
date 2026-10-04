@@ -44,6 +44,8 @@ def sources(tmp_path: Path) -> Path:
     src.mkdir()
     (src / "axtext.m").write_bytes(b"// axtext\n")
     (src / "menukeys.m").write_bytes(b"// menukeys\n")
+    (src / "activate.m").write_bytes(b"// activate\n")
+    (src / "winrec.m").write_bytes(b"// winrec\n")
     return src
 
 
@@ -149,6 +151,8 @@ async def test_missing_sources_build_nothing(paths: Paths, tmp_path: Path) -> No
     helpers = Helpers(paths, runner=clang, sources=tmp_path / "nowhere")
     assert await helpers.axtext_app() is None
     assert await helpers.menukeys_bin() is None
+    assert await helpers.activate_bin() is None
+    assert await helpers.winrec_bin() is None
     assert clang.calls == []
 
 
@@ -210,3 +214,27 @@ async def test_close_cancels_a_running_build(paths: Paths, sources: Path) -> Non
     with pytest.raises(asyncio.CancelledError):
         await caller
     assert [p.name for p in paths.menukeys.iterdir()] == ["Info.plist"]
+
+
+async def test_builds_the_activate_and_winrec_binaries_once(paths: Paths, sources: Path) -> None:
+    clang = _Clang()
+    helpers = Helpers(paths, runner=clang, sources=sources)
+    activate = await helpers.activate_bin()
+    winrec = await helpers.winrec_bin()
+    assert activate == paths.activate / f"activate-{_hash(sources / 'activate.m')}"
+    assert winrec == paths.winrec / f"winrec-{_hash(sources / 'winrec.m')}"
+    assert await helpers.activate_bin() == activate
+    assert await Helpers(paths, runner=clang, sources=sources).winrec_bin() == winrec
+    assert [call[:3] for call in clang.calls] == [("clang", "-fobjc-arc", "-O2"), ("clang", "-fobjc-arc", "-O2")]
+    assert "-mmacosx-version-min=15.0" in clang.calls[1]
+    assert "ScreenCaptureKit" in clang.calls[1]
+    assert [p.name for p in paths.activate.iterdir()] == [activate.name]
+
+
+async def test_a_failed_winrec_build_is_remembered_and_leaves_nothing(paths: Paths, sources: Path) -> None:
+    clang = _Clang(fails=True)
+    helpers = Helpers(paths, runner=clang, sources=sources)
+    assert await helpers.winrec_bin() is None
+    assert await helpers.winrec_bin() is None
+    assert len(clang.calls) == 1
+    assert list(paths.winrec.iterdir()) == []

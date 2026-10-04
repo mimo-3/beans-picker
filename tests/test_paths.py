@@ -16,3 +16,5 @@ def test_subdirectories(paths: Paths) -> None:
     assert paths.axtext == paths.cache / "axtext"
     assert paths.shots == paths.cache / "shots"
     assert paths.menukeys == paths.cache / "menukeys"
+    assert paths.activate == paths.cache / "activate"
+    assert paths.winrec == paths.cache / "winrec"
