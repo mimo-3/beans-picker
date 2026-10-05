@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-05
+
 ### Added
 
 - `beans-picker record --app <app> --out <file.mp4>` records one window on its own until Ctrl-C
@@ -139,6 +141,7 @@ The first release on PyPI. Versions 0.1 and 0.2 were never published.
 - A text field named only by its placeholder keeps its candidate ids once it is typed in, so text
   entered into it is checked in that field instead of ending as `mismatch` ("the target field is gone").
 
-[Unreleased]: https://github.com/mimo-3/beans-picker/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/mimo-3/beans-picker/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/mimo-3/beans-picker/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/mimo-3/beans-picker/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mimo-3/beans-picker/releases/tag/v0.3.0
