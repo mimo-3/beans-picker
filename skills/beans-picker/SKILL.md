@@ -1,168 +1,149 @@
 ---
 name: beans-picker
-description: Operate a macOS app window (native apps or pages in Chrome) in the background through the beans-picker MCP server (observe / act / extract). Use when a task asks to fill in forms, click through a flow, or read values in a Mac window and the beans-picker tools are available. Covers which steps need Jev and which run faster without it (candidateId and batched `then` steps), when cua-driver fits better, how to read act's status, and recipes for combo boxes, number fields, pop-ups, long tables and checking the result before reporting success.
+description: Operate a macOS app window (native apps or pages in Chrome) in the background through the beans-picker MCP server (observe / act / extract). Use when a task asks to fill in forms, click through a flow, or read values in a Mac window and the beans-picker tools are available. Covers the fast loop (one observe, batched `act` steps, reading `change` instead of observing again), the places where runs stall (custom list boxes, combo boxes, keyboard drags, content that loads late, a `done` that changed nothing) with the sequence that works for each, when to ask Jev, when cua-driver fits better, and checking the result before reporting success.
 ---
 
 # Driving a Mac window with beans-picker
 
-beans-picker picks controls from the accessibility tree and never brings the app to
-the front. Every `act` step is checked on fresh snapshots: did the effect asked for happen? Text is
-entered as given and checked by exact equality.
-
-## Which tool, and when to ask Jev
-
-Three ways to take a step, from fastest to most help:
-
-| way | Jev? | use it for |
-|---|---|---|
-| `act` with `candidateId` (and `then` for the next steps) | no | Steps whose control you already saw in an observe: fields to fill, boxes to tick, Next / Save, keys. |
-| `act` or `observe` with an `instruction` | yes | Picking one control among look-alikes by what surrounds it: "Restore in the row deleted 2026-09-24", "the second Jordan Lee (Security)". A long page where the plain candidate list would be huge. |
-| `extract` | yes | Reading one value or one table exactly, on a crowded page. |
-
-Each Jev call takes about a second and is billed by input tokens; a plain `observe` and a
-`candidateId` step make no Jev call. So ask Jev when the choice is the hard part, and skip it when
-the choice is already made.
-
-**Tasks that do not need Jev at all**: a form with labelled fields, a wizard of Next buttons, a
-settings page, a keyboard drag (focus the handle, Space, arrows, Space). One plain observe gives
-the ids (the first 80 by default: when `total` is larger than the list you got, pass a larger
-`limit`); one or two `act` calls with `then` do the rest.
-
-**Tasks where Jev earns its time**: many similar rows (files, payments, tickets) where the right one
-is known only by its content; decoys (two people with one name, a stale duplicate); reading a
-value out of a busy page.
-
-**Use cua-driver instead** (screenshots and pixel clicks) when the UI has no accessibility tree to
-speak of: a canvas, a game, custom-drawn widgets. Also for anything you must *see*
-(an image, a layout), and for a menu-bar command that has no keyboard shortcut (beans-picker reports it
-as `failed` with `foreground_required`).
-
-When enabled with `BEANS_PICKER_RAW_DRIVER=1`, beans-picker's `driver` tool forwards
-`{tool, arguments}` for calls such as `double_click` and `zoom`. It makes no Jev call, does not
-verify effects and asks for no destructive confirmation. Check the result yourself. Its allowlist is
-`click`, `double_click`, `right_click`, `drag`, `scroll`, `type_text`, `press_key`, `hotkey`, `set_value`,
-`zoom`, `move_cursor`, `page`, `get_window_state`, `list_windows`, `list_apps`,
-`get_screen_size`, `get_cursor_position` and `get_accessibility_tree`. Other loaded tools return
-`driver_tool_disallowed`, including `launch_app`; absent tools return `unknown_driver_tool`. Input calls (clicks, drag,
-scroll, typing, keys, set_value and page) need an integer `pid` and are watched for activation.
-Desktop scope, foreground delivery, `move_cursor` and `page.enable_javascript_apple_events` are
-refused. `page.cdp_port` and `page.bundle_id` return `driver_argument_disallowed` because they can
-select a different process from the watched `pid`. `screenshot_out_file` is redirected to private `shots/capture-*` storage; other file-output
-arguments such as `debug_image_out` are refused. Path-key values and this session's cache/capture
-paths are redacted at directory boundaries; sibling paths sharing a prefix and unrelated URLs
-are unchanged. Failures return only a code and fixed
-message. The tool is absent by default.
+beans-picker picks controls from the accessibility tree and never brings the app to the front.
+Every `act` step is checked on fresh snapshots. Text is entered as given and checked by exact
+equality.
 
 ## The fast loop
 
-Almost all of a task's time is your own replies, a few seconds each; a tool call takes about a
-second. Make as few replies as you can: no plan or progress messages between steps, one short
-message at the end.
+A reply costs you 3 to 5 seconds; a tool call costs 0.3 s (observe) to 5 s (a text field, a
+`<select>`). Runs are slow when they take many replies, and slowest when they retry something that
+cannot work. So: few replies, and no second try of the same thing.
 
-1. **observe** the window once, with the task's `pid` / `windowId` and no instruction. You get
-   candidate ids with what each one does, plus `screenText` and `fields`.
-2. **act** on everything you can already name, in one call: the first step in the top-level fields,
-   the rest in `then` (`[{instruction, candidateId, text?}, …]`). The run stops at the first step
-   that is not `done` or `unverified`, and `steps` says what each one did. The step that commits
-   (Save, Submit) can be the last in `then` when the steps before it are routine.
-   A step whose control appears only after an earlier one (the item of a menu the step before
-   opens, a dialog's button) goes in `then` too, with an `instruction` and no `candidateId`: Jev
-   picks it on the window as it is by then. Opening a menu and choosing its item is one call.
-3. **Read the status** of the last step (and `steps` when it stopped early). Do not observe to see
-   what happened: `change` says what changed, and when the step brought up something new (a menu, a
-   dialog, another page) the result carries its `screenText` and, in `newCandidates`, its controls
-   with their ids. Act on those directly. Observe again only when what you need is in neither (when
-   `newTotal` says more controls came up than were listed, observe with an instruction).
-4. Name a step with an `instruction` (Jev) only when the id is not in hand or several controls look
-   alike.
-5. Check once, at the end (see "Before you report success"), not after every step.
+1. **Observe once**, with the task's `pid` / `windowId` and no instruction. On a Chrome window the
+   page's controls come first and the browser's menu commands (`menu …`) after them, so
+   `limit: 40` covers most pages. If the list ends before the first `menu …` line, the page has
+   more controls: observe again with a larger `limit`.
+2. **Act on everything you can already name, in one call**: the first step in the top-level
+   fields, the rest in `then` (`[{instruction, candidateId, text?}, …]`). The run stops at the
+   first step that is not `done` or `unverified`. The step that commits (Save, Submit) can be the
+   last one.
+   - A step for a control that the step before brings up (a menu's item, a dialog's button) goes
+     in `then` with an `instruction` and no `candidateId`.
+   - **End the call at a step whose result loads late**: expanding a tree folder, "Load more", a
+     search, opening a record. Their result carries the new controls in `newCandidates`; a step
+     queued behind them finds nothing yet and returns `not_found`.
+3. **Read `status` and `change`**, not the screen (in a batch, each entry of `steps` has its
+   own). `change` says what appeared, disappeared or
+   changed value; a step that brought up something new also carries `screenText` and
+   `newCandidates` (ids included). Act on those directly. Text you need (a date in a details
+   panel, a total) is usually in that `screenText` already: do not `extract` it again.
+4. **Several tool calls in one reply** when the next one does not depend on reading the last.
+   They run in the order given, and unlike `then` a call that is not `done` does not stop the
+   next. This is how key presses that read `no_effect` are sent (see below).
+5. Name a step with an `instruction` (Jev, about a second, billed) only when the id is not in
+   hand or several controls look alike. Ids from an observe stay valid while the control is on
+   the window. A control that moved to another container (a card to another column, a row to
+   another list) has a new id: take it from `newCandidates`.
+6. No plan or progress messages between steps. One short message at the end.
+
+## Reading the status
 
 | status | what to do |
 |---|---|
-| `done` | The effect is seen. Go on. |
-| `unverified` | The field changed but its exact text could not be read. `extract` proves the exact text only when the element it returns has `exact: true`; otherwise it may be trimmed, so treat the text as unconfirmed (running `beans-picker grant-ax` lets it be read). |
-| `no_effect` | Nothing changed. Do not repeat the same call blindly. Observe again: the control may be disabled, hidden or off-screen. Focusing a drag handle also reads as `no_effect`; the next key press still goes to it. |
-| `mismatch` | Something changed, but not what was asked. Read `change` and fix it before going on. |
-| `ambiguous` | Pick the right `candidateId` from the list returned and call again. Do not guess by rewording. |
-| `needs_confirmation` | The action may not be undoable. Repeat it with `allowDestructive: true` only if the task asks for exactly this. |
-| `not_found` | Observe again. What you want may be off-screen (scroll) or behind another step. |
-| `failed` | Read `code`. `foreground_required` and `foreground_violation` mean this action needs cua-driver. |
+| `done` | The window changed. **Check that `change` shows what you asked for** (the chosen value, the new chip, "Saved"). `done` with an empty `change` (`appeared` and `disappeared` both empty, no field changed) did nothing you can rely on: a click on a custom option often reads like this. Do not repeat it; use the keyboard recipe. |
+| `unverified` | The step ran but its result could not be confirmed, most often a field whose exact text could not be read. Read the state; do not send it again. `extract` proves the text only when the element has `exact: true`. |
+| `no_effect` | Nothing visible changed. Expected for an arrow key that only moves a highlight and for focusing a drag handle: go on. Otherwise the control is disabled, hidden or outside the visible part of its list; do not send the same call again. |
+| `mismatch` | Something changed, but not what was asked. Expected when the "turn on" candidate of a drag handle only focuses it. Otherwise read `change` and fix it before going on. |
+| `ambiguous` | Pick the right `candidateId` from the list returned and call again. Do not reword. |
+| `needs_confirmation` | Repeat with `allowDestructive: true` only if the task asks for exactly this. Return and Space always need it; when the task calls for them, set it on the first try. |
+| `not_found` | The id is gone or the control is not there yet (still loading, scrolled out, behind another step). Use the previous result's `newCandidates`, or observe once. |
+| `failed` | Read `code`. `option_not_found`: this pop-up is not a native menu (see "Custom list boxes"), or it has no option of that title (`message` lists the titles). `tool_error` on a drag: see "Mouse drags". `foreground_required`: this step needs cua-driver. `foreground_violation`: the step may already have run; read the state before doing it again with cua-driver. |
 
-Ids are stable: an id from an earlier `observe` still works while that control is on the window,
-including in later steps of the same `then`. Look-alike controls (the Edit button of each section,
-the menu button of each list row) are told apart by the nearest heading or text: `click Button
-"Edit" near "Company"`.
+## Where runs stall, and what works
 
-## Recipes
+**Native pop-ups** (`PopUpButton`, an HTML `<select>`). Use the `choose … in PopUpButton`
+candidate with `text` set to the option's exact title. One step, about 5 s.
 
-**Text fields.** Give the text in `text`. `set_value` replaces the whole field, `type_into` inserts
-at the caret, and `append` adds at the end. Whitespace is kept.
+**Custom list boxes** (a button that opens a `List`; options appear as `choose option "…" in
+List "…"`). `choose … in PopUpButton` returns `failed` / `option_not_found` here and leaves the
+list open. Instead:
+1. Click the button's `click PopUpButton …` candidate. The options come back in `newCandidates`.
+2. Click the option. It worked if `change` shows the button's new value.
+3. If that reads `no_effect`, the option is outside the visible part of the list. The list opens
+   with the current value highlighted and each arrow key moves one option. Send one
+   `press Up arrow` / `press Down arrow` call per option to cross, then `press Return` with
+   `allowDestructive: true`, all as separate calls in the same reply. Each arrow reads
+   `no_effect` (a highlight is not in the tree), which is why they cannot go in `then`. The
+   Return's `change` shows the new value.
 
-**Number fields** (`Incrementor`, an `<input type="number">`). Use `set Incrementor "…" to "3"`
-with `text: "3"`, or the one-step up / down candidates.
+**Combo boxes with suggestions** (reviewers, assignees, tags). Return takes the highlighted
+suggestion, which is the first one, so make the first one the right one:
+1. `set_value` the combo box to text only your target matches (a handle, an id, an e-mail) and
+   put `press Return` (`allowDestructive: true`) next in `then`. One call, about 3 s. The Return's
+   `change` shows what was added: check it is the one you meant, and remove it if it is not.
+2. If the text cannot be made unique, set it alone, read the suggestions in order from
+   `newCandidates`, then press Down once per position below the first, then Return.
+3. Clicking a suggestion can read `done` with an empty `change` and add nothing. If you clicked
+   anything since typing, click the combo box again first: keys go to the focused control.
 
-**Pop-ups** (`PopUpButton`, an HTML `<select>`). Use the `choose … in PopUpButton` candidate
-with `text` set to the option's exact title: it opens the menu, presses the item and closes the
-menu in one step. If a pop-up's menu is open anyway (`window.modal` is a Menu), press the item you
-want once, and never press Return in it: Return takes the highlighted item, which may be another.
+**Search-or-create fields.** Return creates a new item even when one with that name exists. Type
+to filter, then click the existing item and check `change`.
 
-**Combo boxes with suggestions** (reviewers, assignees, tags):
-1. Type a distinctive part of the name into the combo box.
-2. `observe` again. Each suggestion is a candidate `choose option "…" in List "…"`.
-3. Act on the option whose whole text matches: team, handle, e-mail. Two people can share a name.
-4. **Do not press Return to pick.** Return takes whichever suggestion is highlighted, and that is
-   often the first one, not the one you mean.
+**Keyboard drags** (cards, list items with a handle). Two calls per item, both in one reply:
+1. The handle's own candidate, alone. It reads `mismatch` or `no_effect`; the handle now has the
+   focus.
+2. `press Space` (`allowDestructive: true`), the arrow keys, `press Space` again, in one `then`.
+   Each step's message carries the page's announcement ("Review, position 2 of 2"): the last
+   arrow's message must name the target position, and the drop's the same. If the first Space
+   announces no pick-up, the handle did not have the focus: stop and observe, do not go on
+   pressing keys.
 
-**Search-or-create fields** ("Search or create a label…"). Return creates a new item, even when
-one with that name already exists. Type to filter, then click the existing item (on a web page it
-may be offered as `click the text "…"`).
+Moving across columns usually keeps the row index, so count the Up / Down presses from there.
+When the count is not certain, leave the drop out, read the position, then drop. Plan the order
+first when a column has a limit.
 
-**Right-click menus.** Commands such as rename, star or move to trash may live only in an item's
-context menu. Act on its `open the context menu of … (right-click)` candidate, or press Shift+F10
-after selecting the item. The menu's items then appear as candidates; press the one you want.
+**Mouse drags.** `dragTo: {"candidateId": …}` or `{"dx": …, "dy": …}` on the source's
+`candidateId`. With cua-driver 0.8 a background drag is refused (`failed` / `tool_error`,
+"Background drag is unavailable"), so on a page that offers a keyboard drag, start with that.
 
-**Shift-click and cmd-click.** To extend a selection over a range (or add one item to it), act on
-the item's click or toggle candidate with `modifiers: ["shift"]` (or `["cmd"]`). The item must be
-visible on the window. A row click can report `unverified`: its selection is often not in the
-tree, so check the selection count or the next step instead of clicking again.
+**Shift-click and cmd-click.** `modifiers: ["shift"]` (or `["cmd"]`) on the item's click or toggle
+candidate. If it reads `mismatch`, tick the boxes one by one in a single `then`.
 
-**Mouse drags.** Give the source control's `candidateId` and
-`dragTo: {"candidateId": "<target id>"}` to drag centre to centre, or
-`dragTo: {"dx": 120, "dy": -30}` for an offset in window screenshot pixels. Keep `instruction`,
-omit `text` and `modifiers`; this also works in `then`. Both endpoints must be visible in the
-same window. Destructive controls under either actual endpoint, for both candidate and offset destinations,
-need `allowDestructive: true`. Verification waits for 0.3 seconds of unchanged state, sampled every
-0.15 seconds for at most four more snapshots after an effect appears. An unsettled or unreadable result is `unverified`.
-Verification uses the settled snapshot: source movement relative to the window or a state change (including enabled controls) counts. A whole-window move or a
-source that snaps back does not count. Read the verdict as for any other action;
-`not_visible` means an endpoint is missing, covered or off-window, and `not_found` means an id needs a new observe.
+**Right-click menus.** Act on the item's `open the context menu of … (right-click)` candidate, or
+press Shift+F10 after selecting it. The menu's items come back as candidates.
 
-**Long lists and tables.** Rows outside the visible area are not in the tree at all (virtualized
-grids). Narrow the list first: use the search field, a filter, or a sort header (sort by amount to
-find the largest). Then read it with `extract` on the table, which returns `rows`. If the row you
-need is still not there, act on a `scroll … down one page` candidate and read again.
+**Long lists and tables.** Rows outside the visible area are not in the tree, and neither are rows
+behind "Load more". Narrow first (search, filter, sort), load or scroll (`scroll … down one
+page`), then take the ids from that result. Read a table with `extract` on the table: it returns
+`rows`.
 
-**Reading values.** `extract` returns the text as read. A field's value is exact to the character
-only when the element has `exact: true`; without it, whitespace at the ends may be missing. For a whole table or list, name the table
-("the Transactions table", or "the table of rooms" when it has no name). In `screenText` a table
-row is one line, its cells joined by ` | `; so is a row of a web list (its heading and the short
-texts after it). When the result is `ambiguous`, the shortlist already carries each
-element's value or rows, so read them from there.
+**Text and number fields.** `set_value` replaces the whole field, `type_into` inserts at the
+caret, `append` adds at the end; whitespace is kept. A number field takes `set …` with the digits
+as `text`, or the one-step up / down candidates. A field costs 2 to 3 s whatever you do: batch
+them, do not re-enter them to be sure.
 
-**Dialogs and sheets.** While one is open, only its own controls are offered (`window.modal` names
-it). Finish it or dismiss it with Escape before going back to the page.
+**A dialog that appears in the middle of a batch** does not stop it: the remaining steps still go
+to their own fields. Dismiss it afterwards, then commit.
 
-**Recording a demo.** Record the window, not the display: `beans-picker record --app <app> --out
-demo.mp4` (stop it with SIGINT). Launch the app before the recording starts. If the app still comes
-forward on clicks, run the server with `BEANS_PICKER_PIXEL=off` (slower: every click is an
-accessibility press).
+**Reading values.** `extract` returns text as read; a field's value is exact to the character
+only with `exact: true`. For a table or list, name it ("the Transactions table"). When `extract`
+reads `ambiguous`, the shortlist already carries each element's value: read it there, do not ask
+again in other words.
+
+## When to ask Jev, and when to use cua-driver
+
+A plain `observe` and a `candidateId` step make no Jev call. Forms, wizards, settings pages and
+keyboard drags need none. Jev earns its second where the choice is the hard part: many similar
+rows where the right one is known only by its content, decoys (two people with one name, a stale
+duplicate), one value on a crowded page.
+
+Use cua-driver (screenshots and pixel clicks) when the UI has no accessibility tree to speak of
+(a canvas, a game, custom-drawn widgets), for anything you must *see*, and for a menu-bar command
+with no keyboard shortcut (`failed` / `foreground_required`). With `BEANS_PICKER_RAW_DRIVER=1`
+the `driver` tool forwards allowlisted cua-driver calls (`double_click`, `zoom`, `scroll`, …)
+with no Jev, no effect check and no destructive confirmation: check the result yourself.
 
 ## Before you report success
 
-- The step that commits the task (Save, Submit, Archive) returned `done`, and its `change` or
-  `screenText` shows the result: a "Saved" message, the new value, the row in its new state. That
-  is the check. Do not reopen an editor or reload the page to look again.
-- If the result does not show there, one `extract` (or one observe) of it is enough.
-- For tasks with several parts (several tabs, several items), every part's step returned `done` and its
-  result shows that part; a part that is only `unverified` still needs its one check.
+- The step that commits the task returned `done`, and its `change` or `screenText` shows the
+  result: a "Saved" message, the new value, the row in its new state. That is the check. Do not
+  reopen an editor or revisit a tab to look again.
+- If the result does not show there, one `extract` or one observe with a small `limit` is enough.
+- For a task with several parts, every part's step shows its own result.
 - If you could not confirm it, say so. An honest "not done" beats a false "done".
