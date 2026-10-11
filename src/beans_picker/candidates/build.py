@@ -99,7 +99,8 @@ def build_candidates(snap: Snapshot, opts: BuildOptions | None = None) -> list[A
 
 def candidate_id(key: str) -> str:
     """The id act and observe hand out for a candidate key."""
-    return "c" + hashlib.sha256(hash_bytes(key)).hexdigest()[:32]
+    # 48 bits keep the ids of one window apart, and the caller pays for a shorter id fewer tokens each time.
+    return "c" + hashlib.sha256(hash_bytes(key)).hexdigest()[:12]
 
 
 def describe_short(n: UINode) -> str:
