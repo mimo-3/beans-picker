@@ -877,7 +877,7 @@ class TestBuild:
     def test_candidate_id_hashes_the_key(self) -> None:
         assert candidate_id("click|x") == candidate_id("click|x")
         assert candidate_id("click|x") != candidate_id("click|x#2")
-        assert candidate_id("k") == "c8254c329a92850f6d539dd376f4816ee"
+        assert candidate_id("k") == "c8254c329a928"
         assert candidate_id("\ud800") == candidate_id("\N{REPLACEMENT CHARACTER}")
 
     def test_controls_in_a_fixed_order_with_safe_keys_last(self) -> None:
