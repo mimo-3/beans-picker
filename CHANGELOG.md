@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Candidate ids are 13 characters (`c` and 12 hex digits) instead of 33, so repeating one costs the caller fewer tokens.
+- Typing into a web text field that reads as empty no longer selects the old text first, which saves about two seconds a field.
+
 ## [0.5.0] - 2026-10-05
 
 ### Added
