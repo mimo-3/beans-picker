@@ -179,6 +179,17 @@ async def test_retypes_a_web_pages_number_field_and_checks_its_exact_value(tmp_p
     assert out["status"] == "done"
 
 
+async def test_types_into_an_empty_web_field_without_selecting_first(tmp_path: Path) -> None:
+    was, now = number_window(""), number_window("1")
+    set_value = first(build_candidates(was, BuildOptions(list_text_kinds=True, text="1")), "set_value")
+    session = FakeSession([was, now], cache=tmp_path)
+    out = await act_tool(
+        session, {"pid": 1, "instruction": "set quantity to 1", "candidateId": set_value.id, "text": "1"}
+    )
+    assert [tool for tool, _ in session.calls] == ["type_text"]
+    assert out["status"] == "done"
+
+
 async def test_closes_a_popups_menu_left_open_after_one_of_its_items_is_pressed_directly(tmp_path: Path) -> None:
     is_open = popup_window("Small", True)
     item = first(build_candidates(is_open), "click", "Large")

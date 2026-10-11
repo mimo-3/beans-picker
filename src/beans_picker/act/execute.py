@@ -532,16 +532,21 @@ class Executor:
             )
 
         # Select the whole text: End then Shift+Home in a one-line field, Cmd+Down then Shift+Cmd+Up in a text area.
-        keys = (
+        keys: tuple[tuple[str, tuple[str, ...]], ...] = (
             (("down", ("cmd",)), ("up", ("shift", "cmd")))
             if target.role == "AXTextArea"
             else (("end", ()), ("home", ("shift",)))
         )
+        text = c.text if c.text is not None else ""
+        # Each key costs about a second in cua-driver, and a field read as empty has nothing to select. The field is
+        # read from `snap`: on a second try it may hold part of the text typed the first time.
+        now = _resolve(snap, target)
+        if text and now is not None and now.exact and not (now.raw_value if now.raw_value is not None else now.value):
+            keys = ()
         for k, mods in keys:
             r = await key(k, mods)
             if not r.ok:
                 return r
-        text = c.text if c.text is not None else ""
         if not text:
             return await key("delete")
         return await self._with_rebind(
