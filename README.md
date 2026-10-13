@@ -19,7 +19,81 @@ The server itself never calls a generative model (no `claude -p`, no LLM API).
 | `observe` | `app` \| `pid`, `windowId?`, `instruction?`, `limit?` | Lists the window's candidate actions (`id`, `kind`, what it does). With `instruction`, Jev ranks them and each comes with its probability `p`. |
 | `act` | `app` \| `pid`, `windowId?`, `instruction`, `text?`, `candidateId?`, `dragTo?`, `allowDestructive?`, `modifiers?`, `then?` | Performs one action and checks its effect, then each step in `then` (same fields, up to 12) the same way, stopping at the first that is not `done` or `unverified`; each step's result is in `steps`. Jev picks the action for `instruction`, unless `candidateId` is given. `text` is entered exactly as given. `modifiers` (`shift`, `cmd`, `option`, `ctrl`) are held during a click or toggle, as a pixel click on a control visible on the window. `dragTo` drags the source `candidateId` to another control or by a pixel offset. |
 | `extract` | `app` \| `pid`, `windowId?`, `instruction` | Returns the text or value of the element Jev picks, exactly as read. A table or list with no value of its own comes back as `rows` (each row's texts), any other container as `text`. Its `status` is `done`, `ambiguous` (the shortlist comes back with each element's value) or `not_found`. |
+| `screenshot` | `scope?`, `pid?`, `windowId?`, `out?`, `includeImage?` | Captures an exact window (default) or the primary screen (`scope: "screen"`). Returns PNG image content by default; optionally saves to absolute `out.png`. |
+| `record_start` / `record_stop` | start: `pid`, `windowId`, `out`; stop: `{}` | Records an existing window using the CLI's winrec helper (macOS 15+). Start waits for readiness. Stop returns the finalized `path`, `bytes` and actual media `durationSeconds`. |
+| `clipboard_read` / `clipboard_write` | read: `{}`; write: `text` or `imagePath` | Reads text/types; writes text with exact readback or an absolute image file with type readback (`unverified` for pixels). |
+| `set_window_frame` | `pid`, `windowId`, `x`, `y`, `width`, `height` | Moves and resizes the window in integer screen points. Rereads the frame; returns `done` only on equality, otherwise `mismatch`. |
+| `browser_state` | `pid`, `windowId`, `tabId?`, `query?` | Binds an exact mutable browser window and returns a fresh semantic snapshot with `targetId`, `tabId` and refs. Multiple tabs return `ambiguous` and `tabs`; repeat with one tab id. |
+| `browser_upload` | `pid`, `windowId`, `targetId`, `tabId`, `ref`, `files` | Sets 1–32 absolute regular files on an `input[type=file]` upload ref and refreshes the snapshot. Reports `unverified` because the driver does not read back the FileList. |
+| `browser_download` | `pid`, `windowId`, `targetId`, `tabId`, `ref`, `out` | Saves a completed exact-ref download to absolute `out`; verifies its opaque id and byte count. Preserves driver approval and background refusal codes. |
 | `driver` (opt-in) | `tool`, `arguments` | Forwards one cua-driver call and returns its structured data, text and images. No Jev, effect verification or destructive confirmation. Available only with `BEANS_PICKER_RAW_DRIVER=1`; background and security restrictions still apply. |
+
+### Captures and file transfers
+
+The new tools require an **already open, exact `pid` and `windowId`** wherever a window is involved.
+They do not launch apps, select a tab, open a file picker, change browser preferences or use foreground
+delivery. A window id owned by another process is refused before dispatch. These tools do not need Jev
+or the raw-driver opt-in. An older driver missing a capability returns `unknown_driver_tool`.
+
+For example (replace ids and canonical absolute paths with your own):
+
+```json
+{"pid": 123, "windowId": 456, "out": "/private/tmp/bp-impl-window.png"}
+```
+
+Pass that to `screenshot`. For the primary display use
+`{"scope": "screen", "out": "/private/tmp/bp-impl-screen.png"}` instead. `includeImage: false` saves only
+the file and requires `out`. Captures are decoded and bounded as PNG before saving or returning them.
+Full-screen capture retains the driver's desktop-consent requirements and may return a consent refusal.
+
+Start recording with `record_start({"pid":123,"windowId":456,"out":"/private/tmp/bp-impl-demo.mp4"})`,
+operate the window, then call `record_stop({})`. One recording is allowed per MCP session. The file
+is published only after successful finalization; server shutdown also attempts to stop and save it.
+`record_stop` remains callable while the screen is locked because it only finalizes the existing
+child; starting or capturing still requires an unlocked screen.
+Screen Recording permission must already be available to the process running the helper.
+The helper checks that grant before capture and refuses without requesting an OS permission dialog.
+
+All outputs use private `bp-impl-*` staging and **never replace an existing destination**, including
+symlinks. Published files are owner-readable and owner-writable (0600). Output parents must exist
+and be canonical absolute directories. Inputs must be canonical
+absolute regular files without symlinks. Failed operations clean up their staging files.
+
+For browser transfers, call `browser_state` first with the native ids. If it returns `ambiguous`,
+choose a returned tab id and repeat. Use the resulting `targetId`, `tabId` and fresh action `ref`
+with the same native ids for `browser_upload` or `browser_download`. Upload refs must declare the
+`upload` action. A reconnect or foreign session invalidates the saved binding. Setup and unsupported
+browsers return the driver's refusal; no legacy `page` or native picker fallback is used.
+
+**Current driver limits:** image clipboard reads expose types, not pixels. Upload responses expose
+an assigned count, not FileList content, so neither operation claims exact content verification.
+The current cua-driver download tool requires approval through its own MCP host; an ordinary nested
+MCP call cannot supply that proof and returns `browser_consent_required`. beans-picker preserves this
+boundary rather than manufacturing approval. A success path is supported for a driver that admits
+the call through its authorized transport; the staged file is then checked and published.
+
+### Manual verification on a Mac
+
+The unit tests mock OS access. Before relying on these capabilities in a real session:
+
+1. Open two windows in a background app and keep another app in front. Capture one exact window and
+   the primary screen; open both PNGs and verify their scope. Repeat with `includeImage: false` and
+   an existing output path. Check that the frontmost app, selected tab and real cursor never change.
+2. Start/stop a recording, play the MP4 and compare its duration with `durationSeconds`. Cover the
+   target window while recording; verify that only that window appears. Test startup with missing
+   Screen Recording permission, duplicate start, a closed window, shutdown during recording and
+   stopping an active recording after locking the screen.
+3. Read/write text including an empty string, newlines and Unicode; independently read it back.
+   Write an image and check available image types and the `unverified` status before pasting manually.
+4. Move and resize the background window, including negative coordinates on a second display. Check
+   the returned frame and `mismatch` when the app constrains its minimum size. Try a foreign window id.
+5. On a browser already prepared and authorized outside beans-picker, bind an exact window/tab and
+   assign a harmless fixture to an upload ref. Inspect its FileList manually; no picker should open.
+   Exercise multiple tabs, stale refs, reconnects and unsupported browsers.
+6. Attempt a harmless download to a new destination. With current cua-driver expect
+   `browser_consent_required` and no file or focus change. Where the driver has an authorized host
+   transport, verify the downloaded contents, returned path/bytes, overwrite refusal and cleanup
+   after cancellation. A foreground-only route must stop with a refusal.
 
 To drag, give the source's `candidateId` and either `dragTo: {"candidateId": "<target id>"}`
 or `dragTo: {"dx": 120, "dy": -30}`. The gesture starts at the source control's centre;
