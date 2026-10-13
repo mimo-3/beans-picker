@@ -2,9 +2,12 @@
 
 ## What leaves your machine
 
-beans-picker sends data over the network only when a step needs Jev: `observe` with an `instruction`,
+beans-picker's Jev requests occur when a step needs Jev: `observe` with an `instruction`,
 `act` without a `candidateId`, and `extract`. `observe` without an instruction and `act` with a
-`candidateId` send nothing.
+`candidateId` make no Jev request. Browser actions can still cause the targeted application to
+send network requests. `browser_upload` grants that exact page access to the caller's named local
+files; its input/change handlers may immediately transmit them. `browser_download` may trigger an
+authenticated browser request. Only use those tools for pages and files the caller has authorized.
 
 Each such step makes a request to the configured Jev endpoint (`TYPESAFE_BASE_URL`, by default
 `https://api.typesafe.ai`), authenticated with your `JEV_API_KEY`. The endpoint must use HTTPS,
@@ -37,9 +40,11 @@ This cannot identify secrets displayed in ordinary text fields. Caller-supplied 
 - The `activate` helper brings one app to the front by pid. beans-picker gives it only the app that
   was in front before the app under test took its place, never the app under test, and it needs no
   permission.
-- The `winrec` helper runs only for `beans-picker record`. It writes a video of one window to the
-  file you name, under the Screen Recording permission of the terminal or agent that started it. The
-  command refuses a file that already exists.
+- The `winrec` helper runs for `beans-picker record` and MCP `record_start` / `record_stop`.
+  It writes a video of one window under the Screen Recording permission of the process running it.
+  MCP recording validates window ownership again in the helper, waits for readiness and publishes
+  only a finalized file with actual media duration. Both entry points refuse existing outputs.
+  The helper preflights Screen Recording permission and exits without requesting consent when absent.
 
 ## Where secrets are read from
 
@@ -78,7 +83,30 @@ For drags, destructive controls under both actual endpoints require confirmation
 and offset destinations. Verification requires a 0.3-second quiet interval within four settling
 snapshots; a drag that cannot settle remains `unverified`.
 Indistinguishable controls are bound to their current tokens; an obsolete target is refused rather
-than rebound to a different identical control. A lock-check failure also refuses the tool call.
+than rebound to a different identical control. A lock-check failure also refuses the tool call, except
+`record_stop`: it only signals and finalizes this session's existing child and remains available
+when the screen is locked or lock detection fails. It cannot start a capture or operate a window.
+
+## Explicit captures and local state
+
+Public captures, recording, clipboard and geometry tools do not need the raw-driver opt-in or Jev.
+Window operations require both an existing pid and window id and validate live ownership; they
+never launch an app or select a different window. Screen capture is explicitly requested with
+`scope: "screen"` and retains the driver's desktop-consent policy. Foreground-only routes are refused.
+
+Captures are validated as bounded PNGs. Capture, recording and download outputs use private
+`bp-impl-*` staging and are published with mode 0600 without replacing existing files or symlinks.
+Publication checks the regular single-link source and the published inode. Output parents must
+exist and be canonical; caller-named local inputs must be canonical absolute regular files without
+symlinks. These file outputs are explicit caller authority and do not widen the raw-driver allowlist.
+
+Clipboard text is privacy-sensitive and returned to the MCP client as requested. Text writes require
+exact readback. Image writes report `unverified` because the driver can read types but not pixels.
+Browser binding requires exact native identity and session-scoped capabilities; reconnects invalidate
+stored bindings. File assignment refreshes the semantic snapshot but remains `unverified` without
+FileList readback. Downloads preserve the driver's MCP-host approval requirement; nested calls cannot
+manufacture that proof and current driver versions return `browser_consent_required`. No browser
+preference changes, native file pickers or foreground fallbacks are offered.
 
 The helpers and driver run with the user's privileges. This project does not isolate a malicious app
 bundle, a modified local executable/cache, or another process already running as the same user.

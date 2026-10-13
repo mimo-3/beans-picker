@@ -1,6 +1,6 @@
 ---
 name: beans-picker
-description: Operate a macOS app window (native apps or pages in Chrome) in the background through the beans-picker MCP server (observe / act / extract). Use when a task asks to fill in forms, click through a flow, or read values in a Mac window and the beans-picker tools are available. Covers the fast loop (one observe, batched `act` steps, reading `change` instead of observing again), the places where runs stall (custom list boxes, combo boxes, keyboard drags, content that loads late, a `done` that changed nothing) with the sequence that works for each, when to ask Jev, when cua-driver fits better, and checking the result before reporting success.
+description: Operate macOS windows in the background with beans-picker. Use for forms, flows and value reads through observe / act / extract, or for screenshots, window recording, clipboard text/image writes, exact window geometry and browser file transfers. Covers fresh-state verification, exact pid/window and session browser bindings, incomplete evidence and refusals that stop the workflow. Requires beans-picker tools; never bypasses consent or foreground restrictions.
 ---
 
 # Driving a Mac window with beans-picker
@@ -8,6 +8,43 @@ description: Operate a macOS app window (native apps or pages in Chrome) in the 
 beans-picker picks controls from the accessibility tree and never brings the app to the front.
 Every `act` step is checked on fresh snapshots. Text is entered as given and checked by exact
 equality.
+
+## Captures and explicit local operations
+
+Use these public tools instead of switching to raw cua-driver. They need no Jev or raw-driver
+opt-in. For a window operation, give **both `pid` and `windowId` of an already open window**.
+Never compensate for a refusal by launching, raising, selecting a tab or using foreground delivery.
+
+- `screenshot({pid, windowId, out?, includeImage?})`: exact-window PNG; default returns an image.
+  `screenshot({scope:"screen", out?, includeImage?})`: primary-display PNG, subject to the driver's
+  desktop consent. `includeImage:false` requires `out`.
+- `record_start({pid, windowId, out})`, then `record_stop({})`: one window recording per MCP
+  session, macOS 15+. Start waits for readiness; stop returns path/bytes/actual `durationSeconds`.
+  Stop remains callable while the screen is locked; it only finalizes the existing child.
+- `clipboard_read({})`; `clipboard_write({text})` or `clipboard_write({imagePath})`: text reads
+  back exactly; image writes report `unverified` because only types can be read. Never paste before
+  checking the returned status and types.
+- `set_window_frame({pid,windowId,x,y,width,height})`: integer screen points; rereads the frame.
+  `mismatch` means the app constrained or ignored part of the requested geometry. Read its frame
+  rather than retrying or dragging the title bar.
+- `browser_state({pid,windowId,tabId?,query?})`: get exact mutable binding and semantic refs.
+  Multiple tabs return `ambiguous` with a tab list; choose one exact id and repeat. Use returned
+  `targetId` and `tabId` in this same session and with the same native ids. Browser setup is external.
+- `browser_upload({pid,windowId,targetId,tabId,ref,files})`: 1–32 canonical absolute regular files
+  on a fresh ref with `upload` action. No file picker. It refreshes the snapshot but reports
+  `unverified`: assigned count is not FileList readback. Do not claim the upload or form submission
+  completed based on assignment alone.
+- `browser_download({pid,windowId,targetId,tabId,ref,out})`: checks completed download id/bytes and
+  publishes the file without overwriting. Current cua-driver requires its own MCP-host approval
+  proof; nested calls return `browser_consent_required`. Preserve that refusal; never fabricate
+  proof, change browser download preferences or fall back to a foreground click.
+
+All `out` paths are absolute, with an existing canonical parent; captures use `.png`, recordings
+use `.mp4`. On macOS use canonical `/private/tmp`, rather than the `/tmp` symlink. Outputs use mode
+0600. Existing files and symlinks are refused. Inputs are canonical absolute regular files
+without symlinks. `unknown_driver_tool` means the installed driver lacks that capability.
+`foreground_required`, setup/consent errors and `foreground_violation` stop the background workflow.
+Treat `unverified` as incomplete evidence; the README lists manual Mac verification steps.
 
 ## The fast loop
 
@@ -53,7 +90,7 @@ cannot work. So: few replies, and no second try of the same thing.
 | `ambiguous` | Pick the right `candidateId` from the list returned and call again. Do not reword. |
 | `needs_confirmation` | Repeat with `allowDestructive: true` only if the task asks for exactly this. Return and Space always need it; when the task calls for them, set it on the first try. |
 | `not_found` | The id is gone or the control is not there yet (still loading, scrolled out, behind another step). Use the previous result's `newCandidates`, or observe once. |
-| `failed` | Read `code`. `option_not_found`: this pop-up is not a native menu (see "Custom list boxes"), or it has no option of that title (`message` lists the titles). `tool_error` on a drag: see "Mouse drags". `foreground_required`: this step needs cua-driver. `foreground_violation`: the step may already have run; read the state before doing it again with cua-driver. |
+| `failed` | Read `code`. `option_not_found`: this pop-up is not a native menu (see "Custom list boxes"), or it has no option of that title (`message` lists the titles). `tool_error` on a drag: see "Mouse drags". `foreground_required`: stop and report that the background route is unavailable. `foreground_violation`: the step may already have run; inspect state read-only and stop without rerunning it. Setup and consent refusals also stop the workflow. |
 
 ## Where runs stall, and what works
 
@@ -126,18 +163,20 @@ only with `exact: true`. For a table or list, name it ("the Transactions table")
 reads `ambiguous`, the shortlist already carries each element's value: read it there, do not ask
 again in other words.
 
-## When to ask Jev, and when to use cua-driver
+## When to ask Jev and when to use explicit tools
 
 A plain `observe` and a `candidateId` step make no Jev call. Forms, wizards, settings pages and
 keyboard drags need none. Jev earns its second where the choice is the hard part: many similar
 rows where the right one is known only by its content, decoys (two people with one name, a stale
 duplicate), one value on a crowded page.
 
-Use cua-driver (screenshots and pixel clicks) when the UI has no accessibility tree to speak of
-(a canvas, a game, custom-drawn widgets), for anything you must *see*, and for a menu-bar command
-with no keyboard shortcut (`failed` / `foreground_required`). With `BEANS_PICKER_RAW_DRIVER=1`
-the `driver` tool forwards allowlisted cua-driver calls (`double_click`, `zoom`, `scroll`, …)
-with no Jev, no effect check and no destructive confirmation: check the result yourself.
+Use public `screenshot` for a canvas, game or custom-drawn widget that must be seen. Recording,
+clipboard, geometry and browser transfers use the explicit tools described above. With
+`BEANS_PICKER_RAW_DRIVER=1`, `driver` can perform allowlisted background calls such as
+`double_click`, `zoom` and `scroll` on the same fixed pid/windowId. It has no Jev, effect check
+or destructive confirmation, so check the result yourself. Raw driver calls must never bypass
+a `foreground_required`, setup, consent or activation refusal. If no background route works,
+stop and report the limit; do not retry through a different tool or foreground delivery.
 
 ## Before you report success
 
