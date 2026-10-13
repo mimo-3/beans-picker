@@ -54,7 +54,20 @@ async def test_tools_list_matches_the_capture() -> None:
         await client.initialize()
         got = await client.request("tools/list", {})
     assert got == expected
-    assert [t["name"] for t in got["tools"]] == ["observe", "act", "extract"]
+    assert [t["name"] for t in got["tools"]] == [
+        "observe",
+        "act",
+        "extract",
+        "screenshot",
+        "record_start",
+        "record_stop",
+        "clipboard_read",
+        "clipboard_write",
+        "set_window_frame",
+        "browser_state",
+        "browser_upload",
+        "browser_download",
+    ]
     for mine, theirs in zip(got["tools"], expected["tools"], strict=True):
         # Property order and everything inside each property is as captured; the order of the keys
         # of a tool entry and of the schema's top level is the MCP SDK's wire model's.
