@@ -228,6 +228,7 @@ async def test_builds_the_activate_and_winrec_binaries_once(paths: Paths, source
     assert [call[:3] for call in clang.calls] == [("clang", "-fobjc-arc", "-O2"), ("clang", "-fobjc-arc", "-O2")]
     assert "-mmacosx-version-min=15.0" in clang.calls[1]
     assert "ScreenCaptureKit" in clang.calls[1]
+    assert "CoreGraphics" in clang.calls[1]
     assert [p.name for p in paths.activate.iterdir()] == [activate.name]
 
 

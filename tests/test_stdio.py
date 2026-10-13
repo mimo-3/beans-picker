@@ -65,7 +65,20 @@ async def test_serves_over_stdio_and_exits_on_end_of_input(tmp_path: Path) -> No
         await send({"jsonrpc": "2.0", "method": "notifications/initialized"})
         await send({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
         tools = await answer(2)
-        assert [t["name"] for t in tools["result"]["tools"]] == ["observe", "act", "extract"]
+        assert [t["name"] for t in tools["result"]["tools"]] == [
+            "observe",
+            "act",
+            "extract",
+            "screenshot",
+            "record_start",
+            "record_stop",
+            "clipboard_read",
+            "clipboard_write",
+            "set_window_frame",
+            "browser_state",
+            "browser_upload",
+            "browser_download",
+        ]
         await send({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "observe", "arguments": {}}})
         call = await answer(3)
         assert call["result"]["isError"] is True

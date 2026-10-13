@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Public `screenshot` for exact-window and primary-screen PNG captures, optional image content and
+  non-overwriting file output.
+- Session-owned `record_start` / `record_stop`, reusing winrec without app launch. Readiness is
+  confirmed before start returns; stop verifies the finalized file and actual media duration.
+- `clipboard_read` / `clipboard_write` with text equality readback and image type reporting.
+- `set_window_frame` with fixed pid/window ownership and fresh geometry readback.
+- `browser_state`, `browser_upload` and `browser_download` with exact session bindings, private
+  staging, file checks and preserved background/consent refusals. Upload FileList and clipboard
+  pixels remain `unverified`; current nested driver downloads require its MCP-host consent.
+- Mocked capability and recording lifecycle tests, plus manual Mac verification instructions.
+
 ### Changed
 
 - Candidate ids are 13 characters (`c` and 12 hex digits) instead of 33, so repeating one costs the caller fewer tokens.

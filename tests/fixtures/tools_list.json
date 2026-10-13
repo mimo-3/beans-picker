@@ -1,11 +1,12 @@
 {
   "tools": [
     {
-      "name": "observe",
       "description": "List the candidate actions on a window (id, kind, what it does). With `instruction`, Jev ranks them and the most likely come first with their probability `p`.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "type": "object",
         "properties": {
           "app": {
             "description": "App name (\"Calculator\") or bundle id. Launched in the background if not running.",
@@ -32,18 +33,18 @@
             "exclusiveMinimum": 0,
             "maximum": 9007199254740991
           }
-        }
+        },
+        "type": "object"
       },
-      "execution": {
-        "taskSupport": "forbidden"
-      }
+      "name": "observe"
     },
     {
-      "name": "act",
       "description": "Perform one action on a window and verify its effect, then any steps in `then` the same way. Jev picks the action for `instruction` unless `candidateId` (from observe or an earlier act) is given. With dragTo ({candidateId} or {dx, dy} in screenshot pixels), drag that source control in the background; destructive controls under either actual endpoint require allowDestructive for both destination forms. Verify window-relative movement or state changes after a 0.3-second quiet interval within four settling snapshots; snapbacks are no_effect, unsettled results are unverified.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "type": "object",
         "properties": {
           "app": {
             "description": "App name (\"Calculator\") or bundle id. Launched in the background if not running.",
@@ -201,18 +202,18 @@
         },
         "required": [
           "instruction"
-        ]
+        ],
+        "type": "object"
       },
-      "execution": {
-        "taskSupport": "forbidden"
-      }
+      "name": "act"
     },
     {
-      "name": "extract",
       "description": "Return the text or value of the element Jev picks for `instruction` (e.g. 'the result shown on the display'), exactly as read from accessibility. A table or list is returned as `rows`.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
       "inputSchema": {
         "$schema": "http://json-schema.org/draft-07/schema#",
-        "type": "object",
         "properties": {
           "app": {
             "description": "App name (\"Calculator\") or bundle id. Launched in the background if not running.",
@@ -236,11 +237,303 @@
         },
         "required": [
           "instruction"
-        ]
+        ],
+        "type": "object"
       },
+      "name": "extract"
+    },
+    {
+      "description": "Capture an existing exact window (pid and windowId) or the primary screen (scope=screen). Return a PNG image by default and optionally save to absolute out without overwriting. Never activates apps.",
       "execution": {
         "taskSupport": "forbidden"
-      }
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "window",
+              "screen"
+            ]
+          },
+          "out": {
+            "type": "string"
+          },
+          "includeImage": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "screenshot"
+    },
+    {
+      "description": "Start recording one existing pid/windowId to absolute out.mp4 using winrec (macOS 15+). Wait for capture readiness; one recording per MCP session. Never launches or activates an app.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "out": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pid",
+          "windowId",
+          "out"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "record_start"
+    },
+    {
+      "description": "Stop this session's recording and verify the finalized file. Return path, bytes and actual video durationSeconds. Shutdown also stops recording. Never overwrites existing files.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {},
+        "required": [],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "record_stop"
+    },
+    {
+      "description": "Read system clipboard text and available types without pasting or changing focus.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {},
+        "required": [],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "clipboard_read"
+    },
+    {
+      "description": "Write exactly one of text or absolute imagePath to the system clipboard and read back. Text requires exact equality. Image type readback is reported unverified because pixels cannot be read.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "imagePath": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "clipboard_write"
+    },
+    {
+      "description": "Move and resize one existing pid/windowId in screen points. Read its frame again; return done only for exact equality, otherwise mismatch. No title-bar dragging or foreground fallback.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "x": {
+            "type": "integer"
+          },
+          "y": {
+            "type": "integer"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "pid",
+          "windowId",
+          "x",
+          "y",
+          "width",
+          "height"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "set_window_frame"
+    },
+    {
+      "description": "Bind an existing exact pid/windowId and read a semantic_v2 browser snapshot with refs. Give tabId when several tabs exist. Requires exact binding and mutation_allowed; never prepares a browser.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "tabId": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pid",
+          "windowId"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "browser_state"
+    },
+    {
+      "description": "Assign 1..32 absolute regular files to an input[type=file] upload ref from browser_state using its targetId/tabId and original pid/windowId. Bypass native file pickers; refresh the snapshot afterward. Returns unverified because the driver provides assigned count without FileList readback.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "tabId": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32
+          }
+        },
+        "required": [
+          "pid",
+          "windowId",
+          "targetId",
+          "tabId",
+          "ref",
+          "files"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "browser_upload"
+    },
+    {
+      "description": "Download through an exact ref from browser_state to absolute out without overwriting. Verify the completed download id and bytes in private staging. Driver MCP-host consent requirements and foreground_required refusals are preserved; no host approval is fabricated and no browser setup is performed.",
+      "execution": {
+        "taskSupport": "forbidden"
+      },
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "windowId": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "tabId": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "out": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pid",
+          "windowId",
+          "targetId",
+          "tabId",
+          "ref",
+          "out"
+        ],
+        "type": "object",
+        "additionalProperties": false
+      },
+      "name": "browser_download"
     }
   ]
 }

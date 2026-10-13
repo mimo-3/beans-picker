@@ -34,7 +34,11 @@ _WINREC_FLAGS: Final = (
     "-fobjc-arc",
     "-O2",
     "-mmacosx-version-min=15.0",
-    *(arg for name in ("AppKit", "ScreenCaptureKit", "AVFoundation", "CoreMedia") for arg in ("-framework", name)),
+    *(
+        arg
+        for name in ("AppKit", "ScreenCaptureKit", "AVFoundation", "CoreMedia", "CoreGraphics")
+        for arg in ("-framework", name)
+    ),
 )
 
 AXTEXT_PLIST: Final = (

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from beans_picker.observe.exacttext import EDITABLE_ROLES, TOGGLE_ROLES
+from beans_picker.observe.helpers import _WINREC_FLAGS
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD_SH = ROOT / "bench/fixture-app/build.sh"
@@ -32,6 +33,29 @@ def test_helper_sources_are_package_data(name: str, usage: str) -> None:
     assert "int main(int argc, const char *argv[])" in text
     with resources.as_file(source) as path:
         assert path.is_file()
+
+
+def test_recorder_checks_capture_permission_before_any_app_or_capture_initialization() -> None:
+    text = resources.files("beans_picker.native").joinpath("winrec.m").read_text(encoding="utf-8")
+    check = text.index("if (!CGPreflightScreenCaptureAccess()) fail(")
+    assert check < text.index("[NSApplication sharedApplication]")
+    assert check < text.index("[SCShareableContent getShareableContent")
+    assert "CGRequestScreenCaptureAccess" not in text
+    assert "activateWithOptions" not in text
+    assert "activateIgnoringOtherApps" not in text
+
+
+@pytest.mark.macos
+@pytest.mark.skipif(shutil.which("clang") is None, reason="needs clang and the macOS 15 SDK")
+def test_recorder_compiles_without_running_a_gui_or_capture(tmp_path: Path) -> None:
+    source = resources.files("beans_picker.native").joinpath("winrec.m")
+    with resources.as_file(source) as path:
+        out = tmp_path / "bp-impl-winrec"
+        proc = subprocess.run(
+            ["clang", *_WINREC_FLAGS, str(path), "-o", str(out)], capture_output=True, text=True, check=True
+        )
+    assert proc.returncode == 0
+    assert out.is_file()
 
 
 def _roles_in(text: str, function: str) -> set[str]:

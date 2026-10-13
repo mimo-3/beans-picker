@@ -2,7 +2,9 @@
 // The window is captured on its own, so the video is the same whether it is covered or in front.
 #import <AppKit/AppKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 #import <ScreenCaptureKit/ScreenCaptureKit.h>
+#include <math.h>
 
 static SCStream *gStream;
 static SCRecordingOutput *gOutput;
@@ -41,11 +43,17 @@ static void exitLater(void) {
 }
 - (void)recordingOutputDidStartRecording:(SCRecordingOutput *)output {
   fprintf(stderr, "winrec: recording\n");
+  printf("{\"status\":\"recording\"}\n");
+  fflush(stdout);
 }
 - (void)recordingOutput:(SCRecordingOutput *)output didFailWithError:(NSError *)error {
   fail([NSString stringWithFormat:@"the file could not be written: %@", error.localizedDescription]);
 }
 - (void)recordingOutputDidFinishRecording:(SCRecordingOutput *)output {
+  double duration = CMTimeGetSeconds(output.recordedDuration);
+  if (!isfinite(duration) || duration <= 0) fail(@"the recording has no finite duration");
+  printf("{\"durationSeconds\":%.9f}\n", duration);
+  fflush(stdout);
   exit(gStatus);
 }
 @end
@@ -67,8 +75,11 @@ static void stop(void) {
 
 int main(int argc, const char *argv[]) {
   @autoreleasepool {
-    if (argc != 3) fail(@"usage: winrec <window id> <out.mp4>");
+    if (argc != 3 && argc != 4) fail(@"usage: winrec <window id> <out.mp4> [pid]");
+    // Do not initialize ScreenCaptureKit without an existing grant: it may show a consent prompt.
+    if (!CGPreflightScreenCaptureAccess()) fail(@"Screen Recording permission is required; grant it before recording");
     CGWindowID windowId = (CGWindowID)strtoul(argv[1], NULL, 10);
+    pid_t expectedPid = argc == 4 ? (pid_t)strtol(argv[3], NULL, 10) : 0;
     NSURL *out = [NSURL fileURLWithPath:@(argv[2])];
     Recorder *recorder = [Recorder new];
     gRecorder = recorder;
@@ -92,6 +103,7 @@ int main(int argc, const char *argv[]) {
       SCWindow *window = nil;
       for (SCWindow *w in content.windows) if (w.windowID == windowId) window = w;
       if (!window) fail([NSString stringWithFormat:@"no window with id %u", windowId]);
+      if (expectedPid && window.owningApplication.processID != expectedPid) fail(@"the window belongs to another process");
 
       SCContentFilter *filter = [[SCContentFilter alloc] initWithDesktopIndependentWindow:window];
       SCStreamConfiguration *config = [SCStreamConfiguration new];

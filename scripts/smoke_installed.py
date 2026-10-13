@@ -17,7 +17,20 @@ from beans_picker.paths import Paths
 from beans_picker.server import create_server
 
 CHECKOUT: Final = Path(__file__).resolve().parent.parent
-TOOLS: Final = ["act", "extract", "observe"]
+TOOLS: Final = [
+    "act",
+    "browser_download",
+    "browser_state",
+    "browser_upload",
+    "clipboard_read",
+    "clipboard_write",
+    "extract",
+    "observe",
+    "record_start",
+    "record_stop",
+    "screenshot",
+    "set_window_frame",
+]
 
 
 def imported_from_checkout() -> Path | None:

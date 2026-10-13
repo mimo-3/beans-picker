@@ -101,7 +101,21 @@ def test_validation_text() -> None:
 
 
 def test_schemas_include_the_opt_in_driver_after_the_three_tools() -> None:
-    assert list(INPUT_SCHEMAS) == ["observe", "act", "extract", "driver"]
+    assert list(INPUT_SCHEMAS) == [
+        "observe",
+        "act",
+        "extract",
+        "driver",
+        "screenshot",
+        "record_start",
+        "record_stop",
+        "clipboard_read",
+        "clipboard_write",
+        "set_window_frame",
+        "browser_state",
+        "browser_upload",
+        "browser_download",
+    ]
     assert INPUT_SCHEMAS["act"]["required"] == ["instruction"]
     assert "required" not in INPUT_SCHEMAS["observe"]
 
