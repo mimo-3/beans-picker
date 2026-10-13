@@ -9,6 +9,7 @@ from types import MappingProxyType
 from typing import Final, Literal, NotRequired, TypedDict
 
 from beans_picker._json import JsonObject, JsonValue
+from beans_picker.tools.capability_args import CAPABILITY_SCHEMAS
 
 type Modifier = Literal["shift", "cmd", "option", "ctrl"]
 
@@ -116,6 +117,7 @@ INPUT_SCHEMAS: Final[Mapping[str, JsonObject]] = MappingProxyType(
             {"tool": {"type": "string"}, "arguments": {"type": "object", "additionalProperties": True}},
             ["tool", "arguments"],
         ),
+        **CAPABILITY_SCHEMAS,
     }
 )
 
