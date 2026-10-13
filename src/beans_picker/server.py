@@ -28,6 +28,8 @@ from beans_picker.tools.args import (
     observe_args,
     validation_text,
 )
+from beans_picker.tools.capabilities import capability_tool
+from beans_picker.tools.capability_args import CAPABILITY_DESCRIPTIONS, CAPABILITY_SCHEMAS
 from beans_picker.tools.driver import driver_tool
 from beans_picker.tools.extract import extract_tool
 from beans_picker.tools.observe import observe_tool
@@ -39,7 +41,11 @@ SERVER_NAME: Final = "beans-picker"
 
 INSTRUCTIONS: Final = "\n".join(
     [
-        "macOS app control in the background (the app is never brought to the front).",
+        "macOS app control in the background (the app is never brought to the front). "
+        "screenshot, record_start/record_stop, clipboard_read/clipboard_write, set_window_frame and "
+        "browser_state/browser_upload/browser_download expose explicit captures, local state and file transfers. "
+        "Window operations require an already open pid and windowId; no app launch or browser setup. "
+        "Image clipboard and upload contents remain unverified. Driver consent and foreground refusals stop the call.",
         "- observe: lists a window's candidate actions with stable ids; with an instruction, Jev ranks them.",
         "- act: performs one action, picked by Jev from the instruction or given as candidateId, then checks the "
         "effect on fresh snapshots. Steps you already know (fill these fields, tick these boxes, then press Save) go "
@@ -103,6 +109,7 @@ DESCRIPTIONS: Final[Mapping[str, str]] = MappingProxyType(
         "other file-output arguments, including debug_image_out, are refused. Path-key values and owned cache "
         "paths are redacted at directory boundaries; sibling paths and unrelated URLs are preserved. "
         "Failures return only a code and fixed message.",
+        **CAPABILITY_DESCRIPTIONS,
     }
 )
 
@@ -125,12 +132,13 @@ async def run(
     *,
     acts: bool,
     screen_locked: ScreenLocked = lock.screen_locked,
+    check_lock: bool = True,
 ) -> types.CallToolResult:
-    """One tool call, after every earlier one, and never while the screen is locked."""
+    """Serialize calls and check the screen lock, except for session-owned capture shutdown."""
 
     async def body() -> types.CallToolResult:
         try:
-            if await screen_locked():
+            if check_lock and await screen_locked():
                 verb = "done" if acts else "read"
                 return error("screen_locked", f"the screen is locked; nothing was {verb}. Unlock it and call again")
             result = await fn()
@@ -211,8 +219,19 @@ def create_server(
         return await run(
             the_session,
             _handler(the_session, name, checked),
-            acts=name in {"act", "driver"},
+            acts=name
+            in {
+                "act",
+                "driver",
+                "clipboard_write",
+                "set_window_frame",
+                "browser_upload",
+                "browser_download",
+                "record_start",
+                "record_stop",
+            },
             screen_locked=screen_locked,
+            check_lock=name != "record_stop",
         )
 
     return _Server(
@@ -226,6 +245,8 @@ def create_server(
 
 
 def _handler(session: Session, name: str, arguments: JsonObject) -> Callable[[], Awaitable[object]]:
+    if name in CAPABILITY_SCHEMAS:
+        return lambda: capability_tool(session, name, arguments)
     match name:
         case "observe":
             return lambda: observe_tool(session, observe_args(arguments))

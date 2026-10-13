@@ -28,6 +28,7 @@ from beans_picker.observe.swatch import name_swatches, swatches
 from beans_picker.observe.types import Snapshot
 from beans_picker.observe.visual import capture_window
 from beans_picker.paths import Paths
+from beans_picker.recording import Recorder
 from beans_picker.tools.args import TargetArgs
 
 _log = logging.getLogger(__name__)
@@ -90,6 +91,8 @@ class Session:
         self._sleep = sleep
         self._paths = paths if paths is not None else Paths.default()
         self.helpers = Helpers(self._paths, runner=runner)
+        self.recorder = Recorder(self.helpers)
+        self.browser_bindings: dict[tuple[str, str], tuple[Target, int]] = {}
         self.exact_text = ExactText(self.helpers, self._paths, runner=runner, clock=clock)
         self._menu_keys = MenuKeys(self.helpers, self._paths, runner=runner)
         self._activate = Activator(self.helpers, runner=runner)
@@ -231,7 +234,7 @@ class Session:
         if running is not None:
             running.cancel()
             await asyncio.wait([running])
-        for owner in (self._menu_keys, self.helpers):
+        for owner in (self.recorder, self._menu_keys, self.helpers):
             try:
                 await owner.close()
             except Exception as err:
