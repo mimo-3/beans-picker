@@ -82,6 +82,8 @@ async def capability_tool(session: Session, name: str, args: JsonObject) -> obje
         return await _clipboard(driver, args)
     if name == "screenshot":
         return await _screenshot(session, driver, args)
+    if name == "browser_navigate":
+        browser_url(args.get("url"))  # refuse a bad URL before any driver call
     target = await _target(driver, args)
     if name == "record_start":
         return await session.recorder.start(target.pid, target.window_id, Path(_text(args, "out")))

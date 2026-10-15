@@ -49,10 +49,11 @@ async def test_bad_navigation_url_is_never_dispatched(url: str, tmp_path: Path) 
     driver = BrowserDriver()
     session = await session_for(driver, tmp_path)
     await capability_tool(session, "browser_state", TARGET)
+    calls = len(driver.tools)
     with pytest.raises(ToolError) as info:
         await capability_tool(session, "browser_navigate", {**BROWSER, "url": url})
     assert info.value.code == "bad_arguments"
-    assert "browser_navigate" not in driver.tools
+    assert len(driver.tools) == calls
     assert not driver.sentinel.watching
     await session.close()
 
