@@ -15,7 +15,7 @@ from beans_picker._proc import Runner, run
 from beans_picker.driver.activate import Activator
 from beans_picker.driver.app import AppTarget, ensure_app, pick_window, resolve_bundle
 from beans_picker.driver.mcp import CuaDriver, Driver
-from beans_picker.driver.sentinel import front_pid
+from beans_picker.driver.sentinel import RESTORE_CHECK_INTERVAL_S, RESTORE_CHECKS, front_pid
 from beans_picker.driver.types import windows_of
 from beans_picker.errors import BeansPickerError, ToolError
 from beans_picker.jev.client import JevClient, JevUsage
@@ -157,6 +157,23 @@ class Session:
         driver = await self._connect()
         driver.sentinel.restore = self._activate
         return driver
+
+    async def front(self) -> int | None:
+        """Read the current front app through the session's OS seam."""
+        return await front_pid(runner=self._runner)
+
+    async def restore_front(self, pid: int) -> bool:
+        """Restore the previous front app and verify that it is actually in front."""
+        try:
+            if not await self._activate(pid):
+                return False
+            for _ in range(RESTORE_CHECKS):
+                if await self.front() == pid:
+                    return True
+                await self._sleep(RESTORE_CHECK_INTERVAL_S)
+        except Exception as err:
+            _log.debug("putting the previous app back failed: %s", type(err).__name__)
+        return False
 
     def jev(self) -> JevLike:
         """The Jev client, created on first use; raises JevUnavailable when no key is configured."""
