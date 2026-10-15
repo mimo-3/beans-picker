@@ -20,6 +20,10 @@ CHECKOUT: Final = Path(__file__).resolve().parent.parent
 TOOLS: Final = [
     "act",
     "browser_download",
+    "browser_navigate",
+    "browser_dialog",
+    "windows",
+    "launch_app",
     "browser_state",
     "browser_upload",
     "clipboard_read",

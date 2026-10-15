@@ -67,6 +67,10 @@ async def test_tools_list_matches_the_capture() -> None:
         "browser_state",
         "browser_upload",
         "browser_download",
+        "browser_navigate",
+        "browser_dialog",
+        "windows",
+        "launch_app",
     ]
     for mine, theirs in zip(got["tools"], expected["tools"], strict=True):
         # Property order and everything inside each property is as captured; the order of the keys

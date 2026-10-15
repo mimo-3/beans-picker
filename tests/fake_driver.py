@@ -46,6 +46,8 @@ def _tools(launch: int) -> list[Tool]:
         _tool("fail_plain", session=False),
         _tool("mixed", session=False),
         _tool("whoami", session=False),
+        *[_tool(name, session=True) for name in ("get_browser_state", "browser_navigate", "browser_dialog")],
+        _tool("launch_app", session=False),
     ]
 
 
@@ -88,6 +90,32 @@ def build(state: Path, launch: int) -> Server[Any]:
             return CallToolResult(content=_text("1 window"), structured_content=data)
         if name == "get_window_state":
             return CallToolResult(content=_text("state"), structured_content={"snapshot_id": "s1", "launch": launch})
+        if name == "get_browser_state":
+            data = {"status": "ok", "target_id": "target", "tab_id": "tab"}
+            if "target_id" in args:
+                data.update(page={"url": "https://example.test/"}, snapshot={"id": "p1"})
+            else:
+                data.update(binding_quality="exact", mutation_allowed=True, tabs=[{"tab_id": "tab"}])
+            return CallToolResult(content=_text("browser state"), structured_content=data)
+        if name == "browser_navigate":
+            return CallToolResult(content=_text("navigated"), structured_content={"status": "ok", "url": args["url"]})
+        if name == "browser_dialog":
+            return CallToolResult(
+                content=_text("dialog"),
+                structured_content={"status": "ok", "dialog_id": "d1", "kind": "confirm", "action": args["action"]},
+            )
+        if name == "launch_app":
+            return CallToolResult(
+                content=_text("launched"),
+                structured_content={
+                    "pid": 42,
+                    "bundle_id": "test.app",
+                    "name": "Test",
+                    "windows": [],
+                    "launch_state": {"window_ready": False},
+                    "self_activation_suppressed": True,
+                },
+            )
         if name in ("click", "end_session", "echo"):
             return CallToolResult(content=_text(f"{name} done"), structured_content={"args": args, "launch": launch})
         if name == "refuse":

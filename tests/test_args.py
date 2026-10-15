@@ -115,6 +115,10 @@ def test_schemas_include_the_opt_in_driver_after_the_three_tools() -> None:
         "browser_state",
         "browser_upload",
         "browser_download",
+        "browser_navigate",
+        "browser_dialog",
+        "windows",
+        "launch_app",
     ]
     assert INPUT_SCHEMAS["act"]["required"] == ["instruction"]
     assert "required" not in INPUT_SCHEMAS["observe"]

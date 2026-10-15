@@ -47,17 +47,21 @@ async def test_offers_observe_act_and_extract_and_reports_a_bad_target_as_a_tool
         tools = (await client.list_tools()).tools
         assert sorted(t.name for t in tools) == [
             "act",
+            "browser_dialog",
             "browser_download",
+            "browser_navigate",
             "browser_state",
             "browser_upload",
             "clipboard_read",
             "clipboard_write",
             "extract",
+            "launch_app",
             "observe",
             "record_start",
             "record_stop",
             "screenshot",
             "set_window_frame",
+            "windows",
         ]
         act = next(t for t in tools if t.name == "act")
         props = act.input_schema["properties"]
