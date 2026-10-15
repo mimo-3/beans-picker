@@ -6,8 +6,33 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Refuse launch files and bundle/package directories (any extension or Contents/Info.plist),
+  unsafe app names/bundle ids and option-like inputs; local refusals use `bad_path` with
+  "only plain folders can be opened; files and bundles are refused".
+- Accept only case-insensitive `about:blank` beyond HTTP(S); refuse URL userinfo and Unicode
+  format characters. Bound dialog prompt text to 8192 UTF-16 units.
+- Normalize URL scheme/host, empty paths and default ports for fresh navigation verification,
+  preserving query/fragment. Snapshot errors after successful navigation/dialog resolution return
+  `unverified` with `driverCode` and original url/dialogId; inspect for a possibly open dialog.
+- Report dialog inspection as `done` with only whitelisted camelCase fields. Return window discovery
+  as `done`; expose titles only for app/pid filters and cap them at 256 UTF-16 units. Forward
+  `onScreenOnly` as driver `on_screen_only` (current Space). Mark titles, dialog messages and page
+  snapshots as untrusted content in tool descriptions.
+- Detect delayed launch foreground changes to any app using the restore-check window/interval;
+  report launched pid and restore success on violations. Unknown launch pid stays `unverified`.
+
 ### Added
 
+- Background-only `browser_navigate` with session-bound targets, bounded HTTP(S)/about:blank URLs,
+  fresh page URL verification and invalidated pre-navigation refs.
+- Session-bound `browser_dialog` inspection and exact-id accept/dismiss; accepting requires
+  `allowDestructive`, and confirmed resolution returns a fresh snapshot.
+- Public `windows` discovery with exact app-name, pid and visibility filters, plus typed
+  background `launch_app` for HTTP(S) URLs and canonical local plain folders. Launch checks
+  activation suppression and any change of frontmost app over the bounded restore-check window, verifies restoration and
+  reports `unverified` until a window is ready. Browser setup and raw-driver restrictions remain.
 - Public `screenshot` for exact-window and primary-screen PNG captures, optional image content and
   non-overwriting file output.
 - Session-owned `record_start` / `record_stop`, reusing winrec without app launch. Readiness is
