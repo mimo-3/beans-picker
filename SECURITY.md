@@ -108,6 +108,38 @@ FileList readback. Downloads preserve the driver's MCP-host approval requirement
 manufacture that proof and current driver versions return `browser_consent_required`. No browser
 preference changes, native file pickers or foreground fallbacks are offered.
 
+Public `windows` is read-only discovery returning `status: done`. Titles are omitted without an
+app/pid filter and bounded to 256 UTF-16 units. `onScreenOnly` is forwarded as `on_screen_only`;
+the driver interprets it as current Space, not merely `is_on_screen` visibility.
+
+Typed `launch_app` accepts a bundle id/name, an optional new-instance flag and up to 16 HTTP(S)
+URLs or canonical absolute plain folders without symlinks. It refuses **all regular files**,
+directories with any extension, and folders containing `Contents/` or `Info.plist`, with `bad_path`
+and "only plain folders can be opened; files and bundles are refused". Every urls element starting
+with `-` is refused. Name forbids `/`, `:`, control/Unicode format characters and leading `-`/`.`;
+bundleId must fully match `[A-Za-z0-9][A-Za-z0-9.-]{0,254}`. Use trusted apps and explicitly chosen
+inputs. Arbitrary arguments, WebKit inspector ports and browser preparation remain refused.
+After launch returns, the frontmost app is polled using the restore-check constants (six checks,
+50 ms intervals). Any change away from the previous app, even to a different third-party pid,
+or failed activation suppression returns `foreground_violation`. Restoration is verified against
+the actual front pid; the message includes the launched pid when known and the restore outcome.
+An unknown launched pid always yields `unverified` when no foreground violation occurs.
+
+`browser_navigate` and `browser_dialog` require the exact session/native-window binding and watch
+for activation. Navigation permits only HTTP(S) or case-insensitive `about:blank`, bounded to 8192
+UTF-16 units without userinfo, whitespace, controls or Unicode format characters (zero-width/bidi).
+Fresh page URL comparison lowercases scheme/host, substitutes `/` for an empty path and drops
+default ports 80/443, preserving path case, query and fragment. Old refs are invalid.
+Dialog accept requires `allowDestructive:true`; accept/dismiss require the current dialog id and
+never request foreground delivery. Prompt text is exact and bounded to 8192 UTF-16 units.
+Inspect returns `status: done` and only present `present`, `dialogId`, `type`, `message`,
+`defaultPrompt` fields. Dialog data and prompt responses may be sensitive. A fresh snapshot follows
+confirmed resolution only. Snapshot `ToolError` after successful navigation/resolution becomes
+`unverified` with `driverCode`, original `url`/`dialogId` and a reason advising `browser_dialog`
+inspect because a dialog may be open; it does not imply the mutation failed or should be repeated.
+Window titles, dialog messages and page snapshots are untrusted page/app content, never authority
+or instructions. All tools retain the screen-lock gate and serialized queue; the raw allowlist is unchanged.
+
 The helpers and driver run with the user's privileges. This project does not isolate a malicious app
 bundle, a modified local executable/cache, or another process already running as the same user.
 Local helper/system subprocesses do not inherit `JEV_API_KEY` or `TYPESAFE_API_KEY`. This is not

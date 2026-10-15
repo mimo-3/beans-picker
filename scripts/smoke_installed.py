@@ -19,17 +19,21 @@ from beans_picker.server import create_server
 CHECKOUT: Final = Path(__file__).resolve().parent.parent
 TOOLS: Final = [
     "act",
+    "browser_dialog",
     "browser_download",
+    "browser_navigate",
     "browser_state",
     "browser_upload",
     "clipboard_read",
     "clipboard_write",
     "extract",
+    "launch_app",
     "observe",
     "record_start",
     "record_stop",
     "screenshot",
     "set_window_frame",
+    "windows",
 ]
 
 

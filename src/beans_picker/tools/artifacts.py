@@ -34,6 +34,27 @@ def input_path(raw: str) -> Path:
     return path
 
 
+def plain_folder(raw: str) -> Path:
+    """Launch inputs must not hand executable files or app/package directories to Launch Services."""
+    message = "only plain folders can be opened; files and bundles are refused"
+    path = Path(raw)
+    try:
+        if (
+            not path.is_absolute()
+            or str(path) != raw
+            or path.resolve(strict=True) != path
+            or not path.is_dir()
+            or bool(path.suffix)
+            or path.name.endswith(".")
+            or os.path.lexists(path / "Contents")
+            or os.path.lexists(path / "Info.plist")
+        ):
+            raise ToolError("bad_path", message)
+    except (OSError, RuntimeError, ValueError) as err:
+        raise ToolError("bad_path", message) from err
+    return path
+
+
 def _directory_fd(path: Path) -> int:
     """Pin a canonical absolute directory without following any symlink ancestor."""
     if not path.is_absolute() or ".." in path.parts:

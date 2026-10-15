@@ -78,6 +78,10 @@ async def test_serves_over_stdio_and_exits_on_end_of_input(tmp_path: Path) -> No
             "browser_state",
             "browser_upload",
             "browser_download",
+            "browser_navigate",
+            "browser_dialog",
+            "windows",
+            "launch_app",
         ]
         await send({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "observe", "arguments": {}}})
         call = await answer(3)

@@ -148,7 +148,15 @@ async def test_connect_names_a_unique_session_and_reads_session_tools(
     d = await CuaDriver.connect()
     try:
         assert re.fullmatch(rf"beans-picker-{os.getpid()}-[0-9a-z]+", d.session)
-        assert d.session_tools == {"list_windows", "get_window_state", "click", "end_session"}
+        assert d.session_tools == {
+            "list_windows",
+            "get_window_state",
+            "click",
+            "end_session",
+            "get_browser_state",
+            "browser_navigate",
+            "browser_dialog",
+        }
         assert d.generation == 0
     finally:
         await d.close()
@@ -191,11 +199,31 @@ async def test_loaded_tool_schemas_identify_supported_raw_calls(driver: CuaDrive
         "fail_plain",
         "mixed",
         "whoami",
+        "get_browser_state",
+        "browser_navigate",
+        "browser_dialog",
+        "launch_app",
     }
     assert driver.tool_schemas["click"] == {
         "type": "object",
         "properties": {"pid": {"type": "integer"}, "session": {"type": "string"}},
     }
+
+
+async def test_fake_browser_and_launch_routes_preserve_lifecycle_sessions(driver: CuaDriver, fake_bin: FakeBin) -> None:
+    bound = await driver.must("get_browser_state", {"pid": 42, "window_id": 10})
+    assert bound["binding_quality"] == "exact"
+    target = {"target_id": "target", "tab_id": "tab"}
+    navigated = await driver.must("browser_navigate", {**target, "url": "https://example.test/"})
+    assert navigated["url"] == "https://example.test/"
+    snapshot = await driver.must("get_browser_state", target)
+    assert snapshot["page"] == {"url": "https://example.test/"}
+    dialog = await driver.must("browser_dialog", {**target, "action": "dismiss", "dialog_id": "d1"})
+    assert dialog["action"] == "dismiss"
+    launched = await driver.must("launch_app", {"name": "Test"})
+    assert launched["launch_state"] == {"window_ready": False}
+    assert all(isinstance(call["args"], dict) and "session" in call["args"] for call in fake_bin.calls()[:-1])
+    assert fake_bin.calls()[-1]["args"] == {"name": "Test"}
 
 
 async def test_driver_keeps_inline_images_alongside_text(driver: CuaDriver) -> None:

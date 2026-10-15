@@ -51,6 +51,9 @@ class CapabilityDriver(FakeDriver):
             "get_browser_state",
             "browser_set_input_files",
             "browser_download",
+            "browser_navigate",
+            "browser_dialog",
+            "launch_app",
         )
     }
 
@@ -261,6 +264,9 @@ class BrowserDriver(CapabilityDriver):
         self.tabs = tabs if tabs is not None else ["tab"]
         self.download_refusal: str | None = None
         self.download_attack: str | None = None
+        self.page_url: str | None = "about:blank"
+        self.navigate_result: JsonObject = {"status": "ok", "url": "https://example.test/"}
+        self.dialog_result: JsonObject = {"status": "ok", "present": True, "dialog_id": "d1", "kind": "confirm"}
         super().__init__(self.response)
 
     def response(self, tool: str, args: dict[str, object]) -> ToolResult:
@@ -285,6 +291,7 @@ class BrowserDriver(CapabilityDriver):
                     "status": "ok",
                     "target_id": "target",
                     "tab_id": args["tab_id"],
+                    "page": {"url": self.page_url},
                     "snapshot": {
                         "id": "p1",
                         "refs": [{"ref": "p1:0", "role": "button"}],
@@ -294,6 +301,10 @@ class BrowserDriver(CapabilityDriver):
             )
         if tool == "browser_set_input_files":
             return ok({"status": "ok", "file_count": 1})
+        if tool == "browser_navigate":
+            return ok(self.navigate_result)
+        if tool == "browser_dialog":
+            return ok(self.dialog_result)
         if tool == "browser_download":
             if self.download_refusal:
                 return ToolRefused(

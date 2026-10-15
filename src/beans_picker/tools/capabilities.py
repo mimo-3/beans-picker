@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import re
+import unicodedata
 from collections.abc import Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -12,10 +14,13 @@ from mcp.types import CallToolResult, TextContent
 
 from beans_picker import _json
 from beans_picker._json import JsonObject, JsonValue
+from beans_picker._text import utf16_len, utf16_units
 from beans_picker.driver.mcp import Driver
-from beans_picker.driver.types import Window, windows_of
+from beans_picker.driver.sentinel import RESTORE_CHECK_INTERVAL_S, RESTORE_CHECKS
+from beans_picker.driver.types import Window, get_int, get_obj, get_str, windows_of
 from beans_picker.errors import ToolError
-from beans_picker.tools.artifacts import input_path, output_path, publish
+from beans_picker.tools.artifacts import input_path, output_path, plain_folder, publish
+from beans_picker.tools.capability_args import browser_url, normalized_url
 from beans_picker.tools.driver import _capture_image
 from beans_picker.tools.session import Session, Target
 
@@ -66,6 +71,10 @@ async def capability_tool(session: Session, name: str, args: JsonObject) -> obje
     if name == "record_stop":
         return await session.recorder.stop()
     driver = await session.driver()
+    if name == "windows":
+        return await _windows(driver, args)
+    if name == "launch_app":
+        return await _launch(session, driver, args)
     if name == "clipboard_read":
         data = await _call(driver, "clipboard_read", {"include_text": True})
         return {**data, "status": "done"}
@@ -73,6 +82,8 @@ async def capability_tool(session: Session, name: str, args: JsonObject) -> obje
         return await _clipboard(driver, args)
     if name == "screenshot":
         return await _screenshot(session, driver, args)
+    if name == "browser_navigate":
+        browser_url(args.get("url"))  # refuse a bad URL before any driver call
     target = await _target(driver, args)
     if name == "record_start":
         return await session.recorder.start(target.pid, target.window_id, Path(_text(args, "out")))
@@ -80,6 +91,8 @@ async def capability_tool(session: Session, name: str, args: JsonObject) -> obje
         return await _frame(driver, target, args)
     if name == "browser_state":
         return await _browser_state(session, driver, target, args)
+    if name in {"browser_navigate", "browser_dialog"}:
+        return await _browser_action(session, driver, target, name, args)
     return await _transfer(session, driver, target, name, args)
 
 
@@ -226,10 +239,8 @@ async def _browser_snapshot(driver: Driver, target_id: str, tab_id: str, args: J
 
 
 async def _transfer(session: Session, driver: Driver, target: Target, name: str, args: JsonObject) -> JsonObject:
-    target_id, tab_id, ref = (_text(args, key) for key in ("targetId", "tabId", "ref"))
-    binding = session.browser_bindings.get((target_id, tab_id))
-    if binding != (target, getattr(driver, "generation", 0)):
-        raise ToolError("browser_binding_required", "use browser_state in this session for the same pid and windowId")
+    target_id, tab_id = _binding(session, driver, target, args)
+    ref = _text(args, "ref")
     payload: JsonObject = {"target_id": target_id, "tab_id": tab_id, "ref": ref}
     await driver.sentinel.watch(target.pid)
     try:
@@ -268,3 +279,197 @@ async def _transfer(session: Session, driver: Driver, target: Target, name: str,
             return {"status": "done", "path": str(out), "bytes": size}
     finally:
         driver.sentinel.stop()
+
+
+def _binding(session: Session, driver: Driver, target: Target, args: JsonObject) -> tuple[str, str]:
+    target_id, tab_id = (_text(args, key) for key in ("targetId", "tabId"))
+    binding = session.browser_bindings.get((target_id, tab_id))
+    if binding != (target, getattr(driver, "generation", 0)):
+        raise ToolError("browser_binding_required", "use browser_state in this session for the same pid and windowId")
+    return target_id, tab_id
+
+
+async def _browser_action(session: Session, driver: Driver, target: Target, name: str, args: JsonObject) -> JsonObject:
+    target_id, tab_id = _binding(session, driver, target, args)
+    payload: JsonObject = {"target_id": target_id, "tab_id": tab_id}
+    if name == "browser_navigate":
+        payload["url"] = browser_url(args.get("url"))
+    else:
+        action = args.get("action")
+        if action not in {"inspect", "accept", "dismiss"}:
+            raise ToolError("bad_arguments", "give inspect, accept or dismiss as action")
+        payload["action"] = action
+        if action != "inspect":
+            payload["dialog_id"] = _text(args, "dialogId")
+        if "promptText" in args:
+            if action != "accept" or not isinstance(args["promptText"], str) or utf16_len(args["promptText"]) > 8192:
+                raise ToolError("bad_arguments", "promptText is allowed only with accept and at most 8192 UTF-16 units")
+            payload["prompt_text"] = args["promptText"]
+        if action == "accept" and args.get("allowDestructive") is not True:
+            return {"status": "needs_confirmation", "message": "repeat with allowDestructive to accept the dialog"}
+    await driver.sentinel.watch(target.pid)
+    try:
+        data = await _call(driver, name, payload)
+        if name == "browser_dialog":
+            result: JsonObject = {"status": "done"}
+            for native, public in (
+                ("present", "present"),
+                ("dialog_id", "dialogId"),
+                ("kind", "type"),
+                ("message", "message"),
+                ("default_prompt", "defaultPrompt"),
+            ):
+                if native in data:
+                    result[public] = data[native]
+            if args["action"] == "inspect":
+                return result
+            # Current cua-driver acknowledges resolution with status=ok and the exact id/action.
+            resolved = data.get("resolved") is True or (
+                "resolved" not in data
+                and (
+                    data.get("status") == "resolved"
+                    or (
+                        data.get("status") == "ok"
+                        and data.get("dialog_id") == payload["dialog_id"]
+                        and data.get("action") == payload["action"]
+                    )
+                )
+            )
+            result["status"] = "done" if resolved else "unverified"
+            result["dialogId"] = payload["dialog_id"]
+            if not resolved:
+                result["reason"] = "the driver did not report the exact dialog resolved"
+            else:
+                await _action_snapshot(driver, target_id, tab_id, result)
+            return result
+        result = {"status": "unverified", "url": payload["url"]}
+        snapshot = await _action_snapshot(driver, target_id, tab_id, result)
+        if snapshot is None:
+            return result
+        page = get_obj(snapshot, "page") or {}
+        current_url = get_str(page, "url")
+        final_url = get_str(data, "final_url") or get_str(data, "url")
+        observed = normalized_url(current_url) if current_url is not None else None
+        verified = observed is not None and observed in {
+            normalized_url(_text(payload, "url")),
+            normalized_url(final_url) if final_url is not None else None,
+        }
+        result["status"] = "done" if verified else "unverified"
+        if current_url is not None:
+            result["finalUrl"] = current_url
+        if not verified:
+            result["reason"] = "the fresh page URL does not match the requested or driver-reported final URL"
+        result["snapshot"] = snapshot
+        return result
+    finally:
+        driver.sentinel.stop()
+
+
+async def _action_snapshot(driver: Driver, target_id: str, tab_id: str, result: JsonObject) -> JsonObject | None:
+    try:
+        snapshot = await _browser_snapshot(driver, target_id, tab_id, {})
+    except ToolError as err:
+        result.update(
+            status="unverified",
+            reason="the fresh snapshot failed; a dialog may be open; use browser_dialog with action=inspect",
+            driverCode=err.code,
+        )
+        return None
+    result["snapshot"] = snapshot
+    return snapshot
+
+
+def _window_json(window: Window, *, include_title: bool = True) -> JsonObject:
+    b = window.bounds
+    result: JsonObject = {
+        "pid": window.pid,
+        "windowId": window.window_id,
+        "app": window.app_name,
+        "bounds": {"x": b.x, "y": b.y, "width": b.width, "height": b.height} if b is not None else None,
+        "onScreen": window.is_on_screen,
+        "onCurrentSpace": window.on_current_space,
+        "zIndex": window.z_index,
+    }
+    if include_title:
+        # Avoid leaving half of an astral character at the UTF-16 boundary.
+        result["title"] = (
+            utf16_units(window.title)[:512].decode("utf-16-le", "ignore") if window.title is not None else None
+        )
+    return result
+
+
+async def _windows(driver: Driver, args: JsonObject) -> JsonObject:
+    payload = {"pid": args["pid"]} if "pid" in args else {}
+    if "onScreenOnly" in args:
+        payload["on_screen_only"] = args["onScreenOnly"]
+    data = await _call(driver, "list_windows", payload)
+    app = _text(args, "app").casefold() if "app" in args else None
+    return {
+        "status": "done",
+        "windows": [
+            _window_json(w, include_title="app" in args or "pid" in args)
+            for w in windows_of(data) or []
+            if ("pid" not in args or w.pid == args["pid"])
+            and (app is None or (w.app_name is not None and w.app_name.casefold() == app))
+        ],
+    }
+
+
+async def _launch(session: Session, driver: Driver, args: JsonObject) -> JsonObject:
+    if "bundleId" not in args and "name" not in args:
+        raise ToolError("bad_arguments", "give bundleId or name")
+    payload: JsonObject = {}
+    for public, native in (("bundleId", "bundle_id"), ("name", "name")):
+        if public in args:
+            value = _text(args, public)
+            if (public == "bundleId" and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]{0,254}", value) is None) or (
+                public == "name"
+                and (
+                    value.startswith(("-", "."))
+                    or any(ch in "/:" or unicodedata.category(ch) in {"Cc", "Cf"} for ch in value)
+                )
+            ):
+                raise ToolError("bad_arguments", f"invalid {public}")
+            payload[native] = value
+    if "newInstance" in args:
+        payload["creates_new_application_instance"] = args["newInstance"]
+    if "urls" in args:
+        urls = args["urls"]
+        if not isinstance(urls, list) or len(urls) > 16 or not all(isinstance(u, str) for u in urls):
+            raise ToolError("bad_arguments", "give at most 16 URLs or canonical absolute paths")
+        checked: list[JsonValue] = []
+        for url in urls:
+            if isinstance(url, str) and url.startswith("-"):
+                raise ToolError("bad_arguments", "launch inputs must not start with '-'")
+            if isinstance(url, str) and url.startswith("/"):
+                checked.append(str(await asyncio.to_thread(plain_folder, url)))
+            else:
+                checked.append(browser_url(url, about=False))
+        payload["urls"] = checked
+    previous = await session.front()
+    data = await _call(driver, "launch_app", payload)
+    pid = get_int(data, "pid")
+    for _ in range(RESTORE_CHECKS):
+        current = await session.front()
+        if data.get("self_activation_suppressed") is False or current != previous:
+            restored = (
+                previous is not None
+                and (previous != pid or current != previous)
+                and await session.restore_front(previous)
+            )
+            raise ToolError(
+                "foreground_violation",
+                f"launch pid {pid if pid is not None else 'unknown'} violated background focus; "
+                "the app in front before was " + ("put back" if restored else "not put back"),
+            )
+        await session._sleep(RESTORE_CHECK_INTERVAL_S)
+    state = get_obj(data, "launch_state") or {}
+    windows = [w for w in windows_of(data) or [] if w.pid == pid]
+    ready = pid is not None and bool(windows) and state.get("window_ready") is not False
+    return {
+        "status": "done" if ready else "unverified",
+        "pid": pid,
+        "bundleId": data.get("bundle_id"),
+        "name": data.get("name"),
+        "windows": [_window_json(w) for w in windows],
+    }
