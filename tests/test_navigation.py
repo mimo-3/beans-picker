@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import ClassVar
 
@@ -8,8 +9,9 @@ from mcp import Client
 
 from beans_picker._json import JsonObject
 from beans_picker._text import WS_CODE_POINTS
-from beans_picker.driver.types import ToolResult
-from beans_picker.errors import ToolError
+from beans_picker.driver.sentinel import ActivationSentinel
+from beans_picker.driver.types import ToolResult, carried_foreground
+from beans_picker.errors import DriverTimeout, ToolError
 from beans_picker.server import create_server
 from beans_picker.tools.capabilities import capability_tool
 from beans_picker.tools.capability_args import browser_url
@@ -404,7 +406,7 @@ async def test_launch_rejects_unsafe_local_paths(kind: str, tmp_path: Path) -> N
 
 @pytest.mark.parametrize("suppressed", [True, False])
 @pytest.mark.parametrize("restored", [True, False])
-async def test_launch_focus_steal_restores_previous_app_and_fails(
+async def test_launch_focus_steal_restores_previous_app_and_goes_on(
     suppressed: bool, restored: bool, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     driver = CapabilityDriver(lambda tool, args: ok({"pid": 7, "self_activation_suppressed": suppressed}))
@@ -421,10 +423,13 @@ async def test_launch_focus_steal_restores_previous_app_and_fails(
 
     monkeypatch.setattr(session, "front", front)
     monkeypatch.setattr(session, "restore_front", restore)
-    with pytest.raises(ToolError) as info:
-        await capability_tool(session, "launch_app", {"name": "Test"})
-    assert info.value.code == "foreground_violation"
-    assert info.value.message.endswith("was put back" if restored else "was not put back")
+    out = await capability_tool(session, "launch_app", {"name": "Test"})
+    assert isinstance(out, dict)
+    assert out["status"] == "unverified"
+    assert out["pid"] == 7
+    (seen,) = out["foreground"]
+    assert isinstance(seen, dict)
+    assert (seen["pid"], seen["during"], seen["restored"]) == (7, "launch_app", restored)
     assert restores == [99]
     await session.close()
 
@@ -440,9 +445,11 @@ async def test_launch_does_not_activate_the_target_as_a_restore(
         return prior
 
     monkeypatch.setattr(session, "front", front)
-    with pytest.raises(ToolError) as info:
-        await capability_tool(session, "launch_app", {"name": "Test"})
-    assert info.value.message.endswith("not put back")
+    out = await capability_tool(session, "launch_app", {"name": "Test"})
+    assert isinstance(out, dict)
+    (seen,) = out["foreground"]
+    assert isinstance(seen, dict)
+    assert seen["restored"] is False
     await session.close()
 
 
@@ -594,5 +601,84 @@ async def test_browser_refusals_preserve_codes_and_stop_the_activation_watch(
     with pytest.raises(ToolError) as info:
         await capability_tool(session, name, args)
     assert info.value.code == code
+    assert not driver.sentinel.watching
+    await session.close()
+
+
+async def test_a_navigation_that_brings_the_browser_forward_is_reported_and_still_verified(tmp_path: Path) -> None:
+    driver = BrowserDriver()
+    driver.page_url = URL
+    original = driver.response
+    pid = TARGET["pid"]
+    assert isinstance(pid, int)
+    front: list[int | None] = [1]
+
+    async def sample_front() -> int | None:
+        return front[0]
+
+    async def restore(previous: int) -> bool:
+        front[0] = previous
+        return True
+
+    async def hold(_: float) -> None:
+        await asyncio.Event().wait()
+
+    driver.sentinel = ActivationSentinel(sample_front, sleep=hold, restore=restore)
+
+    async def response(tool: str, args: dict[str, object]) -> ToolResult:
+        if tool == "browser_navigate":
+            front[0] = pid
+            driver.sentinel.end(tool)
+            await driver.sentinel.sample()
+        return original(tool, args)
+
+    driver.on_call = response
+    session = await session_for(driver, tmp_path)
+    await session.driver()
+    driver.sentinel.restore = restore
+    await capability_tool(session, "browser_state", TARGET)
+    result = text_result(await capability_tool(session, "browser_navigate", {**BROWSER, "url": URL}))
+    assert result["status"] == "done"
+    foreground = result["foreground"]
+    assert isinstance(foreground, list)
+    assert [(f["pid"], f["during"], f["restored"]) for f in foreground if isinstance(f, dict)] == [
+        (pid, "after browser_navigate", True)
+    ]
+    assert front[0] == 1
+    assert not driver.sentinel.watching
+    await session.close()
+
+
+async def test_a_navigation_that_times_out_after_an_activation_still_reports_it(tmp_path: Path) -> None:
+    driver = BrowserDriver()
+    driver.page_url = URL
+    original = driver.response
+    pid = TARGET["pid"]
+    assert isinstance(pid, int)
+    front: list[int | None] = [1]
+
+    async def sample_front() -> int | None:
+        return front[0]
+
+    async def hold(_: float) -> None:
+        await asyncio.Event().wait()
+
+    driver.sentinel = ActivationSentinel(sample_front, sleep=hold)
+
+    async def response(tool: str, args: dict[str, object]) -> ToolResult:
+        if tool == "browser_navigate":
+            front[0] = pid
+            await driver.sentinel.sample()
+            raise DriverTimeout("cua-driver did not answer browser_navigate")
+        return original(tool, args)
+
+    driver.on_call = response
+    session = await session_for(driver, tmp_path)
+    await session.driver()
+    driver.sentinel.restore = None
+    await capability_tool(session, "browser_state", TARGET)
+    with pytest.raises(DriverTimeout) as info:
+        await capability_tool(session, "browser_navigate", {**BROWSER, "url": URL})
+    assert [a.pid for a in carried_foreground(info.value).activations] == [pid]
     assert not driver.sentinel.watching
     await session.close()

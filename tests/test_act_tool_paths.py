@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from pathlib import Path
+
+import pytest
+from mcp.types import TextContent
 
 from beans_picker._json import JsonValue
 from beans_picker.candidates.build import BuildOptions, build_candidates
-from beans_picker.driver.types import Activation, ToolOk, ToolRefused, ToolResult
-from beans_picker.errors import ForegroundViolation, ToolError
+from beans_picker.driver.sentinel import ActivationSentinel
+from beans_picker.driver.types import ToolOk, ToolRefused, ToolResult, carried_foreground
+from beans_picker.errors import DriverTimeout, ToolError
 from beans_picker.observe.png import Rgba
 from beans_picker.observe.snapshot import build_snapshot
 from beans_picker.observe.types import Snapshot
+from beans_picker.server import error
 from beans_picker.tools.act import NEW_CANDIDATES, SETTLE_RETAKES, act_tool
 from tests.fakes import FakeDriver
 from tests.helpers import blank, encode_png, paint, snap_fixture
@@ -23,20 +30,105 @@ def _ok() -> ToolOk:
     return ToolOk(data={"effect": "confirmed"}, text="", ms=1)
 
 
-async def test_a_foreground_violation_ends_the_step_without_a_route(tmp_path: Path) -> None:
+class _Stealing:
+    """A driver whose every call brings the target app forward; the sentinel puts the previous app back."""
+
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+        self.front: int | None = 1
+        self.fail: Exception | None = None
+        self.driver = FakeDriver(self._call)
+        self.driver.sentinel = ActivationSentinel(self._front, sleep=_never, restore=self._restore)
+
+    async def _front(self) -> int | None:
+        return self.front
+
+    async def _restore(self, pid: int) -> bool:
+        self.front = pid
+        return True
+
+    async def _call(self, tool: str, args: dict[str, object]) -> ToolResult:
+        self.front = self.pid
+        self.driver.sentinel.end(tool)
+        await self.driver.sentinel.sample()
+        if self.fail is not None:
+            raise self.fail
+        return _ok()
+
+
+async def _never(_: float) -> None:
+    await asyncio.Event().wait()
+
+
+async def test_an_activation_is_reported_and_the_step_still_verified(tmp_path: Path) -> None:
     calc = snap_fixture("calculator")
-
-    def on_call(tool: str, args: dict[str, object]) -> ToolResult:
-        raise ForegroundViolation(Activation(pid=calc.pid, during="click", at="10:00:00.000"))
-
-    driver = FakeDriver(on_call)
-    session = FakeSession([calc, shown(calc, "7")], jev_picking('"Seven"'), driver=driver, cache=tmp_path)
+    stealing = _Stealing(calc.pid)
+    session = FakeSession([calc, shown(calc, "7")], jev_picking('"Seven"'), driver=stealing.driver, cache=tmp_path)
     out = await act_tool(session, {"app": "Calculator", "instruction": "press 7"})
-    assert list(out) == ["status", "code", "window", "message", "action", "jev"]
-    assert out["code"] == "foreground_violation"
-    assert out["message"].startswith(f"foreground_violation: the app under test (pid {calc.pid}) came to the front")
-    assert "route" not in out["action"]
-    assert not driver.sentinel.watching
+    assert out["status"] == "done"
+    assert list(out)[-1] == "foreground"
+    assert [(f["pid"], f["restored"]) for f in out["foreground"]] == [(calc.pid, True)]
+    assert set(out["foreground"][0]) == {"pid", "during", "at", "restored"}
+    assert stealing.front == 1
+    assert not stealing.driver.sentinel.watching
+
+
+async def test_each_step_of_a_sequence_reports_its_activations(tmp_path: Path) -> None:
+    calc = snap_fixture("calculator")
+    seven = next(c for c in build_candidates(calc) if "Seven" in c.summary)
+    stealing = _Stealing(calc.pid)
+    snaps = [calc, shown(calc, "7"), shown(calc, "77")]
+    session = FakeSession(snaps, driver=stealing.driver, cache=tmp_path)
+    step = {"instruction": "7", "candidateId": seven.id}
+    out = await act_tool(session, {"pid": calc.pid, **step, "then": [step]})  # type: ignore[typeddict-item]
+    assert out["steps"][0]["status"] == "done"
+    assert [len(s.get("foreground", [])) for s in out["steps"]] == [1, 1]
+    assert out["foreground"] == [f for s in out["steps"] for f in s.get("foreground", [])]
+
+
+async def test_a_step_that_times_out_after_an_activation_still_reports_it(tmp_path: Path) -> None:
+    calc = snap_fixture("calculator")
+    stealing = _Stealing(calc.pid)
+    stealing.fail = DriverTimeout("cua-driver did not answer click")
+    session = FakeSession([calc, shown(calc, "7")], jev_picking('"Seven"'), driver=stealing.driver, cache=tmp_path)
+    with pytest.raises(DriverTimeout) as info:
+        await act_tool(session, {"app": "Calculator", "instruction": "press 7"})
+    assert [a.pid for a in carried_foreground(info.value).activations] == [calc.pid]
+    failed = error("driver_timeout", "slow", carried_foreground(info.value))
+    first = failed.content[0]
+    assert isinstance(first, TextContent)
+    assert [f["pid"] for f in json.loads(first.text)["foreground"]] == [calc.pid]
+    assert not stealing.driver.sentinel.watching
+
+
+async def test_a_later_step_that_times_out_keeps_its_activation(tmp_path: Path) -> None:
+    calc = snap_fixture("calculator")
+    seven = next(c for c in build_candidates(calc) if "Seven" in c.summary)
+    stealing = _Stealing(calc.pid)
+    calls = 0
+
+    async def on_call(tool: str, args: dict[str, object]) -> ToolResult:
+        nonlocal calls
+        calls += 1
+        stealing.fail = DriverTimeout("slow") if calls > 1 else None
+        return await stealing._call(tool, args)
+
+    stealing.driver.on_call = on_call
+    session = FakeSession([calc, shown(calc, "7"), shown(calc, "77")], driver=stealing.driver, cache=tmp_path)
+    step = {"instruction": "7", "candidateId": seven.id}
+    out = await act_tool(session, {"pid": calc.pid, **step, "then": [step]})  # type: ignore[typeddict-item]
+    assert [s["status"] for s in out["steps"]] == ["done", "failed"]
+    assert out["steps"][1]["code"] == "driver_timeout"
+    assert len(out["steps"][1].get("foreground", [])) == 1
+    assert len(out["foreground"]) == 2
+
+
+async def test_a_quiet_step_has_no_foreground(tmp_path: Path) -> None:
+    calc = snap_fixture("calculator")
+    session = FakeSession([calc, shown(calc, "7")], jev_picking('"Seven"'), cache=tmp_path)
+    out = await act_tool(session, {"app": "Calculator", "instruction": "press 7"})
+    assert out["status"] == "done"
+    assert "foreground" not in out
 
 
 async def test_a_clear_pick_reports_the_pick_and_usage_last(tmp_path: Path) -> None:

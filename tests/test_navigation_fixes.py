@@ -242,11 +242,12 @@ async def test_launch_watches_delayed_changes_to_any_front_app(
 
     monkeypatch.setattr(session, "front", front)
     monkeypatch.setattr(session, "restore_front", restore)
-    with pytest.raises(ToolError) as err:
-        await capability_tool(session, "launch_app", {"name": "Test"})
-    assert err.value.code == "foreground_violation"
-    assert str(pid) in err.value.message if pid is not None else "unknown" in err.value.message
-    assert "put back" in err.value.message
+    out = await capability_tool(session, "launch_app", {"name": "Test"})
+    assert isinstance(out, dict)
+    (seen,) = out["foreground"]
+    assert isinstance(seen, dict)
+    assert seen["pid"] == (pid if pid is not None else changed)
+    assert seen["restored"] is True
     assert restores == [99]
     assert sleep.delays == [RESTORE_CHECK_INTERVAL_S] * (RESTORE_CHECKS - 1)
     await session.close()

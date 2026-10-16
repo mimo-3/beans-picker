@@ -100,5 +100,5 @@ class FakeDriver:
         return r.data
 
     async def close(self) -> None:
-        self.sentinel.stop()
+        await self.sentinel.stop()
         self.closed = True

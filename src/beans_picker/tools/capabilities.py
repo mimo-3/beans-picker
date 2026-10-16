@@ -6,7 +6,7 @@ import asyncio
 import base64
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -16,8 +16,8 @@ from beans_picker import _json
 from beans_picker._json import JsonObject, JsonValue
 from beans_picker._text import utf16_len, utf16_units
 from beans_picker.driver.mcp import Driver
-from beans_picker.driver.sentinel import RESTORE_CHECK_INTERVAL_S, RESTORE_CHECKS
-from beans_picker.driver.types import Window, get_int, get_obj, get_str, windows_of
+from beans_picker.driver.sentinel import RESTORE_CHECK_INTERVAL_S, RESTORE_CHECKS, now_utc, watching
+from beans_picker.driver.types import Activation, ForegroundLog, Window, get_int, get_obj, get_str, windows_of
 from beans_picker.errors import ToolError
 from beans_picker.tools.artifacts import input_path, output_path, plain_folder, publish
 from beans_picker.tools.capability_args import browser_url, normalized_url
@@ -35,6 +35,15 @@ async def _call(driver: Driver, tool: str, args: JsonObject) -> JsonObject:
     if result.data.get("effect") in {"refused", "failed"}:
         raise ToolError("foreground_required", "the driver could not perform the operation in the background")
     return result.data
+
+
+async def _watched(driver: Driver, target: Target, run: Callable[[], Awaitable[JsonObject]]) -> JsonObject:
+    """Runs `run` under the activation watch; each time the target came to the front is reported in `foreground`,
+    while the status still comes from the effect check."""
+    async with watching(driver.sentinel, target.pid) as watched:
+        result = await run()
+    result.update(watched.log.json())
+    return result
 
 
 def _text(args: JsonObject, key: str) -> str:
@@ -157,8 +166,8 @@ async def _screenshot(session: Session, driver: Driver, args: JsonObject) -> Cal
 
 async def _frame(driver: Driver, target: Target, args: JsonObject) -> JsonObject:
     requested: JsonObject = {key: args[key] for key in ("x", "y", "width", "height")}
-    await driver.sentinel.watch(target.pid)
-    try:
+
+    async def run() -> JsonObject:
         await _call(driver, "set_window_frame", {"pid": target.pid, "window_id": target.window_id, **requested})
         window = await _window(driver, target)
         if window.bounds is None:
@@ -171,8 +180,8 @@ async def _frame(driver: Driver, target: Target, args: JsonObject) -> JsonObject
             "windowId": target.window_id,
             "frame": frame,
         }
-    finally:
-        driver.sentinel.stop()
+
+    return await _watched(driver, target, run)
 
 
 async def _browser_state(session: Session, driver: Driver, target: Target, args: JsonObject) -> JsonObject:
@@ -242,8 +251,8 @@ async def _transfer(session: Session, driver: Driver, target: Target, name: str,
     target_id, tab_id = _binding(session, driver, target, args)
     ref = _text(args, "ref")
     payload: JsonObject = {"target_id": target_id, "tab_id": tab_id, "ref": ref}
-    await driver.sentinel.watch(target.pid)
-    try:
+
+    async def run() -> JsonObject:
         if name == "browser_upload":
             files = args.get("files")
             if not isinstance(files, list) or not 1 <= len(files) <= 32 or not all(isinstance(f, str) for f in files):
@@ -277,8 +286,8 @@ async def _transfer(session: Session, driver: Driver, target: Target, name: str,
                 raise ToolError("unverified_output", "the driver did not identify a completed download and byte count")
             await asyncio.to_thread(publish, Path(stage) / download_id, out, expected_bytes=size)
             return {"status": "done", "path": str(out), "bytes": size}
-    finally:
-        driver.sentinel.stop()
+
+    return await _watched(driver, target, run)
 
 
 def _binding(session: Session, driver: Driver, target: Target, args: JsonObject) -> tuple[str, str]:
@@ -307,8 +316,8 @@ async def _browser_action(session: Session, driver: Driver, target: Target, name
             payload["prompt_text"] = args["promptText"]
         if action == "accept" and args.get("allowDestructive") is not True:
             return {"status": "needs_confirmation", "message": "repeat with allowDestructive to accept the dialog"}
-    await driver.sentinel.watch(target.pid)
-    try:
+
+    async def run() -> JsonObject:
         data = await _call(driver, name, payload)
         if name == "browser_dialog":
             result: JsonObject = {"status": "done"}
@@ -361,8 +370,8 @@ async def _browser_action(session: Session, driver: Driver, target: Target, name
             result["reason"] = "the fresh page URL does not match the requested or driver-reported final URL"
         result["snapshot"] = snapshot
         return result
-    finally:
-        driver.sentinel.stop()
+
+    return await _watched(driver, target, run)
 
 
 async def _action_snapshot(driver: Driver, target_id: str, tab_id: str, result: JsonObject) -> JsonObject | None:
@@ -449,27 +458,30 @@ async def _launch(session: Session, driver: Driver, args: JsonObject) -> JsonObj
     previous = await session.front()
     data = await _call(driver, "launch_app", payload)
     pid = get_int(data, "pid")
+    activation: Activation | None = None
     for _ in range(RESTORE_CHECKS):
         current = await session.front()
         if data.get("self_activation_suppressed") is False or current != previous:
+            # The launched app took the front: put the previous app back, report it, and carry on.
             restored = (
                 previous is not None
                 and (previous != pid or current != previous)
                 and await session.restore_front(previous)
             )
-            raise ToolError(
-                "foreground_violation",
-                f"launch pid {pid if pid is not None else 'unknown'} violated background focus; "
-                "the app in front before was " + ("put back" if restored else "not put back"),
-            )
+            front = pid if pid is not None else current if current != previous else None
+            activation = Activation(pid=front, during="launch_app", at=now_utc(), restored=restored)
+            break
         await session._sleep(RESTORE_CHECK_INTERVAL_S)
     state = get_obj(data, "launch_state") or {}
     windows = [w for w in windows_of(data) or [] if w.pid == pid]
     ready = pid is not None and bool(windows) and state.get("window_ready") is not False
-    return {
+    result: JsonObject = {
         "status": "done" if ready else "unverified",
         "pid": pid,
         "bundleId": data.get("bundle_id"),
         "name": data.get("name"),
         "windows": [_window_json(w) for w in windows],
     }
+    if activation is not None:
+        result.update(ForegroundLog((activation,)).json())
+    return result

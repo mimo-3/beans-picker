@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal, NotRequired, TypedDict
+from typing import Final, Literal, NotRequired, TypedDict, cast
 
 from mcp.types import ImageContent
 
@@ -365,8 +365,72 @@ class HotkeyArgs(TypedDict):
 class Activation:
     """The app under test was seen in front: when, and during which driver call."""
 
-    pid: int
+    pid: int | None
+    """None only for a launch that reported no pid."""
     during: str
     at: str
     restored: bool = False
     """Whether the app that was in front before was put back."""
+
+
+class ForegroundOut(TypedDict):
+    """One activation as a tool reports it in `foreground`."""
+
+    pid: int | None
+    during: str
+    at: str
+    restored: bool
+
+
+class ForegroundFields(TypedDict, total=False):
+    """What a tool result gains when its target came to the front."""
+
+    foreground: list[ForegroundOut]
+    foregroundTruncated: bool
+    """Set when more activations happened than were kept."""
+
+
+_CARRIED: Final = "_beans_picker_foreground"
+
+
+@dataclass(frozen=True, slots=True)
+class ForegroundLog:
+    """The activations seen during one watch, oldest first."""
+
+    activations: tuple[Activation, ...] = ()
+    truncated: bool = False
+
+    def __bool__(self) -> bool:
+        return bool(self.activations)
+
+    def __add__(self, other: ForegroundLog) -> ForegroundLog:
+        return ForegroundLog(self.activations + other.activations, self.truncated or other.truncated)
+
+    def fields(self) -> ForegroundFields:
+        """`foreground` (and `foregroundTruncated`) for a result; empty when nothing came to the front."""
+        if not self.activations:
+            return {}
+        out: ForegroundFields = {
+            "foreground": [
+                {"pid": a.pid, "during": a.during, "at": a.at, "restored": a.restored} for a in self.activations
+            ]
+        }
+        if self.truncated:
+            out["foregroundTruncated"] = True
+        return out
+
+    def json(self) -> JsonObject:
+        """`fields` as a plain JSON object, for results built as JSON."""
+        return cast("JsonObject", self.fields())
+
+
+def carry_foreground(err: BaseException, log: ForegroundLog) -> None:
+    """Attach the activations of a watch that ended in `err`, so the failure still reports them."""
+    if log:
+        setattr(err, _CARRIED, carried_foreground(err) + log)
+
+
+def carried_foreground(err: BaseException) -> ForegroundLog:
+    """The activations attached to `err` by `carry_foreground`; empty when none were."""
+    log = getattr(err, _CARRIED, None)
+    return log if isinstance(log, ForegroundLog) else ForegroundLog()
