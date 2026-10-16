@@ -121,9 +121,9 @@ bundleId must fully match `[A-Za-z0-9][A-Za-z0-9.-]{0,254}`. Use trusted apps an
 inputs. Arbitrary arguments, WebKit inspector ports and browser preparation remain refused.
 After launch returns, the frontmost app is polled using the restore-check constants (six checks,
 50 ms intervals). Any change away from the previous app, even to a different third-party pid,
-or failed activation suppression returns `foreground_violation`. Restoration is verified against
-the actual front pid; the message includes the launched pid when known and the restore outcome.
-An unknown launched pid always yields `unverified` when no foreground violation occurs.
+or failed activation suppression puts the previous app back and adds a `foreground` entry with the
+launched pid when known and whether restoration was verified against the actual front pid. The
+launch result is not failed by it. An unknown launched pid always yields `unverified`.
 
 `browser_navigate` and `browser_dialog` require the exact session/native-window binding and watch
 for activation. Navigation permits only HTTP(S) or case-insensitive `about:blank`, bounded to 8192
@@ -131,7 +131,7 @@ UTF-16 units without userinfo, whitespace, controls or Unicode format characters
 Fresh page URL comparison lowercases scheme/host, substitutes `/` for an empty path and drops
 default ports 80/443, preserving path case, query and fragment. Old refs are invalid.
 Dialog accept requires `allowDestructive:true`; accept/dismiss require the current dialog id and
-never request foreground delivery. Prompt text is exact and bounded to 8192 UTF-16 units.
+never request foreground delivery; an activation they cause is put back and reported in `foreground`. Prompt text is exact and bounded to 8192 UTF-16 units.
 Inspect returns `status: done` and only present `present`, `dialogId`, `type`, `message`,
 `defaultPrompt` fields. Dialog data and prompt responses may be sensitive. A fresh snapshot follows
 confirmed resolution only. Snapshot `ToolError` after successful navigation/resolution becomes
@@ -161,8 +161,12 @@ Calls run through the serialized, screen-lock-checked wrapper. The allowlist is:
 loaded schemas returns `unknown_driver_tool`; any other tool outside the allowlist returns
 `driver_tool_disallowed`, including `launch_app`, future tools, desktop capture and administrative tools.
 
-Desktop scope and foreground delivery are refused. The existing focus guard still refuses
-`move_cursor`. Input calls (`click`, `double_click`, `right_click`, `drag`, `scroll`, `type_text`,
+Desktop scope is refused. `delivery_mode` must be `background` or `foreground`; foreground delivery
+is forwarded only for the watched input calls below and only with an integer `window_id`
+(`driver_window_required`), so it stays bound to that pid and window. The activation sentinel does
+not put the previous app back while that call is delivering (the keys would go to it); it does so
+right after, and reports the activation in `foreground`. The focus guard still refuses
+`bring_to_front`, `activate`, `activate_app`, `invoke_menu` and `move_cursor`. Input calls (`click`, `double_click`, `right_click`, `drag`, `scroll`, `type_text`,
 `press_key`, `hotkey`, `set_value`, `page`) require an integer `pid` and watch the target with the
 same activation sentinel as `act`. The `page` action `enable_javascript_apple_events` is refused
 because it changes browser preferences and relaunches the browser. The per-tool refused-arguments

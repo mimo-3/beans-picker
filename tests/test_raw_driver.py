@@ -127,20 +127,28 @@ async def test_enabled_driver_forwards_one_call_and_keeps_text_data_and_images(t
 
 
 @pytest.mark.usefixtures("enabled")
-@pytest.mark.parametrize(
-    ("tool", "arguments"),
-    [
-        ("move_cursor", {}),
-        ("double_click", {"pid": 3, "delivery_mode": "foreground"}),
-    ],
-)
-async def test_focus_stealing_calls_are_refused_before_driver_call(
-    tool: str, arguments: JsonObject, tmp_path: Path
-) -> None:
-    driver = RawDriver((tool,))
-    result = await _call(driver, tmp_path / "raw-cache", {"tool": tool, "arguments": arguments})
+async def test_focus_stealing_tools_are_refused_before_driver_call(tmp_path: Path) -> None:
+    driver = RawDriver(("move_cursor",))
+    result = await _call(driver, tmp_path / "raw-cache", {"tool": "move_cursor", "arguments": {}})
     assert _failure(result)["code"] == "foreground_disallowed"
     assert driver.calls == []
+
+
+@pytest.mark.usefixtures("enabled")
+async def test_pid_bound_foreground_delivery_is_forwarded_under_watch(tmp_path: Path) -> None:
+    watched: list[bool] = []
+
+    def on_call(tool: str, args: dict[str, object]) -> ToolResult:
+        watched.append(driver.sentinel.watching)
+        return ToolOk(data={"effect": "confirmed"}, text="ok", ms=1)
+
+    driver = RawDriver(("press_key",), on_call)
+    arguments: JsonObject = {"pid": 3, "window_id": 9, "key": "l", "modifiers": ["cmd"], "delivery_mode": "foreground"}
+    result = await _call(driver, tmp_path / "raw-cache", {"tool": "press_key", "arguments": arguments})
+    assert not result.is_error
+    assert driver.calls == [("press_key", arguments)]
+    assert watched == [True]
+    assert result.structured_content == {"effect": "confirmed"}
 
 
 @pytest.mark.usefixtures("enabled")
@@ -652,7 +660,7 @@ async def test_input_watch_stops_after_failure_or_cancellation(cancel: bool, tmp
 
 
 @pytest.mark.usefixtures("enabled")
-async def test_raw_input_reports_activation_detected_by_real_driver_guard(tmp_path: Path) -> None:
+async def test_raw_input_reports_an_activation_beside_the_result(tmp_path: Path) -> None:
     fake_bin = FakeBin(tmp_path)
     driver = await CuaDriver.connect(CuaDriverOptions(bin=str(fake_bin.path)))
     samples = 0
@@ -664,7 +672,16 @@ async def test_raw_input_reports_activation_detected_by_real_driver_guard(tmp_pa
 
     driver.sentinel = ActivationSentinel(front)
     result = await _call(driver, tmp_path / "raw-cache", {"tool": "click", "arguments": {"pid": 3}})
-    assert _failure(result)["code"] == "foreground_violation"
+    assert not result.is_error
+    assert result.structured_content is not None
+    foreground = result.structured_content["foreground"]
+    assert isinstance(foreground, list)
+    assert [(f["pid"], f["during"], f["restored"]) for f in foreground if isinstance(f, dict)] == [
+        (3, "after click", False)
+    ]
+    assert json.loads(next(c.text for c in result.content[1:] if isinstance(c, TextContent))) == {
+        "foreground": foreground
+    }
     assert not driver.sentinel.watching
 
 
@@ -715,3 +732,73 @@ async def test_refused_capture_does_not_read_file_or_forward_images(tmp_path: Pa
     assert result.structured_content is None
     assert str(directories[0]) not in result.model_dump_json()
     assert not directories[0].exists()
+
+
+@pytest.mark.usefixtures("enabled")
+@pytest.mark.parametrize(
+    ("arguments", "code"),
+    [
+        ({"pid": 3, "window_id": 9, "key": "l", "delivery_mode": "front"}, "driver_argument_disallowed"),
+        ({"pid": 3, "window_id": 9, "key": "l", "delivery_mode": ["foreground"]}, "driver_argument_disallowed"),
+        ({"pid": 3, "key": "l", "delivery_mode": "foreground"}, "driver_window_required"),
+        ({"pid": 3, "window_id": True, "key": "l", "delivery_mode": "foreground"}, "driver_window_required"),
+    ],
+)
+async def test_bad_delivery_modes_are_refused_before_driver_call(
+    arguments: JsonObject, code: str, tmp_path: Path
+) -> None:
+    driver = RawDriver(("press_key",))
+    result = await _call(driver, tmp_path / "raw-cache", {"tool": "press_key", "arguments": arguments})
+    assert _failure(result)["code"] == code
+    assert driver.calls == []
+
+
+@pytest.mark.usefixtures("enabled")
+async def test_foreground_delivery_is_refused_for_unwatched_tools(tmp_path: Path) -> None:
+    driver = RawDriver(("zoom",))
+    arguments: JsonObject = {"pid": 3, "window_id": 9, "delivery_mode": "foreground"}
+    result = await _call(driver, tmp_path / "raw-cache", {"tool": "zoom", "arguments": arguments})
+    assert _failure(result)["code"] == "driver_argument_disallowed"
+    assert driver.calls == []
+
+
+def _stealing_raw(answer: ToolResult | Exception) -> RawDriver:
+    front: list[int | None] = [1]
+
+    async def sample_front() -> int | None:
+        return front[0]
+
+    async def on_call(tool: str, args: dict[str, object]) -> ToolResult:
+        front[0] = 3
+        await driver.sentinel.sample()
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    driver = RawDriver(("click",), on_call)
+    driver.sentinel = ActivationSentinel(sample_front)
+    return driver
+
+
+@pytest.mark.usefixtures("enabled")
+async def test_raw_input_that_times_out_still_reports_the_activation(tmp_path: Path) -> None:
+    driver = _stealing_raw(DriverTimeout("slow"))
+    result = await _call(driver, tmp_path / "raw-cache", {"tool": "click", "arguments": {"pid": 3}})
+    failed = _failure(result)
+    assert failed["code"] == "driver_timeout"
+    foreground = failed["foreground"]
+    assert isinstance(foreground, list)
+    assert [f["pid"] for f in foreground if isinstance(f, dict)] == [3]
+
+
+@pytest.mark.usefixtures("enabled")
+async def test_a_driver_foreground_key_is_kept(tmp_path: Path) -> None:
+    driver = _stealing_raw(ToolOk(data={"effect": "confirmed", "foreground": "driver"}, text="ok", ms=1))
+    result = await _call(driver, tmp_path / "raw-cache", {"tool": "click", "arguments": {"pid": 3}})
+    assert not result.is_error
+    data = result.structured_content
+    assert data is not None
+    assert data["foreground"] == "driver"
+    ours = data["beansPicker"]
+    assert isinstance(ours, dict)
+    assert isinstance(ours["foreground"], list)

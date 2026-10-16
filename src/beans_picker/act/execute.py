@@ -112,12 +112,14 @@ class _PressKeyArgs(TypedDict):
     element_token: NotRequired[str]
     key: str
     modifiers: NotRequired[list[str]]
+    delivery_mode: NotRequired[Literal["foreground"]]
 
 
 class _HotkeyArgs(TypedDict):
     pid: int
     window_id: int
     keys: list[str]
+    delivery_mode: NotRequired[Literal["foreground"]]
 
 
 type _ArgsFor = Callable[[str], Mapping[str, object]]
@@ -125,6 +127,8 @@ type _ArgsFor = Callable[[str], Mapping[str, object]]
 _AX_FAILED: Final = re.compile(r"AX action failed", re.IGNORECASE | re.ASCII)
 _STALE_MESSAGE: Final = re.compile(r"not found in cache|call get_window_state first", re.IGNORECASE | re.ASCII)
 _KEYPAD_REBINDS: Final = 2
+SAME_PID_KEYBOARD_AMBIGUITY: Final = "same_pid_keyboard_ambiguity"
+"""cua-driver cannot prove that process-scoped key events reach the given window (the app has several)."""
 
 
 class Executor:
@@ -303,7 +307,7 @@ class Executor:
         if c.target is not None:
             return await self._with_rebind(c.target, route, "press_key", payload)
         route.append("press_key")
-        return to_act(await self._driver.call("press_key", payload(None)))
+        return to_act(await self._window_keys("press_key", payload(None), route, "fg:press_key"))
 
     async def _press(
         self, node: UINode, snap: Snapshot, route: list[str], *, allow_destructive: bool = False
@@ -479,7 +483,27 @@ class Executor:
                 pass
         keys = list(eq.keys)
         route.extend(["hotkey", "bg:" + "+".join(keys)])
-        return to_act(await self._driver.call("hotkey", _HotkeyArgs(pid=snap.pid, window_id=snap.window_id, keys=keys)))
+        return to_act(
+            await self._window_keys(
+                "hotkey", _HotkeyArgs(pid=snap.pid, window_id=snap.window_id, keys=keys), route, "fg:" + "+".join(keys)
+            )
+        )
+
+    async def _window_keys(
+        self, tool: Literal["press_key", "hotkey"], args: _PressKeyArgs | _HotkeyArgs, route: list[str], label: str
+    ) -> ToolResult:
+        """Sends keys to a window with no element to aim at. When the app has several windows, cua-driver cannot
+        prove background keys reach this one; the same call is then sent once in the foreground, still bound to
+        this pid and window, and the activation sentinel puts the app that was in front back."""
+        r = await self._driver.call(tool, args)
+        # The retry is safe only because this code is a refusal made before any key was delivered: nothing reached
+        # the app, so sending the keys once more cannot type them twice.
+        if r.ok or r.code != SAME_PID_KEYBOARD_AMBIGUITY:
+            return r
+        route.append(label)
+        foreground = args.copy()
+        foreground["delivery_mode"] = "foreground"
+        return await self._driver.call(tool, foreground)
 
     async def _append(self, c: ActionCandidate, route: list[str]) -> _Outcome:
         # Insert at the end (cmd+down) so trimmed whitespace and rich-text formatting survive.

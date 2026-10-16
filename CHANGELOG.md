@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- The target app coming to the front no longer stops a call. Each activation is recorded, the app
+  in front before is put back, watching continues, and `act` (each step and the sequence), raw
+  `driver`, the watched capabilities and `launch_app` report it in a `foreground` list
+  (`pid`, `during`, `at`, `restored`). The status still comes from the effect check.
+  `foreground_violation` and `ForegroundViolation` are removed.
+  Failures carry the activations seen before them; a sequence joins its steps' lists; more than 16
+  set `foregroundTruncated`. The previous app is put back after, not during, a foreground delivery,
+  and a failed put-back is tried once more after the next driver call.
+- `act` retries a window key route (`press_key` / menu `hotkey` without an element) once with
+  `delivery_mode: "foreground"` on the same pid and window id when cua-driver answers
+  `same_pid_keyboard_ambiguity`; the route shows `fg:press_key` or `fg:<keys>` (e.g. `fg:cmd+c`).
+- Raw `driver` forwards a pid-bound `delivery_mode: "foreground"` input call with an integer
+  `window_id` under the activation watch instead of refusing it with `foreground_disallowed`; other
+  modes are refused, a missing window is `driver_window_required`; `bring_to_front`, `invoke_menu` and
+  `move_cursor` are still refused.
+
 ### Fixed
 
 - Refuse launch files and bundle/package directories (any extension or Contents/Info.plist),

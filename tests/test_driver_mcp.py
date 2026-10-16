@@ -27,7 +27,7 @@ from beans_picker.driver.mcp import (
 )
 from beans_picker.driver.sentinel import ActivationSentinel
 from beans_picker.driver.types import ToolOk, ToolRefused
-from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable, ForegroundViolation
+from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable
 
 FAKE_DRIVER = Path(__file__).with_name("fake_driver.py")
 
@@ -101,17 +101,11 @@ def test_tool_sets() -> None:
 
 
 @pytest.mark.parametrize(
-    ("tool", "args", "expected"),
-    [
-        ("activate_app", {}, True),
-        ("move_cursor", {"x": 1}, True),
-        ("click", {"delivery_mode": "foreground"}, True),
-        ("click", {"delivery_mode": "background"}, False),
-        ("click", {}, False),
-    ],
+    ("tool", "expected"),
+    [("activate_app", True), ("move_cursor", True), ("bring_to_front", True), ("click", False), ("press_key", False)],
 )
-def test_steals_focus(tool: str, args: dict[str, object], expected: bool) -> None:
-    assert steals_focus(tool, args) is expected
+def test_steals_focus(tool: str, expected: bool) -> None:
+    assert steals_focus(tool) is expected
 
 
 def test_is_transport_error() -> None:
@@ -258,39 +252,19 @@ async def test_text_joins_every_content_item(driver: CuaDriver) -> None:
 @pytest.mark.parametrize(
     ("tool", "args", "message"),
     [
-        ("bring_to_front", {}, "bring_to_front would bring an app to the front; beans-picker runs background-only"),
-        ("activate", {"pid": 1}, "activate would bring an app to the front; beans-picker runs background-only"),
-        (
-            "click",
-            {"delivery_mode": "foreground"},
-            "click (delivery_mode foreground) would bring an app to the front; beans-picker runs background-only",
-        ),
+        ("bring_to_front", {}, "bring_to_front would raise an app or move the real cursor; beans-picker refuses it"),
+        ("activate", {"pid": 1}, "activate would raise an app or move the real cursor; beans-picker refuses it"),
         (
             "activate_app",
             {"delivery_mode": "background"},
-            "activate_app (delivery_mode background) would bring an app to the front; "
-            "beans-picker runs background-only",
+            "activate_app would raise an app or move the real cursor; beans-picker refuses it",
         ),
         (
             "invoke_menu",
-            {"delivery_mode": ""},
-            "invoke_menu would bring an app to the front; beans-picker runs background-only",
+            {"delivery_mode": "foreground"},
+            "invoke_menu would raise an app or move the real cursor; beans-picker refuses it",
         ),
-        (
-            "move_cursor",
-            {"delivery_mode": 0},
-            "move_cursor would bring an app to the front; beans-picker runs background-only",
-        ),
-        (
-            "move_cursor",
-            {"delivery_mode": float("nan")},
-            "move_cursor would bring an app to the front; beans-picker runs background-only",
-        ),
-        (
-            "activate",
-            {"delivery_mode": []},
-            "activate (delivery_mode ) would bring an app to the front; beans-picker runs background-only",
-        ),
+        ("move_cursor", {}, "move_cursor would raise an app or move the real cursor; beans-picker refuses it"),
     ],
 )
 async def test_foreground_calls_are_refused_locally(tool: str, args: dict[str, object], message: str) -> None:
@@ -302,10 +276,16 @@ async def test_foreground_calls_are_refused_locally(tool: str, args: dict[str, o
     await offline.close()
 
 
-async def test_a_foreground_call_never_reaches_the_driver(driver: CuaDriver, fake_bin: FakeBin) -> None:
-    r = await driver.call("click", {"pid": 1, "delivery_mode": "foreground"})
+async def test_a_foreground_tool_never_reaches_the_driver(driver: CuaDriver, fake_bin: FakeBin) -> None:
+    r = await driver.call("bring_to_front", {"pid": 1})
     assert isinstance(r, ToolRefused)
     assert fake_bin.calls() == []
+
+
+async def test_a_pid_bound_foreground_delivery_reaches_the_driver(driver: CuaDriver, fake_bin: FakeBin) -> None:
+    r = await driver.call("click", {"pid": 1, "delivery_mode": "foreground"})
+    assert isinstance(r, ToolOk)
+    assert len(fake_bin.calls()) == 1
 
 
 async def test_a_read_is_retried_once_after_the_child_dies(driver: CuaDriver, fake_bin: FakeBin) -> None:
@@ -463,24 +443,24 @@ async def test_a_cancelled_connect_leaves_nothing_running(fake_bin: FakeBin) -> 
     assert asyncio.all_tasks() == before
 
 
-async def test_an_action_after_which_the_app_is_in_front_raises(driver: CuaDriver, fake_bin: FakeBin) -> None:
+async def test_an_activation_is_recorded_and_the_calls_go_on(driver: CuaDriver, fake_bin: FakeBin) -> None:
     front = Front(1)
-    driver.sentinel = ActivationSentinel(front)
+
+    async def restore(pid: int) -> bool:
+        front.pid = pid
+        return True
+
+    driver.sentinel = ActivationSentinel(front, restore=restore)
     await driver.sentinel.watch(5)
     assert isinstance(await driver.call("click"), ToolOk)
     front.pid = 5
-    with pytest.raises(ForegroundViolation, match=r"\(pid 5\) came to the front during after click at ") as info:
-        await driver.call("click", {"pid": 5})
-    assert info.value.activation.during == "after click"
-    assert len(fake_bin.calls()) == 2
-    with pytest.raises(ForegroundViolation):
-        await driver.call("click")
-    with pytest.raises(ForegroundViolation):
-        await driver.must("type_text")
-    assert len(fake_bin.calls()) == 2
-    assert isinstance(await driver.call("list_windows"), ToolOk)
-    assert isinstance(await driver.call("end_session"), ToolOk)
-    driver.sentinel.stop()
+    assert isinstance(await driver.call("click", {"pid": 5}), ToolOk)
+    assert front.pid == 1
+    front.pid = 5
+    assert isinstance(await driver.must("click", {"pid": 5}), dict)
+    assert len(fake_bin.calls()) == 3
+    seen = (await driver.sentinel.stop()).activations
+    assert [(a.pid, a.during, a.restored) for a in seen] == [(5, "after click", True)] * 2
     assert isinstance(await driver.call("click"), ToolOk)
 
 
@@ -489,10 +469,9 @@ async def test_a_locally_refused_action_is_guarded_too(driver: CuaDriver) -> Non
     driver.sentinel = ActivationSentinel(front)
     await driver.sentinel.watch(5)
     front.pid = 5
-    with pytest.raises(ForegroundViolation) as info:
-        await driver.call("activate_app")
-    assert info.value.activation.during == "after activate_app"
-    driver.sentinel.stop()
+    assert isinstance(await driver.call("activate_app"), ToolRefused)
+    (a,) = (await driver.sentinel.stop()).activations
+    assert a.during == "after activate_app"
 
 
 async def test_a_cancelled_action_is_not_sampled(driver: CuaDriver) -> None:
@@ -505,14 +484,41 @@ async def test_a_cancelled_action_is_not_sampled(driver: CuaDriver) -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    driver.sentinel.stop()
+    await driver.sentinel.stop()
 
 
-async def test_a_violation_replaces_a_transport_loss(driver: CuaDriver) -> None:
+async def test_an_activation_does_not_hide_a_transport_loss(driver: CuaDriver) -> None:
     front = Front(1)
     driver.sentinel = ActivationSentinel(front)
     await driver.sentinel.watch(5)
     front.pid = 5
-    with pytest.raises(ForegroundViolation):
-        await driver.call("click", {"die_in_launch": 1})
-    driver.sentinel.stop()
+    r = await driver.call("click", {"die_in_launch": 1})
+    assert isinstance(r, ToolRefused)
+    assert r.code == "transport_lost"
+    assert len((await driver.sentinel.stop()).activations) == 1
+
+
+async def test_the_previous_app_stays_behind_until_a_foreground_delivery_returns(driver: CuaDriver) -> None:
+    front = Front(1)
+    restores: list[int] = []
+
+    async def restore(pid: int) -> bool:
+        restores.append(pid)
+        front.pid = pid
+        return True
+
+    async def tick(_: float) -> None:
+        await asyncio.sleep(0.01)
+
+    driver.sentinel = ActivationSentinel(front, sleep=tick, restore=restore)
+    await driver.sentinel.watch(5)
+    task = asyncio.create_task(driver.call("click", {"pid": 5, "hold": 0.3, "delivery_mode": "foreground"}))
+    await asyncio.sleep(0.05)
+    front.pid = 5
+    await asyncio.sleep(0.15)
+    assert driver.sentinel.activations
+    assert restores == []
+    assert isinstance(await task, ToolOk)
+    assert restores == [1]
+    (a,) = (await driver.sentinel.stop()).activations
+    assert (a.during, a.restored) == ("click", True)

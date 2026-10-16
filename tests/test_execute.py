@@ -665,3 +665,56 @@ async def test_a_control_listed_earlier_that_overlaps_the_centre_counts_as_cover
     r = await ex.execute(cand("click", target), snap([PAGE, danger, target]))
     assert r.route == ["click"]
     assert driver.calls == [("click", {"pid": 1, "element_token": "t:2"})]
+
+
+AMBIGUOUS_KEYS = refused("same_pid_keyboard_ambiguity", "process-scoped key events cannot be proven to reach window 1")
+
+
+async def test_window_keys_the_driver_cannot_aim_are_sent_once_in_the_foreground() -> None:
+    driver = CallDriver({"press_key": [AMBIGUOUS_KEYS, ok()]})
+    ex, _ = executor(driver)
+    r = await ex.execute(cand("key", keys=["cmd", "l"]), WIN, allow_destructive=True)
+    assert r.ok
+    assert r.route == ["press_key", "fg:press_key"]
+    assert driver.calls == [
+        ("press_key", {"pid": 1, "window_id": 1, "key": "l", "modifiers": ["cmd"]}),
+        ("press_key", {"pid": 1, "window_id": 1, "key": "l", "modifiers": ["cmd"], "delivery_mode": "foreground"}),
+    ]
+
+
+async def test_a_foreground_retry_that_fails_is_reported_not_retried_again() -> None:
+    driver = CallDriver({"press_key": [AMBIGUOUS_KEYS]})
+    ex, _ = executor(driver)
+    r = await ex.execute(cand("key", keys=["return"]), WIN, allow_destructive=True)
+    assert not r.ok
+    assert r.code == "same_pid_keyboard_ambiguity"
+    assert driver.tools == ["press_key", "press_key"]
+
+
+async def test_a_menu_shortcut_the_driver_cannot_aim_goes_to_the_same_window_in_the_foreground() -> None:
+    driver = CallDriver({"hotkey": [AMBIGUOUS_KEYS, ok()]})
+    ex, _ = executor(driver, snap(menu=EDIT_MENU), keys=FakeMenuKeys())
+    r = await ex.execute(cand("menu", menu=COPY), snap(menu=EDIT_MENU))
+    assert r.ok
+    assert r.route == ["hotkey", "bg:cmd+c", "fg:cmd+c"]
+    assert driver.calls[-1] == (
+        "hotkey",
+        {"pid": 1, "window_id": 1, "keys": ["cmd", "c"], "delivery_mode": "foreground"},
+    )
+
+
+async def test_keys_aimed_at_an_element_are_never_sent_in_the_foreground() -> None:
+    row = node(2, "AXRow", "Draft")
+    driver = CallDriver({"press_key": [AMBIGUOUS_KEYS]})
+    ex, _ = executor(driver)
+    r = await ex.execute(cand("key", row, keys=["return"]), snap([row]), allow_destructive=True)
+    assert not r.ok
+    assert all("delivery_mode" not in args for _, args in driver.calls)
+
+
+async def test_other_key_refusals_are_not_retried_in_the_foreground() -> None:
+    driver = CallDriver({"press_key": [refused("tool_error", "no")]})
+    ex, _ = executor(driver)
+    r = await ex.execute(cand("key", keys=["return"]), WIN, allow_destructive=True)
+    assert r.route == ["press_key"]
+    assert driver.tools == ["press_key"]

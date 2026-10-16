@@ -7,7 +7,8 @@ from collections.abc import Callable
 import pytest
 
 from beans_picker._proc import Completed
-from beans_picker.driver.sentinel import ActivationSentinel, front_pid
+from beans_picker.driver.sentinel import MAX_ACTIVATIONS, ActivationSentinel, front_pid, watching
+from beans_picker.driver.types import carried_foreground
 from tests.fakes import RecordingSleep, fake_runner
 
 AT = re.compile(r"[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\Z")
@@ -44,89 +45,134 @@ async def test_an_app_already_in_front_is_not_watched() -> None:
     s = ActivationSentinel(front, sleep=never)
     await s.watch(5)
     assert not s.watching
-    assert await s.sample() is None
+    assert await s.sample() == ()
     assert front.calls == 1
 
 
-async def test_the_first_time_a_watched_app_is_in_front_is_a_violation() -> None:
+async def test_a_watched_app_in_front_is_recorded() -> None:
     front = Front(1)
     s = ActivationSentinel(front, sleep=never)
     await s.watch(5)
     assert s.watching
-    assert await s.sample() is None
+    assert await s.sample() == ()
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
-    assert (v.pid, v.during) == (5, "start")
-    assert AT.match(v.at)
-    assert s.violation is v
-    s.stop()
+    (a,) = await s.sample()
+    assert (a.pid, a.during) == (5, "start")
+    assert AT.match(a.at)
+    assert s.activations == (a,)
+    assert s.watching
+    assert (await s.stop()).activations == (a,)
 
 
-async def test_violations_name_the_call_running_or_just_finished() -> None:
+async def test_activations_name_the_call_running_or_just_finished() -> None:
     front = Front(1)
     s = ActivationSentinel(front, sleep=never)
     await s.watch(5)
     s.begin("click")
     s.end("click")
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
-    assert v.during == "after click"
-    s.stop()
+    (a,) = await s.sample()
+    assert a.during == "after click"
+    await s.stop()
 
     front2 = Front(1)
     s2 = ActivationSentinel(front2, sleep=never)
     await s2.watch(5)
     s2.begin("press_key")
     front2.pid = 5
-    v2 = await s2.sample()
-    assert v2 is not None
-    assert v2.during == "press_key"
-    s2.stop()
+    (a2,) = await s2.sample()
+    assert a2.during == "press_key"
+    await s2.stop()
 
 
-async def test_the_first_violation_is_kept() -> None:
+async def test_an_app_staying_in_front_is_one_activation() -> None:
     front = Front(1)
     s = ActivationSentinel(front, sleep=never)
     await s.watch(5)
     await s.watch(6)
     front.pid = 5
     first = await s.sample()
-    front.pid = 6
     s.begin("click")
-    calls = front.calls
-    assert await s.sample() is first
-    assert front.calls == calls
-    s.stop()
+    assert await s.sample() == first
+    front.pid = 6
+    # Another watched pid while one was in front: the same stretch in front, not a new activation.
+    assert await s.sample() == first
+    await s.stop()
 
 
-async def test_stop_keeps_the_violation_and_the_next_watch_clears_it() -> None:
+async def test_each_activation_is_recorded_and_put_back() -> None:
+    front = Front(1)
+    restore = Restore(front)
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    s.begin("press_key")
+    front.pid = 5
+    await s.sample()
+    s.begin("hotkey")
+    front.pid = 5
+    seen = await s.sample()
+    assert [(a.pid, a.during, a.restored) for a in seen] == [(5, "press_key", True), (5, "hotkey", True)]
+    assert restore.pids == [1, 1]
+    assert front.pid == 1
+    assert s.watching
+    assert (await s.stop()).activations == seen
+
+
+async def test_an_app_left_in_front_is_recorded_again_after_it_went_behind() -> None:
     front = Front(1)
     s = ActivationSentinel(front, sleep=never)
     await s.watch(5)
     front.pid = 5
-    v = await s.sample()
-    s.stop()
-    assert not s.watching
-    assert s.violation is v
-    assert await s.sample() is v
+    await s.sample()
+    await s.sample()
+    front.pid = 2
+    await s.sample()
     front.pid = 5
+    seen = await s.sample()
+    assert [a.restored for a in seen] == [False, False]
+    await s.stop()
+
+
+async def test_the_record_is_bounded() -> None:
+    front = Front(1)
+    s = ActivationSentinel(front, sleep=never, restore=Restore(front))
     await s.watch(5)
-    assert s.violation is None
-    assert not s.watching
+    for _ in range(MAX_ACTIVATIONS + 3):
+        front.pid = 5
+        await s.sample()
+    assert len(s.activations) == MAX_ACTIVATIONS
+    assert front.pid == 1
+    log = await s.stop()
+    assert log.truncated
+    assert log.fields().get("foregroundTruncated") is True
 
 
-async def test_watching_another_pid_while_watching_keeps_the_violation() -> None:
+async def test_stop_hands_over_the_activations_and_the_next_watch_starts_empty() -> None:
     front = Front(1)
     s = ActivationSentinel(front, sleep=never)
     await s.watch(5)
     front.pid = 5
-    v = await s.sample()
+    seen = await s.sample()
+    assert (await s.stop()).activations == seen
+    assert not s.watching
+    assert s.activations == ()
+    assert await s.sample() == ()
+    front.pid = 1
+    await s.watch(5)
+    assert s.activations == ()
+    await s.stop()
+
+
+async def test_watching_another_pid_while_watching_keeps_the_activations() -> None:
+    front = Front(1)
+    s = ActivationSentinel(front, sleep=never)
+    await s.watch(5)
+    front.pid = 5
+    seen = await s.sample()
     front.pid = 1
     await s.watch(6)
-    assert s.violation is v
-    s.stop()
+    assert s.activations == seen
+    await s.stop()
 
 
 async def test_a_sample_in_flight_is_awaited_before_a_fresh_one() -> None:
@@ -149,12 +195,11 @@ async def test_a_sample_in_flight_is_awaited_before_a_fresh_one() -> None:
     assert calls == 2
     s.begin("click")
     release.set()
-    assert await first is None
-    v = await second
-    assert v is not None
-    assert (v.pid, v.during) == (5, "click")
+    assert await first == ()
+    (a,) = await second
+    assert (a.pid, a.during) == (5, "click")
     assert calls == 3
-    s.stop()
+    await s.stop()
 
 
 async def test_a_failing_sampler_fails_the_sample() -> None:
@@ -169,7 +214,7 @@ async def test_a_failing_sampler_fails_the_sample() -> None:
     with pytest.raises(RuntimeError, match="no lsappinfo"):
         await s.sample()
     assert s._inflight is None
-    s.stop()
+    await s.stop()
 
 
 async def test_the_ticker_samples_periodically_until_stopped() -> None:
@@ -184,10 +229,9 @@ async def test_the_ticker_samples_periodically_until_stopped() -> None:
     await s.watch(5)
     await until(lambda: front.calls >= 4)
     front.pid = 5
-    await until(lambda: s.violation is not None)
-    assert s.violation is not None
-    assert s.violation.during == "start"
-    s.stop()
+    await until(lambda: bool(s.activations))
+    assert s.activations[0].during == "start"
+    await s.stop()
     assert s._ticker is None
     await asyncio.sleep(0)
     calls = front.calls
@@ -213,10 +257,10 @@ async def test_periodic_failures_are_swallowed() -> None:
     s = ActivationSentinel(flaky, sleep=tick)
     await s.watch(5)
     await until(lambda: calls >= 5)
-    s.stop()
+    await s.stop()
     for _ in range(3):
         await asyncio.sleep(0)
-    assert s.violation is None
+    assert s.activations == ()
 
 
 async def test_front_pid_reads_launch_services() -> None:
@@ -253,12 +297,12 @@ async def test_a_probe_from_a_stopped_watch_does_not_reach_the_next_one() -> Non
             return 5
         return answers.pop()
 
-    s = ActivationSentinel(sampler, sleep=never)
+    s = ActivationSentinel(sampler, sleep=never, stop_wait_s=0)
     await s.watch(5)
     s.begin("old-click")
     old = asyncio.ensure_future(s.sample())
     await blocked.wait()
-    s.stop()
+    await s.stop()
     old.cancel()
     await asyncio.wait({old})
     answers.append(1)
@@ -266,8 +310,8 @@ async def test_a_probe_from_a_stopped_watch_does_not_reach_the_next_one() -> Non
     release.set()
     for _ in range(5):
         await asyncio.sleep(0)
-    assert s.violation is None
-    s.stop()
+    assert s.activations == ()
+    await s.stop()
 
 
 class Restore:
@@ -286,16 +330,15 @@ class Restore:
         return self.works
 
 
-async def test_the_app_in_front_before_is_put_back_once() -> None:
+async def test_the_app_in_front_before_is_put_back() -> None:
     front = Front(1)
     restore = Restore(front)
     s = ActivationSentinel(front, sleep=never, restore=restore)
     await s.watch(5)
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
-    assert (v.pid, v.restored) == (5, True)
-    assert await s.sample() is v
+    seen = await s.sample()
+    assert [(a.pid, a.restored) for a in seen] == [(5, True)]
+    assert await s.sample() == seen
     assert restore.pids == [1]
     assert front.pid == 1
 
@@ -308,8 +351,7 @@ async def test_an_app_that_is_still_behind_is_not_reported_as_put_back(works: bo
     s = ActivationSentinel(front, sleep=never, restore=restore, restore_sleep=waits)
     await s.watch(5)
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
+    (v,) = await s.sample()
     assert v.restored is False
     assert restore.pids == [1]
     assert waits.delays == ([0.05] * 6 if works else [])
@@ -324,8 +366,7 @@ async def test_a_restore_that_raises_is_not_put_back() -> None:
     s = ActivationSentinel(front, sleep=never, restore=restore)
     await s.watch(5)
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
+    (v,) = await s.sample()
     assert v.restored is False
 
 
@@ -334,10 +375,9 @@ async def test_nothing_is_put_back_without_a_restorer_or_a_known_front_app() -> 
     s = ActivationSentinel(front, sleep=never)
     await s.watch(5)
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
+    (v,) = await s.sample()
     assert v.restored is False
-    s.stop()
+    await s.stop()
 
     # The app in front during an earlier watch is forgotten.
     restore = Restore(front)
@@ -345,8 +385,7 @@ async def test_nothing_is_put_back_without_a_restorer_or_a_known_front_app() -> 
     front.pid = None
     await s.watch(5)
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
+    (v,) = await s.sample()
     assert v.restored is False
     assert restore.pids == []
 
@@ -364,15 +403,14 @@ async def test_a_sample_during_a_restore_waits_for_how_it_ended() -> None:
     await s.watch(5)
     front.pid = 5
     first = asyncio.create_task(s.sample())
-    await until(lambda: s.violation is not None)
+    await until(lambda: bool(s.activations))
     second = asyncio.create_task(s.sample())
     await asyncio.sleep(0)
     assert not second.done()
     gate.set()
-    a, b = await first, await second
-    assert a is not None
+    (a,) = await first
     assert a.restored is True
-    assert b is a
+    assert await second == (a,)
 
 
 async def test_the_app_put_back_is_the_last_one_seen_in_front() -> None:
@@ -381,10 +419,9 @@ async def test_the_app_put_back_is_the_last_one_seen_in_front() -> None:
     s = ActivationSentinel(front, sleep=never, restore=restore)
     await s.watch(5)
     front.pid = 2
-    assert await s.sample() is None
+    assert await s.sample() == ()
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
+    (v,) = await s.sample()
     assert v.restored is True
     assert restore.pids == [2]
 
@@ -399,7 +436,83 @@ async def test_a_watched_app_is_never_brought_forward() -> None:
     front.pid = 1
     await s.watch(9)
     front.pid = 5
-    v = await s.sample()
-    assert v is not None
+    (v,) = await s.sample()
     assert v.restored is False
     assert restore.pids == []
+
+
+async def test_a_foreground_delivery_is_not_interrupted_by_a_put_back() -> None:
+    front = Front(1)
+    restore = Restore(front)
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    s.begin("press_key", foreground=True)
+    front.pid = 5
+    (a,) = await s.sample()
+    await s.sample()
+    assert (a.during, a.restored) == ("press_key", False)
+    assert restore.pids == []
+    s.end("press_key")
+    (a,) = await s.sample()
+    assert a.restored is True
+    assert restore.pids == [1]
+    await s.stop()
+
+
+async def test_a_failed_put_back_is_tried_again_once_after_the_next_call() -> None:
+    front = Front(1)
+    restore = Restore(front, works=False)
+    s = ActivationSentinel(front, sleep=never, restore=restore, restore_sleep=RecordingSleep())
+    await s.watch(5)
+    front.pid = 5
+    (a,) = await s.sample()
+    await s.sample()
+    assert a.restored is False
+    assert restore.pids == [1]
+    restore.works = True
+    s.begin("click")
+    s.end("click")
+    (a,) = await s.sample()
+    assert a.restored is True
+    assert restore.pids == [1, 1]
+    await s.stop()
+
+
+async def test_stop_lets_a_put_back_under_way_finish() -> None:
+    front = Front(1)
+    gate = asyncio.Event()
+
+    async def restore(pid: int) -> bool:
+        await gate.wait()
+        front.pid = pid
+        return True
+
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    front.pid = 5
+    sampling = asyncio.create_task(s.sample())
+    await until(lambda: bool(s.activations))
+    stopping = asyncio.create_task(s.stop())
+    await asyncio.sleep(0)
+    assert not stopping.done()
+    gate.set()
+    log = await stopping
+    assert [a.restored for a in log.activations] == [True]
+    assert front.pid == 1
+    await sampling
+
+
+async def test_watching_carries_the_activations_onto_a_failure() -> None:
+    front = Front(1)
+    s = ActivationSentinel(front, sleep=never)
+
+    async def body() -> None:
+        async with watching(s, 5):
+            front.pid = 5
+            await s.sample()
+            raise TimeoutError
+
+    with pytest.raises(TimeoutError) as info:
+        await body()
+    assert [a.pid for a in carried_foreground(info.value).activations] == [5]
+    assert not s.watching

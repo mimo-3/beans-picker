@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from beans_picker.driver.types import Activation
-
 
 class BeansPickerError(Exception):
     """Base of every exception this package raises on purpose."""
@@ -41,18 +36,6 @@ class DriverTimeout(BeansPickerError):
 
 class AppLaunchError(BeansPickerError):
     """The target app could not be launched, or showed no window."""
-
-
-class ForegroundViolation(BeansPickerError):
-    """The app under test came to the front while it was being driven."""
-
-    def __init__(self, activation: Activation) -> None:
-        super().__init__(
-            f"foreground_violation: the app under test (pid {activation.pid}) came to the front "
-            f"during {activation.during} at {activation.at}; the app in front before was "
-            f"{'put back' if activation.restored else 'not put back'}"
-        )
-        self.activation = activation
 
 
 class JevError(BeansPickerError):
@@ -91,7 +74,5 @@ def failure(err: Exception) -> tuple[str, str]:
             return "driver_timeout", str(err)
         case DriverError():
             return "driver_error", str(err)
-        case ForegroundViolation():
-            return "foreground_violation", str(err)
         case _:
             return "internal", "an internal error occurred"
