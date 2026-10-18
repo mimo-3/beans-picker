@@ -89,6 +89,7 @@ class ActivationSentinel:
         self._in_front = False
         # A foreground delivery is running: record, but do not put the previous app back yet.
         self._holding = False
+        self._recovery_paused = False
         # One put-back try is allowed per activation and per guarded call; a failed one is not hammered.
         self._may_put_back = False
 
@@ -112,6 +113,7 @@ class ActivationSentinel:
             self._previous = None
             self._in_front = False
             self._holding = False
+            self._recovery_paused = False
             self._may_put_back = False
         front = await self._sample_front()
         if front == pid:
@@ -166,9 +168,19 @@ class ActivationSentinel:
         # A restore already submitted must finish before any foreground input is sent.
         running = self._inflight
         if foreground and running is not None and not running.done():
-            await asyncio.wait({running})
+            wait_s = RESTORE_CHECKS * RESTORE_CHECK_INTERVAL_S
+            _, pending = await asyncio.wait({running}, timeout=wait_s)
+            if pending:
+                # Queued periodic samples must not immediately restart the stuck recovery.
+                self._recovery_paused = True
+                running.cancel()
+                # Cancellation cleanup is bounded too; a stuck restorer must never hold up input forever.
+                await asyncio.wait({running}, timeout=wait_s)
+                raise TimeoutError("focus recovery did not finish before foreground delivery")
 
-    def end(self, tool: str) -> None:
+    def end(self, tool: str, *, resume_recovery: bool = True) -> None:
+        if resume_recovery:
+            self._recovery_paused = False
         self._current = f"after {tool}"
         self._holding = False
         self._may_put_back = True
@@ -189,7 +201,7 @@ class ActivationSentinel:
         # A probe in flight: wait for it (and for its restore), then take a fresh one.
         while (running := self._inflight) is not None and not running.done():
             await asyncio.wait({running})
-        if not self._pids:
+        if not self._pids or self._recovery_paused:
             return self.activations
         probe = asyncio.create_task(self._probe(self._current, self._generation))
         self._probes.add(probe)

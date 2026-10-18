@@ -263,13 +263,21 @@ class CuaDriver:
         guarded = self.sentinel.watching and tool not in READ_TOOLS and tool != "end_session"
         if not guarded:
             return await self._call_guarded(tool, payload)
+        recovery_timed_out = False
         try:
-            await self.sentinel.begin(tool, foreground=payload.get("delivery_mode") == "foreground")
+            try:
+                await self.sentinel.begin(tool, foreground=payload.get("delivery_mode") == "foreground")
+            except TimeoutError:
+                recovery_timed_out = True
+                message = f"{tool}: focus recovery timed out; no input was sent; retry the action"
+                return ToolRefused(code="foreground_restore_timeout", message=message, data={}, text=message, ms=0)
             return await self._call_guarded(tool, payload)
         finally:
-            self.sentinel.end(tool)
+            self.sentinel.end(tool, resume_recovery=not recovery_timed_out)
             # Cleanup also runs under cancellation; focus recovery cannot replace the call's own result.
-            await self.sentinel.settle()
+            # No input ran after a recovery timeout; do not restart the stuck restore before the retry.
+            if not recovery_timed_out:
+                await self.sentinel.settle()
 
     async def must(self, tool: str, args: Mapping[str, object] | None = None) -> JsonObject:
         """Like `call`, but a refusal raises DriverError."""
