@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from beans_picker.driver.types import Activation
 from beans_picker.errors import (
     AppLaunchError,
     BeansPickerError,
     DriverError,
     DriverTimeout,
     DriverUnavailable,
-    ForegroundViolation,
     JevBadResponse,
     JevError,
     JevUnavailable,
@@ -17,18 +15,6 @@ from beans_picker.errors import (
     ToolError,
     failure,
 )
-
-
-def test_foreground_violation_message() -> None:
-    a = Activation(pid=42, during="after click", at="12:34:56.789")
-    err = ForegroundViolation(a)
-    assert str(err) == (
-        "foreground_violation: the app under test (pid 42) came to the front during after click at 12:34:56.789"
-        "; the app in front before was not put back"
-    )
-    restored = ForegroundViolation(Activation(pid=42, during="after click", at="12:34:56.789", restored=True))
-    assert str(restored).endswith("at 12:34:56.789; the app in front before was put back")
-    assert err.activation is a
 
 
 def test_driver_error_message() -> None:
@@ -56,7 +42,6 @@ def test_hierarchy() -> None:
         DriverUnavailable,
         DriverTimeout,
         AppLaunchError,
-        ForegroundViolation,
         JevError,
         ProcessError,
     ):
@@ -74,7 +59,6 @@ def test_hierarchy() -> None:
         (DriverUnavailable("missing"), "driver_unavailable", "missing"),
         (DriverTimeout("slow"), "driver_timeout", "slow"),
         (DriverError("click", "stale", "gone"), "driver_error", "click refused (stale): gone"),
-        (ForegroundViolation(Activation(pid=1, during="click", at="t")), "foreground_violation", None),
         (RuntimeError("SENTINEL-exception-private-text"), "internal", "an internal error occurred"),
     ],
 )

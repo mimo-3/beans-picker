@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 import os
 import re
 import time
@@ -19,10 +18,10 @@ from mcp.types import CONNECTION_CLOSED, CallToolResult, ImageContent, Implement
 
 from beans_picker import __version__, config
 from beans_picker._json import JsonObject
-from beans_picker._numbers import round_half_up, scalar_text
+from beans_picker._numbers import round_half_up
 from beans_picker.driver.sentinel import ActivationSentinel
 from beans_picker.driver.types import ToolOk, ToolRefused, ToolResult, as_obj, get_obj, get_str
-from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable, ForegroundViolation
+from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable
 
 _log = logging.getLogger(__name__)
 
@@ -60,9 +59,13 @@ class Driver(Protocol):
 type Connect = Callable[[], Awaitable[Driver]]
 
 
-def steals_focus(tool: str, args: Mapping[str, object]) -> bool:
-    """True for a call that would bring an app to the front."""
-    return tool in FOREGROUND_TOOLS or args.get("delivery_mode") == "foreground"
+def steals_focus(tool: str) -> bool:
+    """True for a tool whose whole job is to bring an app forward or move the real cursor.
+
+    A pid-bound call with `delivery_mode: "foreground"` is not one: the activation sentinel records it and
+    puts the app that was in front back.
+    """
+    return tool in FOREGROUND_TOOLS
 
 
 def is_transport_error(err: BaseException) -> bool:
@@ -102,14 +105,6 @@ def _first_leaf(group: ExceptionGroup[Exception]) -> Exception:
         else:
             leaves.append(e)
     return leaves[0] if len(leaves) == 1 else group
-
-
-def _truthy(value: object) -> bool:
-    if isinstance(value, float) and math.isnan(value):
-        return False
-    if isinstance(value, list | dict):
-        return True
-    return bool(value)
 
 
 def _base36(n: int) -> str:
@@ -268,20 +263,21 @@ class CuaDriver:
         guarded = self.sentinel.watching and tool not in READ_TOOLS and tool != "end_session"
         if not guarded:
             return await self._call_guarded(tool, payload)
-        # `sample` waits for a restore still under way, so the report says how it ended.
-        if self.sentinel.violation is not None and (seen := await self.sentinel.sample()) is not None:
-            raise ForegroundViolation(seen)
-        self.sentinel.begin(tool)
-        cancelled = False
+        recovery_timed_out = False
         try:
+            try:
+                await self.sentinel.begin(tool, foreground=payload.get("delivery_mode") == "foreground")
+            except TimeoutError:
+                recovery_timed_out = True
+                message = f"{tool}: focus recovery timed out; no input was sent; retry the action"
+                return ToolRefused(code="foreground_restore_timeout", message=message, data={}, text=message, ms=0)
             return await self._call_guarded(tool, payload)
-        except asyncio.CancelledError:
-            cancelled = True
-            raise
         finally:
-            self.sentinel.end(tool)
-            if not cancelled and (v := await self.sentinel.sample()) is not None:
-                raise ForegroundViolation(v)
+            self.sentinel.end(tool, resume_recovery=not recovery_timed_out)
+            # Cleanup also runs under cancellation; focus recovery cannot replace the call's own result.
+            # No input ran after a recovery timeout; do not restart the stuck restore before the retry.
+            if not recovery_timed_out:
+                await self.sentinel.settle()
 
     async def must(self, tool: str, args: Mapping[str, object] | None = None) -> JsonObject:
         """Like `call`, but a refusal raises DriverError."""
@@ -292,7 +288,7 @@ class CuaDriver:
 
     async def close(self) -> None:
         """Stop the sentinel, end the session in the daemon, and stop the child."""
-        self.sentinel.stop()
+        await self.sentinel.stop()
         try:
             task = self._reconnecting
             if task is not None and not task.done():
@@ -340,10 +336,8 @@ class CuaDriver:
         _log.debug("reconnected to cua-driver (generation %d)", self.generation)
 
     async def _call_once(self, tool: str, args: Mapping[str, object], conn: _Connection) -> ToolResult:
-        if steals_focus(tool, args):
-            mode = args.get("delivery_mode")
-            via = f" (delivery_mode {scalar_text(mode)})" if _truthy(mode) else ""
-            message = f"{tool}{via} would bring an app to the front; beans-picker runs background-only"
+        if steals_focus(tool):
+            message = f"{tool} would raise an app or move the real cursor; beans-picker refuses it"
             return ToolRefused(code="foreground_disallowed", message=message, data={}, text=message, ms=0)
         arguments = {"session": self.session, **args} if tool in self.session_tools else dict(args)
         session = conn.session()

@@ -14,11 +14,13 @@ from typing import Final
 
 from mcp.types import CallToolResult, ImageContent, TextContent
 
+from beans_picker import _json
 from beans_picker._json import JsonObject, JsonValue
 from beans_picker._text import WS_CLASS_BODY
 from beans_picker.driver.mcp import Driver, steals_focus
-from beans_picker.driver.types import ToolResult
-from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable, ForegroundViolation, ToolError
+from beans_picker.driver.sentinel import watching
+from beans_picker.driver.types import ForegroundLog, ToolResult, carried_foreground, carry_foreground
+from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable, ToolError
 from beans_picker.observe.png import MAX_PNG_BYTES, decode_png
 from beans_picker.tools.args import DriverArgs
 from beans_picker.tools.session import ToolSession
@@ -48,6 +50,8 @@ ALLOWED_TOOLS: Final = frozenset(
 INPUT_TOOLS: Final = frozenset(
     {"click", "double_click", "right_click", "drag", "scroll", "type_text", "press_key", "hotkey", "set_value", "page"}
 )
+DELIVERY_MODES: Final = frozenset({"background", "foreground"})
+"""A foreground delivery must also name its window: it is bound to that pid and window id."""
 REFUSED_ACTIONS: Final = {"page": frozenset({"enable_javascript_apple_events"})}
 REFUSED_ARGUMENTS: Final = {"page": frozenset({"cdp_port", "bundle_id"})}
 
@@ -60,13 +64,17 @@ async def driver_tool(session: ToolSession, args: DriverArgs) -> CallToolResult:
     try:
         return await _driver_tool(session, args)
     except DriverError as err:
-        raise ToolError("driver_error", "cua-driver refused the call") from err
+        raise _carried(ToolError("driver_error", "cua-driver refused the call"), err) from err
     except DriverTimeout as err:
-        raise ToolError("driver_timeout", "cua-driver did not answer in time; the action may have occurred") from err
+        message = "cua-driver did not answer in time; the action may have occurred"
+        raise _carried(ToolError("driver_timeout", message), err) from err
     except DriverUnavailable as err:
-        raise ToolError("driver_unavailable", "cua-driver is unavailable") from err
-    except ForegroundViolation as err:
-        raise ToolError("foreground_violation", "the target app came to the front during the driver call") from err
+        raise _carried(ToolError("driver_unavailable", "cua-driver is unavailable"), err) from err
+
+
+def _carried(new: ToolError, old: Exception) -> ToolError:
+    carry_foreground(new, carried_foreground(old))
+    return new
 
 
 async def _driver_tool(session: ToolSession, args: DriverArgs) -> CallToolResult:
@@ -77,8 +85,16 @@ async def _driver_tool(session: ToolSession, args: DriverArgs) -> CallToolResult
         raise ToolError("unknown_driver_tool", "the tool is not in cua-driver's loaded schemas")
     if tool not in ALLOWED_TOOLS:
         raise ToolError("driver_tool_disallowed", "the driver tool is not in the app-control allowlist")
-    if steals_focus(tool, arguments):
-        raise ToolError("foreground_disallowed", "the driver call would bring an app to the front")
+    if steals_focus(tool):
+        raise ToolError("foreground_disallowed", "the driver tool brings an app to the front or moves the real cursor")
+    mode = arguments.get("delivery_mode", "background")
+    if not isinstance(mode, str) or mode not in DELIVERY_MODES:
+        raise ToolError("driver_argument_disallowed", "delivery_mode must be background or foreground")
+    if mode == "foreground" and tool not in INPUT_TOOLS:
+        raise ToolError("driver_argument_disallowed", "foreground delivery is allowed only for watched input calls")
+    window_id = arguments.get("window_id")
+    if mode == "foreground" and (isinstance(window_id, bool) or not isinstance(window_id, int)):
+        raise ToolError("driver_window_required", "foreground delivery requires an integer window_id")
     if arguments.get("scope") == "desktop":
         raise ToolError("desktop_disallowed", "raw driver calls must target an app, not the desktop")
     action = arguments.get("action")
@@ -90,22 +106,32 @@ async def _driver_tool(session: ToolSession, args: DriverArgs) -> CallToolResult
     if tool in INPUT_TOOLS and (isinstance(pid, bool) or not isinstance(pid, int)):
         raise ToolError("driver_pid_required", "input calls require an integer target pid")
     _check_outputs(arguments, schemas[tool])
-    watched = tool in INPUT_TOOLS and isinstance(pid, int)
-    try:
-        if watched and isinstance(pid, int):
-            await driver.sentinel.watch(pid)
+    watched_pid = pid if tool in INPUT_TOOLS and isinstance(pid, int) else None
+    async with watching(driver.sentinel, watched_pid) as watched:
         paths = (str(session.paths.cache),)
         if "screenshot_out_file" not in arguments:
-            return await _forward(driver, tool, arguments, paths=paths)
-        session.paths.shots.mkdir(parents=True, exist_ok=True)
-        with TemporaryDirectory(prefix="capture-", dir=session.paths.shots) as directory:
-            out = Path(directory) / "window.png"
-            return await _forward(
-                driver, tool, {**arguments, "screenshot_out_file": str(out)}, paths=(directory, *paths), out=out
-            )
-    finally:
-        if watched:
-            driver.sentinel.stop()
+            result = await _forward(driver, tool, arguments, paths=paths)
+        else:
+            session.paths.shots.mkdir(parents=True, exist_ok=True)
+            with TemporaryDirectory(prefix="capture-", dir=session.paths.shots) as directory:
+                out = Path(directory) / "window.png"
+                result = await _forward(
+                    driver, tool, {**arguments, "screenshot_out_file": str(out)}, paths=(directory, *paths), out=out
+                )
+    if watched.log:
+        _report_foreground(result, watched.log)
+    return result
+
+
+def _report_foreground(result: CallToolResult, log: ForegroundLog) -> None:
+    """Adds `foreground` beside the driver's own data, so the activation reaches the caller with the result.
+
+    A driver answer that already has its own `foreground` key keeps it; ours then goes under `beansPicker`.
+    """
+    data = result.structured_content or {}
+    foreground: JsonObject = log.json() if "foreground" not in data else {"beansPicker": log.json()}
+    result.structured_content = {**data, **foreground}
+    result.content = [*result.content[:1], TextContent(type="text", text=_json.dumps(foreground)), *result.content[1:]]
 
 
 def _check_outputs(arguments: JsonObject, schema: object) -> None:

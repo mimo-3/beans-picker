@@ -1,11 +1,15 @@
 ---
 name: beans-picker
-description: Operate macOS windows in the background with beans-picker. Use for forms, flows, value reads, captures, local state, window discovery, app launch and exact browser navigation, dialogs or file transfers. Covers fresh-state verification, exact pid/window and session browser bindings, incomplete evidence and refusals that stop the workflow. Requires beans-picker tools; never bypasses consent or foreground restrictions.
+description: Operate macOS windows in the background with beans-picker. Use for forms, flows, value reads, captures, local state, window discovery, app launch and exact browser navigation, dialogs or file transfers. Covers fresh-state verification, exact pid/window and session browser bindings, incomplete evidence, foreground activations that are reported and put back, and refusals that stop the workflow. Requires beans-picker tools; never bypasses consent restrictions.
 ---
 
 # Driving a Mac window with beans-picker
 
-beans-picker picks controls from the accessibility tree and never brings the app to the front.
+beans-picker picks controls from the accessibility tree and works in the background by preference.
+If the target app comes to the front anyway (a new tab, a dialog, keys that had to go in the
+foreground), the call goes on: the app in front before is put back and the result lists each
+activation in `foreground` (`pid`, `during`, `at`, `restored`). Read the status as usual; it still
+comes from the effect check. An activation is not a reason to stop.
 Every `act` step is checked on fresh snapshots. Text is entered as given and checked by exact
 equality.
 
@@ -13,7 +17,7 @@ equality.
 
 Use these public tools instead of switching to raw cua-driver. They need no Jev or raw-driver
 opt-in. For a window operation, give **both `pid` and `windowId` of an already open window**.
-Never compensate for a refusal by launching, raising, selecting a tab or using foreground delivery.
+Never compensate for a refusal by launching, raising or selecting a tab.
 
 - `windows({app?,pid?,onScreenOnly?})`: discover exact native ids without the raw-driver opt-in.
   Returns `status:done`. App-name matching is exact and case-insensitive. Titles require an app/pid
@@ -27,8 +31,8 @@ Never compensate for a refusal by launching, raising, selecting a tab or using f
   can be opened; files and bundles are refused"). Refuse inputs starting with `-`. Unknown pid
   or no ready window is `unverified`. After launch returns, poll frontmost using the restore-check
   constants (six checks at 50 ms intervals). Any change away from the previous app, including a
-  third app, is `foreground_violation`; restore the previous app and report the launched pid when
-  known and restore outcome. Browser setup remains external.
+  third app, puts the previous app back and adds a `foreground` entry (launched pid when known,
+  `restored`); the launch status is unchanged. Browser setup remains external.
 - `screenshot({pid, windowId, out?, includeImage?})`: exact-window PNG; default returns an image.
   `screenshot({scope:"screen", out?, includeImage?})`: primary-display PNG, subject to the driver's
   desktop consent. `includeImage:false` requires `out`.
@@ -73,7 +77,13 @@ All `out` paths are absolute, with an existing canonical parent; captures use `.
 use `.mp4`. On macOS use canonical `/private/tmp`, rather than the `/tmp` symlink. Outputs use mode
 0600. Existing files and symlinks are refused. Upload/clipboard inputs are canonical absolute regular files
 without symlinks; launch local inputs are plain folders only. `unknown_driver_tool` means the installed driver lacks that capability.
-`foreground_required`, setup/consent errors and `foreground_violation` stop the background workflow.
+`foreground_required` and setup/consent errors stop the background workflow; a `foreground` list does not.
+
+For URL entry or a new tab, use `browser_navigate` instead of typing into the address bar or
+pressing Cmd+T/Cmd+L. When the app has several windows, cua-driver may refuse background keys with
+`same_pid_keyboard_ambiguity`: prefer an exact element action, `browser_navigate` or the page tool;
+`act` itself retries window keys once in the foreground on the same pid and window (route
+`fg:press_key`, or `fg:<keys>` for a menu shortcut). Never close or touch the app's other windows to resolve it.
 Treat `unverified` as incomplete evidence; the README lists manual Mac verification steps.
 
 ## The fast loop
@@ -120,7 +130,7 @@ cannot work. So: few replies, and no second try of the same thing.
 | `ambiguous` | Pick the right `candidateId` from the list returned and call again. Do not reword. |
 | `needs_confirmation` | Repeat with `allowDestructive: true` only if the task asks for exactly this. Return and Space always need it; when the task calls for them, set it on the first try. |
 | `not_found` | The id is gone or the control is not there yet (still loading, scrolled out, behind another step). Use the previous result's `newCandidates`, or observe once. |
-| `failed` | Read `code`. `option_not_found`: this pop-up is not a native menu (see "Custom list boxes"), or it has no option of that title (`message` lists the titles). `tool_error` on a drag: see "Mouse drags". `foreground_required`: stop and report that the background route is unavailable. `foreground_violation`: the step may already have run; inspect state read-only and stop without rerunning it. Setup and consent refusals also stop the workflow. |
+| `failed` | Read `code`. `option_not_found`: this pop-up is not a native menu (see "Custom list boxes"), or it has no option of that title (`message` lists the titles). `tool_error` on a drag: see "Mouse drags". `foreground_required`: stop and report that the background route is unavailable. Setup and consent refusals also stop the workflow. |
 
 ## Where runs stall, and what works
 
@@ -205,8 +215,9 @@ clipboard, geometry and browser transfers use the explicit tools described above
 `BEANS_PICKER_RAW_DRIVER=1`, `driver` can perform allowlisted background calls such as
 `double_click`, `zoom` and `scroll` on the same fixed pid/windowId. It has no Jev, effect check
 or destructive confirmation, so check the result yourself. Raw driver calls must never bypass
-a `foreground_required`, setup, consent or activation refusal. If no background route works,
-stop and report the limit; do not retry through a different tool or foreground delivery.
+a `foreground_required`, setup or consent refusal. A pid-bound `delivery_mode:"foreground"` call is
+allowed as a last resort for keys on the exact window (for `same_pid_keyboard_ambiguity`); the
+previous app is put back and the result carries `foreground`.
 
 ## Before you report success
 

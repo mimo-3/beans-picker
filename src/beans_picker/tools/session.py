@@ -259,7 +259,7 @@ class Session:
         driver = await self._settled_driver()
         if driver is not None:
             try:
-                driver.sentinel.stop()
+                await driver.sentinel.stop()
             except Exception as err:
                 _log.debug("stopping the sentinel failed: %s", type(err).__name__)
             try:

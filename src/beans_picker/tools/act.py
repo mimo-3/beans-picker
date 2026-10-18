@@ -20,7 +20,9 @@ from beans_picker.candidates.safety import control_context, is_destructive_contr
 from beans_picker.candidates.types import TEXT_KINDS, ActionCandidate
 from beans_picker.driver.app import WINDOW_CHECK_INTERVAL_S
 from beans_picker.driver.mcp import Driver
-from beans_picker.errors import DriverError, DriverTimeout, ForegroundViolation, ToolError, failure
+from beans_picker.driver.sentinel import watching
+from beans_picker.driver.types import ForegroundFields, ForegroundLog, carried_foreground
+from beans_picker.errors import DriverError, DriverTimeout, ToolError, failure
 from beans_picker.jev.client import JevUsageOut
 from beans_picker.jev.questions import action_question, action_question_forced
 from beans_picker.jev.rank import Ambiguous, NotFound, Pick, RankSpec, gate, rank
@@ -71,8 +73,12 @@ class PickOut(TypedDict):
     rule: str
 
 
-class ActOutput(TypedDict):
-    """One step's result; a sequence has `steps` (each without `window`) and `skipped`."""
+class ActOutput(ForegroundFields):
+    """One step's result; a sequence has `steps` (each without `window`) and `skipped`.
+
+    `foreground` lists each time the target app came to the front during the step; on a sequence it joins
+    the steps' lists in order.
+    """
 
     status: ActStatus
     code: NotRequired[str]
@@ -111,6 +117,7 @@ async def act_tool(session: ToolSession, args: ActArgs) -> ActOutput:
             if not isinstance(err, ToolError):
                 _log.warning("act step %d failed (%s, %s)", len(outs) + 1, code, type(err).__name__)
             out = {"status": "failed", "code": code, "message": message}
+            _add_foreground(out, carried_foreground(err))
         outs.append(out)
     last = outs[-1]
     total = len(then) + 1
@@ -126,6 +133,10 @@ async def act_tool(session: ToolSession, args: ActArgs) -> ActOutput:
     result["steps"] = [_without_window(o) for o in outs]
     if skipped:
         result["skipped"] = skipped
+    if foreground := [a for o in outs for a in o.get("foreground", [])]:
+        result["foreground"] = foreground
+        if any(o.get("foregroundTruncated") for o in outs):
+            result["foregroundTruncated"] = True
     return _with_new_candidates(session, t, result, before, after)
 
 
@@ -290,9 +301,8 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
 
     driver = await session.driver()
     executor = Executor(driver, lambda: session.snapshot(t), menu_keys=session.menu_keys)
-    await driver.sentinel.watch(t.pid)
-    try:
-        return with_usage(
+    async with watching(driver.sentinel, t.pid) as watched:
+        out = with_usage(
             with_pick(
                 await _execute(
                     session,
@@ -308,10 +318,16 @@ async def _step(session: ToolSession, t: Target, args: Step, before: Snapshot, s
                 )
             )
         )
-    except ForegroundViolation as err:
-        return with_usage(_failed("foreground_violation", window, str(err), _shown_action(chosen)))
-    finally:
-        driver.sentinel.stop()
+    _add_foreground(out, watched.log)
+    return out
+
+
+def _add_foreground(out: ActOutput, log: ForegroundLog) -> None:
+    fields = log.fields()
+    if "foreground" in fields:
+        out["foreground"] = fields["foreground"]
+    if "foregroundTruncated" in fields:
+        out["foregroundTruncated"] = fields["foregroundTruncated"]
 
 
 def _drag_candidate(

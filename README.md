@@ -117,9 +117,9 @@ WebKit inspector ports are not exposed; `browser_prepare` and CDP/browser setup 
 Returned windows have the same bounded title/geometry fields; unknown metadata is `null`.
 Unknown launched pid or no ready window yields `unverified`. After the driver returns, launch polls
 the frontmost app using the same six checks at 50 ms intervals as restoration. Any change away
-from the previous app (including to a third app), or failed activation suppression, causes
-`foreground_violation` and an attempt to restore the previous app. The message includes the launched
-pid when known and whether restoration succeeded.
+from the previous app (including to a third app), or failed activation suppression, puts the previous
+app back and adds a `foreground` entry (the launched pid when known, `during: "launch_app"`, `at`,
+`restored`); the launch result itself is still `done` or `unverified`.
 All four tools use the existing serialized queue and screen-lock gate, need no Jev or raw-driver
 opt-in, and preserve `unknown_driver_tool` on older drivers.
 
@@ -168,8 +168,10 @@ Only these app-control tools are allowlisted: `click`, `double_click`, `right_cl
 other tools outside the allowlist, including `launch_app`, return `driver_tool_disallowed`.
 
 Input calls (clicks, drag, scroll, typing, keys, set_value and page) require an integer `pid` and
-watch that target for activation. Desktop scope, foreground delivery and focus-stealing tools
-(including `move_cursor`) remain refused. `page` cannot run `enable_javascript_apple_events`. Its `cdp_port` and `bundle_id` arguments
+watch that target for activation. `delivery_mode: "foreground"` is forwarded for a pid-bound call;
+when the target comes to the front, the app in front before is put back and the result gains a
+`foreground` list (pid, during, at, restored). Desktop scope and focus-stealing tools
+(`bring_to_front`, `invoke_menu`, `move_cursor`) remain refused. `page` cannot run `enable_javascript_apple_events`. Its `cdp_port` and `bundle_id` arguments
 are refused with `driver_argument_disallowed` because they can select another process.
 `screenshot_out_file` is redirected into private `shots/capture-*` storage and returned as an image;
 other file-output arguments, such as `debug_image_out`, are refused. Failures return only a code
@@ -189,7 +191,15 @@ See [SECURITY.md](SECURITY.md) for the passthrough boundary.
 | `ambiguous` | Jev had no clear leader. The top candidates are returned; call `act` again with the right `candidateId`. |
 | `needs_confirmation` | The action may not be undoable (delete, close, send, quit …). Call again with `candidateId` and `allowDestructive: true`. |
 | `not_found` | No candidate fits, or the `candidateId` is not on the window any more. |
-| `failed` | cua-driver refused, the command needs the foreground, or the app came to the front (`foreground_violation`). |
+| `failed` | cua-driver refused, or the command needs the foreground (`foreground_required`). |
+
+Whatever the status, a result whose target app came to the front carries `foreground`: one entry
+per activation with `pid`, `during` (the driver call), `at` (UTC time) and `restored` (whether the
+app in front before was put back). The call is not stopped by it, and a failed call (for example a
+`driver_timeout`) still carries the activations seen before it failed. On an `act` sequence each
+step has its own list and the top-level `foreground` joins them in order. At most 16 are kept per
+call; `foregroundTruncated: true` says more happened. While a call delivers in the foreground,
+the previous app is put back only after it returns.
 
 A call that cannot run at all returns `isError` with `{"status": "failed", "code", "message"}`. Codes include `bad_target`, `window_not_found`, `screen_locked`, `jev_unavailable` (no key, Jev unreachable or too slow), `jev_bad_response`, `driver_unavailable` (cua-driver could not be started), `driver_timeout`, `driver_error` (cua-driver refused a call the tool needed) and `internal`. Failures other than a tool's own refusal are logged by code and exception type at `WARNING`, without exception contents or tracebacks.
 
@@ -253,7 +263,7 @@ Variables are read from the environment first, then from `.env.local` and `.env`
 
 ## Rules the server keeps
 
-- **Background only.** `bring_to_front`, `invoke_menu`, `move_cursor` and `delivery_mode: "foreground"` are refused before they reach cua-driver. App launch is allowed only through the typed background `launch_app` tool. Menu commands run as their keyboard shortcut sent to the app's pid; a command without a known shortcut returns `failed` / `foreground_required`. During `act`, raw input and browser mutation calls, the frontmost app is sampled continuously; if the target app comes to the front, the call stops with `foreground_violation` and the app that was in front before is put back. Launch also checks activation suppression and polls for any change of frontmost app during its bounded watch; violations report the launched pid and whether restoration succeeded.
+- **Background first.** `bring_to_front`, `invoke_menu` and `move_cursor` are refused before they reach cua-driver. A pid-bound `delivery_mode: "foreground"` call is allowed: `act` uses it only to retry window keys once when cua-driver answers `same_pid_keyboard_ambiguity` (the app has several windows), with the same pid and window id (route `fg:press_key`, or `fg:<keys>` such as `fg:cmd+c` for a menu shortcut). App launch is allowed only through the typed background `launch_app` tool. Menu commands run as their keyboard shortcut sent to the app's pid; a command without a known shortcut returns `failed` / `foreground_required`. During `act`, raw input and browser mutation calls, the frontmost app is sampled continuously; each time the target app comes to the front, the app that was in front before is put back, the activation is listed in `foreground`, and the call goes on. Launch also checks activation suppression and polls for any change of frontmost app during its bounded watch, reporting the same way.
 - **Time limits.** Every request to cua-driver and to Jev has a generous limit (see Configuration), so one that stalls ends its call with `driver_timeout` or `jev_unavailable` instead of blocking the queue. An action whose answer timed out may still have happened: observe before repeating it. At shutdown, the final `end_session` gets 5 seconds.
 - **Screen lock.** While `CGSSessionScreenIsLocked` is set, every tool refuses with `screen_locked` and does nothing. A failed or unreadable lock check refuses with `screen_lock_unavailable`.
 - **One call at a time.** Tool calls are queued, so two actions never interleave on the desktop.
@@ -267,7 +277,7 @@ A recording of the whole display shows every moment an app comes to the front. T
 - **Launch the app before recording starts.** An app can take the front for a moment while it starts. beans-picker puts the app that was in front back, but the moment can still be seen on a display recording.
 - **`BEANS_PICKER_PIXEL=off`** when an app comes forward on a pixel click. Every click is then an accessibility press (about 2.5 s each instead of 0.2 s), and a click with modifier keys returns `failed` / `pixel_disabled`.
 
-An app that activates itself (a new window, a dialog) cannot be stopped from outside. beans-picker sees it within about 80 ms and puts the previous app back; the `act` call still reports `foreground_violation`, and its message says whether the app was put back.
+An app that activates itself (a new window, a dialog) cannot be stopped from outside. beans-picker sees it within about 80 ms and puts the previous app back; the call goes on, and its `foreground` field says when it happened and whether the app was put back.
 
 ## How `act` works
 
