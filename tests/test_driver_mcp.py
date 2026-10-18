@@ -28,6 +28,7 @@ from beans_picker.driver.mcp import (
 from beans_picker.driver.sentinel import ActivationSentinel
 from beans_picker.driver.types import ToolOk, ToolRefused
 from beans_picker.errors import DriverError, DriverTimeout, DriverUnavailable
+from beans_picker.tools.session import Session
 
 FAKE_DRIVER = Path(__file__).with_name("fake_driver.py")
 
@@ -598,3 +599,57 @@ async def test_cancelled_foreground_delivery_restores_the_previous_app(
         with pytest.raises(asyncio.CancelledError):
             await call
     assert front.pid == 1
+
+
+@pytest.mark.parametrize("stalled", ["restore", "front"])
+async def test_stalled_focus_recovery_refuses_input_and_allows_retry(
+    driver: CuaDriver, fake_bin: FakeBin, stalled: str
+) -> None:
+    front = Front(1)
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+    session = Session()
+
+    async def hang() -> None:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    async def restore(pid: int) -> bool:
+        if stalled == "restore":
+            await hang()
+        front.pid = pid
+        return True
+
+    async def sample_front() -> int | None:
+        if stalled == "front" and front.pid == 5:
+            await hang()
+        return front.pid
+
+    driver.sentinel = ActivationSentinel(sample_front, restore=restore, stop_wait_s=0.01)
+    await driver.sentinel.watch(5)
+    front.pid = 5
+    sample = asyncio.create_task(driver.sentinel.sample())
+    await started.wait()
+
+    async def send(tool: str = "press_key") -> ToolOk | ToolRefused:
+        return await session.exclusive(lambda: driver.call(tool, {"pid": 5, "delivery_mode": "foreground"}))
+
+    try:
+        async with asyncio.timeout(1):
+            result = await send()
+        assert isinstance(result, ToolRefused)
+        assert result.code == "foreground_restore_timeout"
+        assert cancelled.is_set()
+        assert not session._lock.locked()
+        assert fake_bin.calls() == []
+        # Periodic samples must not restart the stuck recovery while the job schedules its retry.
+        await asyncio.sleep(0.1)
+        async with asyncio.timeout(1):
+            assert (await send("click")).ok
+        assert [c["tool"] for c in fake_bin.calls()] == ["click"]
+    finally:
+        sample.cancel()
+        await asyncio.gather(sample, return_exceptions=True)
