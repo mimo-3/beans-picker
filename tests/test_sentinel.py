@@ -4,6 +4,7 @@ import asyncio
 import re
 from collections.abc import Callable
 
+import anyio
 import pytest
 
 from beans_picker._proc import Completed
@@ -68,7 +69,7 @@ async def test_activations_name_the_call_running_or_just_finished() -> None:
     front = Front(1)
     s = ActivationSentinel(front, sleep=never)
     await s.watch(5)
-    s.begin("click")
+    await s.begin("click")
     s.end("click")
     front.pid = 5
     (a,) = await s.sample()
@@ -78,7 +79,7 @@ async def test_activations_name_the_call_running_or_just_finished() -> None:
     front2 = Front(1)
     s2 = ActivationSentinel(front2, sleep=never)
     await s2.watch(5)
-    s2.begin("press_key")
+    await s2.begin("press_key")
     front2.pid = 5
     (a2,) = await s2.sample()
     assert a2.during == "press_key"
@@ -92,7 +93,7 @@ async def test_an_app_staying_in_front_is_one_activation() -> None:
     await s.watch(6)
     front.pid = 5
     first = await s.sample()
-    s.begin("click")
+    await s.begin("click")
     assert await s.sample() == first
     front.pid = 6
     # Another watched pid while one was in front: the same stretch in front, not a new activation.
@@ -105,10 +106,10 @@ async def test_each_activation_is_recorded_and_put_back() -> None:
     restore = Restore(front)
     s = ActivationSentinel(front, sleep=never, restore=restore)
     await s.watch(5)
-    s.begin("press_key")
+    await s.begin("press_key")
     front.pid = 5
     await s.sample()
-    s.begin("hotkey")
+    await s.begin("hotkey")
     front.pid = 5
     seen = await s.sample()
     assert [(a.pid, a.during, a.restored) for a in seen] == [(5, "press_key", True), (5, "hotkey", True)]
@@ -193,7 +194,7 @@ async def test_a_sample_in_flight_is_awaited_before_a_fresh_one() -> None:
     second = asyncio.create_task(s.sample())
     await asyncio.sleep(0)
     assert calls == 2
-    s.begin("click")
+    await s.begin("click")
     release.set()
     assert await first == ()
     (a,) = await second
@@ -299,7 +300,7 @@ async def test_a_probe_from_a_stopped_watch_does_not_reach_the_next_one() -> Non
 
     s = ActivationSentinel(sampler, sleep=never, stop_wait_s=0)
     await s.watch(5)
-    s.begin("old-click")
+    await s.begin("old-click")
     old = asyncio.ensure_future(s.sample())
     await blocked.wait()
     await s.stop()
@@ -446,7 +447,7 @@ async def test_a_foreground_delivery_is_not_interrupted_by_a_put_back() -> None:
     restore = Restore(front)
     s = ActivationSentinel(front, sleep=never, restore=restore)
     await s.watch(5)
-    s.begin("press_key", foreground=True)
+    await s.begin("press_key", foreground=True)
     front.pid = 5
     (a,) = await s.sample()
     await s.sample()
@@ -470,7 +471,7 @@ async def test_a_failed_put_back_is_tried_again_once_after_the_next_call() -> No
     assert a.restored is False
     assert restore.pids == [1]
     restore.works = True
-    s.begin("click")
+    await s.begin("click")
     s.end("click")
     (a,) = await s.sample()
     assert a.restored is True
@@ -515,4 +516,58 @@ async def test_watching_carries_the_activations_onto_a_failure() -> None:
     with pytest.raises(TimeoutError) as info:
         await body()
     assert [a.pid for a in carried_foreground(info.value).activations] == [5]
+    assert not s.watching
+
+
+@pytest.mark.parametrize("sampled", [False, True])
+async def test_stop_restores_an_unfinished_foreground_delivery(sampled: bool) -> None:
+    front = Front(1)
+    restore = Restore(front)
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+    await s.watch(5)
+    await s.begin("press_key", foreground=True)
+    front.pid = 5
+    if sampled:
+        await s.sample()
+    log = await s.stop()
+    assert front.pid == 1
+    assert restore.pids == [1]
+    assert [a.restored for a in log.activations] == [True]
+    assert not s.watching
+
+
+async def test_cancelled_watch_waits_for_restoration_before_discarding_the_watch() -> None:
+    front = Front(1)
+    restoring = asyncio.Event()
+    release = asyncio.Event()
+    entered = asyncio.Event()
+    scope = anyio.CancelScope()
+
+    async def restore(pid: int) -> bool:
+        restoring.set()
+        await release.wait()
+        front.pid = pid
+        return True
+
+    s = ActivationSentinel(front, sleep=never, restore=restore)
+
+    async def body() -> None:
+        with scope:
+            async with watching(s, 5):
+                front.pid = 5
+                entered.set()
+                await asyncio.Event().wait()
+
+    task = asyncio.create_task(body())
+    await entered.wait()
+    sample = asyncio.create_task(s.sample())
+    await restoring.wait()
+    scope.cancel()
+    for _ in range(10):
+        await asyncio.sleep(0)
+    assert not task.done()
+    release.set()
+    await task
+    await sample
+    assert front.pid == 1
     assert not s.watching

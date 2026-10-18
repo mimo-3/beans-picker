@@ -522,3 +522,79 @@ async def test_the_previous_app_stays_behind_until_a_foreground_delivery_returns
     assert restores == [1]
     (a,) = (await driver.sentinel.stop()).activations
     assert (a.during, a.restored) == ("click", True)
+
+
+async def test_foreground_delivery_waits_for_an_inflight_restore(
+    driver: CuaDriver, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    front = Front(1)
+    restoring = asyncio.Event()
+    release = asyncio.Event()
+    delivered = asyncio.Event()
+
+    async def restore(pid: int) -> bool:
+        restoring.set()
+        await release.wait()
+        front.pid = pid
+        return True
+
+    async def deliver(tool: str, args: object) -> ToolOk:
+        delivered.set()
+        front.pid = 5
+        await driver.sentinel.sample()
+        assert front.pid == 5
+        return ToolOk(data={}, text="", ms=0)
+
+    monkeypatch.setattr(driver, "_call_guarded", deliver)
+    driver.sentinel = ActivationSentinel(front, restore=restore)
+    await driver.sentinel.watch(5)
+    front.pid = 5
+    sample = asyncio.create_task(driver.sentinel.sample())
+    await restoring.wait()
+    call = asyncio.create_task(driver.call("press_key", {"pid": 5, "delivery_mode": "foreground"}))
+    try:
+        for _ in range(10):
+            await asyncio.sleep(0)
+        assert not delivered.is_set()
+    finally:
+        release.set()
+        await sample
+        await call
+    assert front.pid == 1
+
+
+@pytest.mark.parametrize("cancel_scope", [False, True])
+async def test_cancelled_foreground_delivery_restores_the_previous_app(
+    driver: CuaDriver, monkeypatch: pytest.MonkeyPatch, cancel_scope: bool
+) -> None:
+    front = Front(1)
+    delivered = asyncio.Event()
+    scope = anyio.CancelScope()
+
+    async def restore(pid: int) -> bool:
+        front.pid = pid
+        return True
+
+    async def deliver(tool: str, args: object) -> ToolOk:
+        front.pid = 5
+        delivered.set()
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    async def body() -> None:
+        with scope:
+            await driver.call("press_key", {"pid": 5, "delivery_mode": "foreground"})
+
+    monkeypatch.setattr(driver, "_call_guarded", deliver)
+    driver.sentinel = ActivationSentinel(front, restore=restore)
+    await driver.sentinel.watch(5)
+    call = asyncio.create_task(body())
+    await delivered.wait()
+    if cancel_scope:
+        scope.cancel()
+        await call
+    else:
+        call.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await call
+    assert front.pid == 1
