@@ -11,6 +11,8 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Final
 
+import anyio
+
 from beans_picker._aio import Sleep
 from beans_picker._proc import Runner, run
 from beans_picker._text import DIGIT, WS, trim
@@ -124,13 +126,22 @@ class ActivationSentinel:
         """Stop watching every pid; returns the activations recorded during the watch.
 
         A sample still putting the previous app back is given up to `stop_wait_s` to finish first.
+        A final sample then puts back an app left in front by an interrupted foreground delivery.
         """
+        with anyio.CancelScope(shield=True):
+            log = await self._stop()
+        return log
+
+    async def _stop(self) -> ForegroundLog:
         if self._ticker is not None:
             self._ticker.cancel()
             self._ticker = None
         running = self._inflight
         if running is not None and not running.done():
             await asyncio.wait({running}, timeout=self._stop_wait_s)
+        self._holding = False
+        if self._pids and self.restore is not None:
+            await self.settle()
         for task in self._periodic:
             task.cancel()
         for probe in self._probes:
@@ -144,18 +155,34 @@ class ActivationSentinel:
         self._truncated = False
         return log
 
-    def begin(self, tool: str, *, foreground: bool = False) -> None:
+    async def begin(self, tool: str, *, foreground: bool = False) -> None:
         """Name the driver call now running, so an activation says which route caused it.
 
         `foreground`: the call delivers in the foreground, so the previous app stays behind until it returns.
         """
         self._current = tool
         self._holding = foreground
+        # Claim the hold before yielding, so no new probe can start a restore.
+        # A restore already submitted must finish before any foreground input is sent.
+        running = self._inflight
+        if foreground and running is not None and not running.done():
+            await asyncio.wait({running})
 
     def end(self, tool: str) -> None:
         self._current = f"after {tool}"
         self._holding = False
         self._may_put_back = True
+
+    async def settle(self) -> None:
+        """Take a bounded final sample, including when the caller's cancel scope has ended.
+
+        Focus recovery is best effort and must not replace the action's result or cancellation.
+        """
+        with anyio.move_on_after(self._stop_wait_s, shield=True):
+            try:
+                await self.sample()
+            except Exception as err:
+                _log.debug("final front sample failed: %s", type(err).__name__)
 
     async def sample(self) -> tuple[Activation, ...]:
         """Take one sample right now (on top of the periodic ones); returns the activations recorded so far."""

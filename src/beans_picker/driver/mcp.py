@@ -263,18 +263,13 @@ class CuaDriver:
         guarded = self.sentinel.watching and tool not in READ_TOOLS and tool != "end_session"
         if not guarded:
             return await self._call_guarded(tool, payload)
-        self.sentinel.begin(tool, foreground=payload.get("delivery_mode") == "foreground")
-        cancelled = False
         try:
+            await self.sentinel.begin(tool, foreground=payload.get("delivery_mode") == "foreground")
             return await self._call_guarded(tool, payload)
-        except asyncio.CancelledError:
-            cancelled = True
-            raise
         finally:
             self.sentinel.end(tool)
-            # Records an activation and waits for the previous app to be put back; the call's own result stands.
-            if not cancelled:
-                await self.sentinel.sample()
+            # Cleanup also runs under cancellation; focus recovery cannot replace the call's own result.
+            await self.sentinel.settle()
 
     async def must(self, tool: str, args: Mapping[str, object] | None = None) -> JsonObject:
         """Like `call`, but a refusal raises DriverError."""
