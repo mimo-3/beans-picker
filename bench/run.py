@@ -252,8 +252,8 @@ def codex_argv(condition: str, prompt: str, model: str, environment: dict[str, s
                 config[f"mcp_servers.{name}.{key}"] = value
             config[f"mcp_servers.{name}.default_tools_approval_mode"] = "approve"
             config[f"mcp_servers.{name}.required"] = True
-            if environment:
-                config[f"mcp_servers.{name}.env"] = dict(environment)
+            for key, value in (environment or {}).items():  # `-c` reads TOML, so a JSON object would be a string
+                config[f"mcp_servers.{name}.env.{key}"] = value
             if condition == "a":
                 config[f"mcp_servers.{name}.disabled_tools"] = list(DRIVER_DENY)
     return [
