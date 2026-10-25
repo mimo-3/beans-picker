@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -41,6 +42,16 @@ TEXTEDIT_APP: Final = Path("/Applications/TextEdit.app")
 DRIVER_MAX_BYTES: Final = 32 * 1024 * 1024
 POLL: Final = 0.15
 FRONT_INTERVAL: Final = 0.2
+RUN_TIMEOUT: Final = 600.0
+AUTH_TIMEOUT: Final = 120.0
+DRAIN: Final = 5.0
+EXIT_POLL: Final = 0.05
+
+# Everything the bench writes into a temporary directory sits under this name, so a leftover is easy to spot.
+SCRATCH: Final = "bench"
+
+# The MCP servers run outside the agent's isolated home, so they keep the caller's environment.
+MCP_ENV: Final = ("HOME", "PATH", "TMPDIR", "TMP", "TEMP", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL")
 
 # Tools of cua-driver the baseline may not use: they raise apps, kill processes or read the whole screen.
 DRIVER_DENY: Final = (
@@ -56,8 +67,23 @@ DRIVER_DENY: Final = (
     "stop_recording",
 )
 
+# OpenCode's own tools a run may not use. They are denied one by one because denying `*` also
+# removes the MCP tools the model needs.
+BUILTIN_TOOLS: Final = (
+    "read",
+    "edit",
+    "glob",
+    "grep",
+    "shell",
+    "webfetch",
+    "websearch",
+    "subagent",
+    "skill",
+    "question",
+)
+
 _ASN: Final = re.compile(rf'ASN:[^{WS_CLASS_BODY}:"]+')
-_PID: Final = re.compile(rf'"pid"{WS}*={WS}*({DIGIT}+)')
+_PID: Final = re.compile(rf'"?pid"?{WS}*={WS}*"?({DIGIT}+)')
 _TOOL_PREFIX: Final = re.compile(r"^mcp__[^_]+(?:-[^_]+)*__")
 _JEV_USAGE: Final = re.compile(rf'"jev":\{{"calls":({DIGIT}+),"inputTokens":({DIGIT}+)')
 _CLAIM_SUCCESS: Final = re.compile(rf"RESULT:{WS}*success", re.IGNORECASE | re.ASCII)
@@ -73,6 +99,7 @@ class Options:
     model: str = "sonnet"
     only: list[str] | None = None
     conditions: list[str] = field(default_factory=lambda: ["a", "b"])
+    run_timeout: float = RUN_TIMEOUT
 
 
 def parse_args(argv: Sequence[str]) -> Options:
@@ -85,15 +112,21 @@ def parse_args(argv: Sequence[str]) -> Options:
         return argv[i] if i < len(argv) else None
 
     reps, model, only, conditions = opt("--reps"), opt("--model"), opt("--only"), opt("--conditions")
-    harness = opt("--harness") or "claude"
+    harness = opt("--harness")
+    if harness is None:
+        if "--harness" in argv:
+            raise ValueError("--harness needs a value: claude, codex or opencode")
+        harness = "claude"
     if harness not in ("claude", "codex", "opencode"):
         raise ValueError(f"unknown harness: {harness}")
+    run_timeout = opt("--run-timeout")
     return Options(
         harness=harness,
         reps=1 if reps is None else parse_number(reps),
         model="sonnet" if model is None else model,
         only=None if only is None else only.split(","),
         conditions=["a", "b"] if conditions is None else conditions.split(","),
+        run_timeout=RUN_TIMEOUT if run_timeout is None else parse_number(run_timeout),
     )
 
 
@@ -121,10 +154,11 @@ class Metrics:
 
     tool_calls: int = 0
     tool_names: dict[str, int] = field(default_factory=dict)
+    tool_errors: int = 0
     result: str | None = None
     _message_id: str | None = field(default=None, repr=False, compare=False)
-    _started_ms: int | float | None = field(default=None, repr=False, compare=False)
     is_error: bool | None = None
+    timed_out: bool = False
     outcome: JsonObject = field(default_factory=dict)
     tokens: JsonObject = field(default_factory=lambda: {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0})
     jev: dict[str, int] = field(default_factory=lambda: {"calls": 0, "inputTokens": 0})
@@ -182,12 +216,12 @@ def claude_argv(condition: str, prompt: str, model: str, mcp_config: Path) -> li
     ]
 
 
-def codex_argv(condition: str, prompt: str, model: str) -> list[str]:
+def codex_argv(condition: str, prompt: str, model: str, environment: dict[str, str] | None = None) -> list[str]:
     config: JsonObject = {
         "approval_policy": "never",
         "web_search": "disabled",
         "project_doc_max_bytes": 0,
-        "project_root_markers": ["benchh-root"],
+        "project_root_markers": [f"{SCRATCH}-root"],
         "suppress_unstable_features_warning": True,
     }
     for feature in (
@@ -218,6 +252,8 @@ def codex_argv(condition: str, prompt: str, model: str) -> list[str]:
                 config[f"mcp_servers.{name}.{key}"] = value
             config[f"mcp_servers.{name}.default_tools_approval_mode"] = "approve"
             config[f"mcp_servers.{name}.required"] = True
+            if environment:
+                config[f"mcp_servers.{name}.env"] = dict(environment)
             if condition == "a":
                 config[f"mcp_servers.{name}.disabled_tools"] = list(DRIVER_DENY)
     return [
@@ -240,21 +276,23 @@ def opencode_argv(prompt: str, model: str) -> list[str]:
     return ["run", "--standalone", "--auto", "--format", "json", "-m", model, prompt]
 
 
-def opencode_config(condition: str) -> JsonObject:
+def opencode_config(condition: str, environment: dict[str, str] | None = None) -> JsonObject:
     servers: JsonObject = {}
     for name, server in mcp_servers(condition).items():
         if isinstance(server, dict):
             args = server.get("args")
-            servers[name] = {
+            entry: JsonObject = {
                 "type": "local",
                 "command": [server["command"], *(args if isinstance(args, list) else [])],
                 "codemode": False,
             }
-    prefix = "cua-driver" if condition == "a" else "beans-picker"
-    permissions: list[JsonValue] = [
-        {"action": "*", "resource": "*", "effect": "deny"},
-        {"action": f"{prefix}_*", "resource": "*", "effect": "allow"},
-    ]
+            if environment:
+                entry["environment"] = dict(environment)
+            servers[name] = entry
+    prefix = "cua_driver" if condition == "a" else "beans_picker"
+    # Built-in tools are denied one by one: a catch-all deny also hides the MCP tools from the model.
+    permissions: list[JsonValue] = [{"action": action, "resource": "*", "effect": "deny"} for action in BUILTIN_TOOLS]
+    permissions.append({"action": f"{prefix}_*", "resource": "*", "effect": "allow"})
     if condition == "a":
         permissions += [{"action": f"{prefix}_{tool}", "resource": "*", "effect": "deny"} for tool in DRIVER_DENY]
     return {"mcp": {"servers": servers}, "permissions": permissions, "snapshots": False}
@@ -300,6 +338,8 @@ def take(m: Metrics, line: str, harness: str = "claude") -> None:
         for b in content:
             if b.get("type") != "tool_result":
                 continue
+            if b.get("is_error") is True:
+                m.tool_errors += 1
             body = b.get("content")
             if isinstance(body, list):
                 text = "".join(_text_of(x.get("text")) if isinstance(x, dict) else "" for x in body)
@@ -358,16 +398,20 @@ def _take_codex(m: Metrics, ev: JsonObject) -> None:
     kind = ev.get("type")
     item = ev.get("item")
     if kind == "item.completed" and isinstance(item, dict):
-        match item.get("type"):
+        item_type = item.get("type")
+        match item_type:
             case "mcp_tool_call":
                 _tool(m, _TOOL_PREFIX.sub("", _text_of(item.get("tool")), count=1))
                 result = item.get("result")
                 if isinstance(result, dict):
                     _jev(m, _body(result.get("content")))
                 if item.get("error") or item.get("status") == "failed":
-                    m.is_error = True
+                    m.tool_errors += 1
             case "agent_message":
                 m.result = _text_of(item.get("text"))
+            case _ if item_type not in (None, "reasoning", "error"):
+                # Anything else is a built-in tool that leaked through the isolation.
+                _tool(m, f"!{_text_of(item_type)}")
     elif kind == "turn.completed":
         u = ev.get("usage")
         if isinstance(u, dict):
@@ -384,20 +428,19 @@ def _take_codex(m: Metrics, ev: JsonObject) -> None:
         _turn(m)
         if m.is_error is None:
             m.is_error = False
-    elif kind in ("error", "turn.failed"):
+    elif kind == "turn.failed":
+        # `error` events can be transient reconnects; only a failed turn or a non-zero exit fails the run.
         m.is_error = True
 
 
 def _take_opencode(m: Metrics, ev: JsonObject) -> None:
     kind = ev.get("type")
-    stamp = ev.get("timestamp")
-    if isinstance(stamp, int | float) and not isinstance(stamp, bool):
-        if kind == "step_start" and m._started_ms is None:
-            m._started_ms = stamp
-        if m._started_ms is not None:
-            m.outcome["durationMs"] = max(0, stamp - m._started_ms)
     part = ev.get("part")
-    if kind == "error":
+    if kind == "step_start":
+        # Only the last step's text is the final message; earlier steps are just narration.
+        m.result = None
+        m._message_id = None
+    elif kind == "error":
         m.is_error = True
     elif isinstance(part, dict):
         if kind == "text":
@@ -405,8 +448,6 @@ def _take_opencode(m: Metrics, ev: JsonObject) -> None:
             text = _text_of(part.get("text"))
             m.result = (m.result or "") + text if message_id == m._message_id else text
             m._message_id = message_id
-            if m.is_error is None:
-                m.is_error = False
         elif kind == "tool_use":
             name = _text_of(part.get("tool"))
             for prefix in ("beans-picker_", "cua-driver_", "beans_picker_", "cua_driver_"):
@@ -418,7 +459,7 @@ def _take_opencode(m: Metrics, ev: JsonObject) -> None:
             if isinstance(state, dict):
                 _jev(m, _body(state.get("output")))
                 if state.get("status") == "error":
-                    m.is_error = True
+                    m.tool_errors += 1
         elif kind == "step_finish":
             u = part.get("tokens")
             if isinstance(u, dict):
@@ -428,7 +469,7 @@ def _take_opencode(m: Metrics, ev: JsonObject) -> None:
                     m,
                     {
                         "input": u.get("input"),
-                        "output": u.get("output"),
+                        "output": _number(u.get("output")) + _number(u.get("reasoning")),
                         "cacheRead": cache.get("read"),
                         "cacheWrite": cache.get("write"),
                     },
@@ -483,17 +524,22 @@ def build_record(
             record[key] = judge[key]
     record["toolCalls"] = m.tool_calls
     record["toolNames"] = dict(m.tool_names)
+    record["toolErrors"] = m.tool_errors
     if "numTurns" in m.outcome:
         record["numTurns"] = m.outcome["numTurns"]
     record["wallMs"] = wall_ms
-    for key in ("durationMs", "costUsd"):
-        if key in m.outcome:
-            record[key] = m.outcome[key]
+    # Only Claude Code reports a meaningful duration; compare harnesses by wallMs alone.
+    if harness == "claude" and "durationMs" in m.outcome:
+        record["durationMs"] = m.outcome["durationMs"]
+    if "costUsd" in m.outcome:
+        record["costUsd"] = m.outcome["costUsd"]
     record["tokens"] = dict(m.tokens)
     record["jev"] = dict(m.jev)
     record["focusSteals"] = steals
     if m.is_error is not None:
         record["isError"] = m.is_error
+    if m.timed_out:
+        record["timeout"] = True
     return record
 
 
@@ -562,10 +608,16 @@ class FrontWatch:
 
 
 async def _end_process_group(child: asyncio.subprocess.Process) -> None:
-    if child.returncode is None:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(child.pid, signal.SIGKILL)
+    """Kill whatever the agent left behind, even when it exited cleanly, then reap it."""
+    with contextlib.suppress(ProcessLookupError):
+        os.killpg(child.pid, signal.SIGKILL)
     await asyncio.shield(child.wait())
+
+
+async def _wait_exit(child: asyncio.subprocess.Process) -> None:
+    """Wait for the agent itself; `wait()` would also wait for pipes a leftover child still holds."""
+    while child.returncode is None:  # noqa: ASYNC110 - wait() would also wait for pipes a leftover child still holds
+        await asyncio.sleep(EXIT_POLL)
 
 
 def _now_ms() -> int:
@@ -701,13 +753,14 @@ class Bench:
 
     def mcp_config(self, condition: str) -> Path:
         """Write the MCP config for `condition` into the work directory."""
-        path = self.work / f"benchh-mcp-{condition}.json"
+        path = self.work / f"mcp-{condition}.json"
         _write_text(path, dumps({"mcpServers": mcp_servers(condition)}))
         return path
 
     def agent_env(self, directory: Path, condition: str) -> dict[str, str]:
         """Isolate agent settings and writable state; retain the environment needed by the MCP."""
         env = dict(os.environ)
+        mcp_env = self._mcp_env()
         if self.options.harness == "codex":
             source = Path(env.get("CODEX_HOME", str(Path.home() / ".codex"))) / "auth.json"
             env["CODEX_HOME"] = str(directory)
@@ -715,21 +768,52 @@ class Bench:
                 auth = directory / "auth.json"
                 shutil.copyfile(source, auth)
                 auth.chmod(0o600)
-            _write_text(directory / "benchh-root", "")
+            _write_text(directory / f"{SCRATCH}-root", "")
         elif self.options.harness == "opencode":
             for key in list(env):
                 if key.startswith("OPENCODE_"):
                     del env[key]
+            env["HOME"] = str(directory / "home")
+            _make_dirs(Path(env["HOME"]))
             for key in ("DATA", "CONFIG", "CACHE", "STATE"):
-                env[f"XDG_{key}_HOME"] = str(directory / f"benchh-{key.lower()}")
-            env["OPENCODE_CONFIG_DIR"] = str(directory / "benchh-config")
+                env[f"XDG_{key}_HOME"] = str(directory / key.lower())
+            env["OPENCODE_CONFIG_DIR"] = str(directory / "config" / "opencode")
             env["OPENCODE_CONFIG_PROJECT_DISABLE"] = "1"
             env["OPENCODE_DISABLE_CLAUDE_CODE"] = "1"
-            path = directory / "benchh-opencode.json"
-            _write_text(path, dumps(opencode_config(condition)))
+            env["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] = "1"
+            path = directory / "opencode.json"
+            _write_text(path, dumps(opencode_config(condition, mcp_env)))
             env["OPENCODE_CONFIG"] = str(path)
             env["TMPDIR"] = str(directory)
         return env
+
+    def _auth(self, directory: Path, action: str, env: dict[str, str], stdin: str = "") -> str:
+        """Run `opencode auth <action>` from `directory`; its output, or nothing when it fails."""
+        try:
+            done = subprocess.run(
+                [self.opencode, "auth", action, "--standalone"],
+                input=stdin,
+                capture_output=True,
+                text=True,
+                env=env,
+                cwd=directory,
+                timeout=AUTH_TIMEOUT,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return ""
+        return done.stdout if done.returncode == 0 else ""
+
+    def clone_credentials(self, directory: Path, env: dict[str, str]) -> None:
+        """Copy only the stored credentials into OpenCode's isolated data directory.
+
+        OpenCode v2 keeps them in its SQLite store, so they go through `auth export`/`auth import`
+        and stay in memory; none of the user's other data is copied. Both commands run in the
+        scratch directory so they do not register the repository as a project in either store.
+        """
+        exported = self._auth(directory, "export", dict(os.environ))
+        if trim(exported):
+            self._auth(directory, "import", env, exported)
 
     async def run_agent(self, condition: str, prompt: str, rid: str) -> Metrics:
         """Run the selected harness to the end, saving and accounting for its non-blank events."""
@@ -737,42 +821,69 @@ class Bench:
         if harness == "claude":
             argv = claude_argv(condition, prompt, self.options.model, self.mcp_config(condition))
         elif harness == "codex":
-            argv = codex_argv(condition, prompt, self.options.model)
+            argv = codex_argv(condition, prompt, self.options.model, self._mcp_env())
         else:
             argv = opencode_argv(prompt, self.options.model)
         m = Metrics()
         stream_file = self.work / f"{rid}.stream.jsonl"
-        with tempfile.TemporaryDirectory(prefix="benchh-", dir=self.work) as temporary:
+        stderr_file = self.work / f"{rid}.stderr.log"
+        timeout = self.options.run_timeout
+        with tempfile.TemporaryDirectory(prefix=f"{SCRATCH}-", dir=self.work) as temporary:
             directory = Path(temporary)
             env = self.agent_env(directory, condition)
-            child = await asyncio.create_subprocess_exec(
-                getattr(self, harness),
-                *argv,
-                cwd=self.work if harness == "claude" else directory,
-                env=env,
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-                start_new_session=True,  # end its MCP servers with the agent on cancellation
-            )
-            try:
+            cwd = self.work if harness == "claude" else directory
+            env["PWD"] = str(cwd)
+            if harness == "opencode":
+                await asyncio.to_thread(self.clone_credentials, directory, env)
+            with stderr_file.open("wb") as err:
+                child = await asyncio.create_subprocess_exec(
+                    getattr(self, harness),
+                    *argv,
+                    cwd=cwd,
+                    env=env,
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=err,
+                    start_new_session=True,  # end its MCP servers with the agent on cancellation
+                )
+                splitter = LineSplitter()
+
+                async def pump(stdout: asyncio.StreamReader) -> None:
+                    while chunk := await stdout.read(64 * 1024):
+                        for line in splitter.feed(chunk):
+                            if trim(line):
+                                _append_text(stream_file, line + "\n")
+                                take(m, line, harness)
+
                 if child.stdout is None:  # pragma: no cover - stdout is always a pipe here
                     raise RuntimeError(f"{harness} has no stdout")
-                splitter = LineSplitter()
-                while chunk := await child.stdout.read(64 * 1024):
-                    for line in splitter.feed(chunk):
-                        if trim(line):
-                            _append_text(stream_file, line + "\n")
-                            take(m, line, harness)
-                await child.wait()
-            finally:
-                await _end_process_group(child)
-            rest = splitter.rest()
-            if trim(rest):
-                take(m, rest, harness)
+                reader = asyncio.create_task(pump(child.stdout))
+                try:
+                    async with asyncio.timeout(timeout if timeout > 0 else None):
+                        await _wait_exit(child)
+                        # Kill what the agent left behind, or its open pipes keep the reader waiting.
+                        await _end_process_group(child)
+                        with contextlib.suppress(TimeoutError):
+                            await asyncio.wait_for(reader, DRAIN)
+                except TimeoutError:
+                    m.is_error = True
+                    m.timed_out = True
+                finally:
+                    reader.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await reader
+                    await _end_process_group(child)
+            if not m.timed_out:
+                rest = splitter.rest()
+                if trim(rest):
+                    take(m, rest, harness)
             if child.returncode != 0:
                 m.is_error = True
         return m
+
+    def _mcp_env(self) -> dict[str, str]:
+        """The environment the MCP servers keep when the agent itself is isolated."""
+        return {key: os.environ[key] for key in MCP_ENV if key in os.environ}
 
     async def one_run(self, task: Task, condition: str, rep: int) -> JsonObject:
         """Set up, run, judge and record one run."""
@@ -828,7 +939,7 @@ def _int(v: JsonValue) -> int:
 
 USAGE = (
     "usage: python -m bench.run [--reps N] [--harness claude|codex|opencode] "
-    "[--model M] [--only id,...] [--conditions a,b]"
+    "[--model M] [--only id,...] [--conditions a,b] [--run-timeout SECONDS]"
 )
 
 
