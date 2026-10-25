@@ -1,4 +1,8 @@
-"""Summarizes bench/results/runs.jsonl into the Markdown tables the README shows."""
+"""Summarizes bench/results/runs.jsonl into the Markdown tables the README shows.
+
+Compare harnesses by the wall-clock column (`wallMs`) only: `durationMs` comes from Claude Code's
+own report and is not recorded for the other harnesses.
+"""
 
 from __future__ import annotations
 
