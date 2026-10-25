@@ -235,8 +235,9 @@ def test_codex_argv_isolates_the_tools_and_keeps_the_requested_model(condition: 
 def test_codex_passes_the_mcp_servers_an_environment_that_survives_the_isolation() -> None:
     env = {"HOME": "/home/someone", "PATH": "/usr/bin"}
     config = dict(arg.split("=", 1) for arg in codex_argv("b", "p", "m", env)[11:-1:2])
-    assert json.loads(config["mcp_servers.beans-picker.env"]) == env
-    assert "mcp_servers.cua-driver.env" not in config
+    assert {k: json.loads(config[f"mcp_servers.beans-picker.env.{k}"]) for k in env} == env
+    assert "mcp_servers.beans-picker.env" not in config  # codex reads `-c` as TOML, where a JSON object is a string
+    assert not any(key.startswith("mcp_servers.cua-driver.") for key in config)
 
 
 def test_opencode_argv_passes_the_provider_model_and_enables_auto_approval() -> None:
