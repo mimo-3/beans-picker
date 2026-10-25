@@ -1,4 +1,8 @@
-"""Summarizes bench/results/runs.jsonl into the Markdown tables the README shows."""
+"""Summarizes bench/results/runs.jsonl into the Markdown tables the README shows.
+
+Compare harnesses by the wall-clock column (`wallMs`) only: `durationMs` comes from Claude Code's
+own report and is not recorded for the other harnesses.
+"""
 
 from __future__ import annotations
 
@@ -51,7 +55,7 @@ def _sub(r: JsonObject, key: str, field: str) -> float:
 
 
 def tokens_of(r: JsonObject) -> float:
-    """Claude's tokens for one run: input, output, cache reads and cache writes."""
+    """The agent's tokens for one run: input, output, cache reads and cache writes."""
     return sum(_sub(r, "tokens", f) for f in ("input", "output", "cacheRead", "cacheWrite"))
 
 
@@ -83,11 +87,12 @@ def row(label: str, rs: Sequence[JsonObject]) -> str:
     return "| " + " | ".join(cells) + " |"
 
 
-def summarize(runs: Sequence[JsonObject]) -> str:
+def _tables(runs: Sequence[JsonObject], harness: str) -> str:
     """The Overall and Per task tables, ending with a newline."""
-    out = ["### Overall", "", HEAD]
+    head = HEAD if harness == "claude" else HEAD.replace("Claude tokens", "Agent tokens")
+    out = ["### Overall", "", head]
     out += [row(LABEL[c], [r for r in runs if r.get("condition") == c]) for c in CONDITIONS]
-    out += ["", "### Per task", "", HEAD.replace("| |", "| task / condition |", 1)]
+    out += ["", "### Per task", "", head.replace("| |", "| task / condition |", 1)]
     tasks = dict.fromkeys(str(r.get("task")) for r in runs)
     for task in tasks:
         for c in CONDITIONS:
@@ -95,6 +100,17 @@ def summarize(runs: Sequence[JsonObject]) -> str:
             if rs:
                 out.append(row(f"{task} {c}", rs))
     return "\n".join(out) + "\n"
+
+
+def summarize(runs: Sequence[JsonObject]) -> str:
+    """Separate harness/model pairs, keeping legacy single-pair tables unchanged."""
+    groups: dict[tuple[str, str], list[JsonObject]] = {}
+    for r in runs:
+        key = (str(r.get("harness", "claude")), str(r.get("model", "")))
+        groups.setdefault(key, []).append(r)
+    if len(groups) <= 1:
+        return _tables(runs, next(iter(groups), ("claude", ""))[0])
+    return "\n".join(f"## {harness} / {model}\n\n{_tables(rs, harness)}" for (harness, model), rs in groups.items())
 
 
 def main(argv: Sequence[str] | None = None) -> int:

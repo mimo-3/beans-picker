@@ -11,8 +11,10 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from bench import run
 from bench.judge import Task, load_tasks
 from bench.run import (
+    BUILTIN_TOOLS,
     DRIVER,
     DRIVER_DENY,
     FIXTURE_APP,
@@ -26,9 +28,12 @@ from bench.run import (
     build_record,
     claimed,
     claude_argv,
+    codex_argv,
     condition_order,
     main,
     mcp_servers,
+    opencode_argv,
+    opencode_config,
     parse_args,
     progress_line,
     prompt_for,
@@ -112,6 +117,29 @@ def test_parse_args_reads_every_flag() -> None:
     assert parse_args(argv) == Options(reps=3, model="opus", only=["calc-chain", "fx-size-save"], conditions=["b"])
 
 
+def test_parse_args_reads_the_run_timeout() -> None:
+    assert parse_args(["--run-timeout", "30"]).run_timeout == 30
+    assert parse_args([]).run_timeout == 600
+    assert math.isnan(parse_args(["--run-timeout", "soon"]).run_timeout)
+
+
+@pytest.mark.parametrize("harness", ["claude", "codex", "opencode"])
+def test_parse_args_selects_the_harness_and_passes_through_the_model(harness: str) -> None:
+    options = parse_args(["--harness", harness, "--model", "provider/model"])
+    assert options.harness == harness
+    assert options.model == "provider/model"
+
+
+def test_parse_args_rejects_an_unknown_harness() -> None:
+    with pytest.raises(ValueError, match="harness"):
+        parse_args(["--harness", "other"])
+
+
+def test_parse_args_rejects_a_harness_without_a_value() -> None:
+    with pytest.raises(ValueError, match="--harness"):
+        parse_args(["--harness"])
+
+
 def test_parse_args_edges() -> None:
     assert math.isnan(parse_args(["--reps", "many"]).reps)
     assert parse_args(["--reps"]).reps == 1
@@ -166,6 +194,105 @@ def test_claude_argv_denies_driver_tools_only_in_a() -> None:
     assert len(DRIVER_DENY) == 10
 
 
+@pytest.mark.parametrize("condition", ["a", "b"])
+def test_codex_argv_isolates_the_tools_and_keeps_the_requested_model(condition: str) -> None:
+    argv = codex_argv(condition, "the prompt", "gpt-6.1-sol")
+    assert argv[:11] == [
+        "exec",
+        "--json",
+        "--ephemeral",
+        "--ignore-user-config",
+        "--ignore-rules",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "--model",
+        "gpt-6.1-sol",
+        "-c",
+    ]
+    assert argv[-1] == "the prompt"
+    config = dict(arg.split("=", 1) for arg in argv[11:-1:2])
+    assert config["approval_policy"] == '"never"'
+    assert config["features.shell_tool"] == "false"
+    assert config["features.view_image"] == "false"
+    assert config["features.goals"] == "false"
+    assert config["web_search"] == '"disabled"'
+    assert config["features.skip_host_skill_discovery"] == "true"
+    assert config["project_doc_max_bytes"] == "0"
+    servers = mcp_servers(condition)
+    name, server = next(iter(servers.items()))
+    assert isinstance(server, dict)
+    assert json.loads(config[f"mcp_servers.{name}.command"]) == server["command"]
+    assert json.loads(config[f"mcp_servers.{name}.args"]) == server["args"]
+    assert config[f"mcp_servers.{name}.default_tools_approval_mode"] == '"approve"'
+    names = {key.split(".")[1] for key in config if key.startswith("mcp_servers.")}
+    assert names == {name}
+    if condition == "a":
+        assert json.loads(config[f"mcp_servers.{name}.disabled_tools"]) == list(DRIVER_DENY)
+    else:
+        assert not any(key.endswith(".disabled_tools") for key in config)
+
+
+def test_codex_passes_the_mcp_servers_an_environment_that_survives_the_isolation() -> None:
+    env = {"HOME": "/home/someone", "PATH": "/usr/bin"}
+    config = dict(arg.split("=", 1) for arg in codex_argv("b", "p", "m", env)[11:-1:2])
+    assert {k: json.loads(config[f"mcp_servers.beans-picker.env.{k}"]) for k in env} == env
+    assert "mcp_servers.beans-picker.env" not in config  # codex reads `-c` as TOML, where a JSON object is a string
+    assert not any(key.startswith("mcp_servers.cua-driver.") for key in config)
+
+
+def test_opencode_argv_passes_the_provider_model_and_enables_auto_approval() -> None:
+    assert opencode_argv("the prompt", "opencode/deepseek-v4.1-flash-free") == [
+        "run",
+        "--standalone",
+        "--auto",
+        "--format",
+        "json",
+        "-m",
+        "opencode/deepseek-v4.1-flash-free",
+        "the prompt",
+    ]
+
+
+@pytest.mark.parametrize("condition", ["a", "b"])
+def test_opencode_config_denies_builtin_tools_and_allows_only_the_selected_mcp(condition: str) -> None:
+    config = opencode_config(condition)
+    mcp = config["mcp"]
+    assert isinstance(mcp, dict)
+    servers = mcp["servers"]
+    assert isinstance(servers, dict)
+    name, expected = next(iter(mcp_servers(condition).items()))
+    assert isinstance(expected, dict)
+    args = expected["args"]
+    assert isinstance(args, list)
+    assert servers == {name: {"type": "local", "command": [expected["command"], *args], "codemode": False}}
+    permissions = config["permissions"]
+    prefix = "cua_driver" if condition == "a" else "beans_picker"
+    assert isinstance(permissions, list)
+    assert permissions[: len(BUILTIN_TOOLS)] == [
+        {"action": action, "resource": "*", "effect": "deny"} for action in BUILTIN_TOOLS
+    ]
+    assert permissions[len(BUILTIN_TOOLS)] == {"action": f"{prefix}_*", "resource": "*", "effect": "allow"}
+    assert permissions[len(BUILTIN_TOOLS) + 1 :] == (
+        [{"action": f"{prefix}_{tool}", "resource": "*", "effect": "deny"} for tool in DRIVER_DENY]
+        if condition == "a"
+        else []
+    )
+    assert "*" not in [rule["action"] for rule in permissions if isinstance(rule, dict)]
+
+
+def test_opencode_config_gives_the_mcp_server_the_callers_environment() -> None:
+    env = {"HOME": "/home/someone", "PATH": "/usr/bin"}
+    config = opencode_config("b", env)
+    mcp = config["mcp"]
+    assert isinstance(mcp, dict)
+    servers = mcp["servers"]
+    assert isinstance(servers, dict)
+    beans = servers["beans-picker"]
+    assert isinstance(beans, dict)
+    assert beans["environment"] == env
+
+
 @pytest.mark.parametrize(
     ("name", "want"),
     [
@@ -207,10 +334,316 @@ def test_take_adds_jev_usage_from_tool_results(content: JsonValue) -> None:
     assert m.jev == {"calls": 4, "inputTokens": 600}
 
 
+def test_take_counts_claude_tool_errors_without_failing_the_run() -> None:
+    m = Metrics()
+    take(
+        m,
+        dumps(
+            {
+                "type": "user",
+                "message": {"content": [{"type": "tool_result", "content": "boom", "is_error": True}]},
+            }
+        ),
+    )
+    take(m, result_event(result="RESULT: success", is_error=False))
+    assert m.tool_errors == 1
+    assert m.is_error is False
+
+
 def test_take_ignores_what_it_cannot_read() -> None:
     m = Metrics()
     for line in ["not json", "5", "null", '{"type":"assistant"}', '{"type":"user","message":"x"}', tool_result(None)]:
         take(m, line)
+    assert m == Metrics()
+
+
+def test_take_codex_counts_completed_calls_and_uses_the_final_agent_message() -> None:
+    m = Metrics()
+    call: JsonObject = {
+        "id": "item_1",
+        "type": "mcp_tool_call",
+        "server": "beans-picker",
+        "tool": "observe",
+        "arguments": {},
+        "result": None,
+        "error": None,
+        "status": "in_progress",
+    }
+    take(m, dumps({"type": "item.started", "item": call}), "codex")
+    take(m, dumps({"type": "item.completed", "item": {**call, "status": "completed"}}), "codex")
+    take(
+        m,
+        dumps({"type": "item.completed", "item": {"id": "item_2", "type": "agent_message", "text": "working"}}),
+        "codex",
+    )
+    take(
+        m,
+        dumps({"type": "item.completed", "item": {"id": "item_3", "type": "agent_message", "text": "RESULT: success"}}),
+        "codex",
+    )
+    take(
+        m,
+        dumps(
+            {
+                "type": "turn.completed",
+                "usage": {
+                    "input_tokens": 15196,
+                    "cached_input_tokens": 8960,
+                    "cache_write_input_tokens": 0,
+                    "output_tokens": 7,
+                    "reasoning_output_tokens": 0,
+                },
+            }
+        ),
+        "codex",
+    )
+    assert m.tool_calls == 1
+    assert m.tool_names == {"observe": 1}
+    assert m.result == "RESULT: success"
+    assert m.is_error is False
+    assert m.tokens == {"input": 6236, "output": 7, "cacheRead": 8960, "cacheWrite": 0}
+    assert m.outcome["numTurns"] == 1
+
+
+def test_take_codex_adds_usage_across_turns_and_reads_jev_results() -> None:
+    m = Metrics()
+    for _ in range(2):
+        take(
+            m,
+            dumps(
+                {
+                    "type": "turn.completed",
+                    "usage": {
+                        "input_tokens": 12,
+                        "cached_input_tokens": 2,
+                        "cache_write_input_tokens": 3,
+                        "output_tokens": 4,
+                    },
+                }
+            ),
+            "codex",
+        )
+    take(
+        m,
+        dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "mcp_tool_call",
+                    "tool": "mcp__beans-picker__act",
+                    "status": "completed",
+                    "result": {
+                        "content": [{"type": "text", "text": '{"jev":{"calls":2,"inputTokens":300}}'}],
+                        "structured_content": None,
+                    },
+                    "error": None,
+                },
+            }
+        ),
+        "codex",
+    )
+    assert m.tokens == {"input": 20, "output": 8, "cacheRead": 4, "cacheWrite": 6}
+    assert m.outcome["numTurns"] == 2
+    assert m.jev == {"calls": 2, "inputTokens": 300}
+    assert m.tool_names == {"act": 1}
+
+
+def test_take_codex_records_a_failed_mcp_call_as_a_tool_error() -> None:
+    m = Metrics()
+    take(
+        m,
+        dumps(
+            {
+                "type": "item.completed",
+                "item": {
+                    "id": "item_1",
+                    "type": "mcp_tool_call",
+                    "server": "probe",
+                    "tool": "echo",
+                    "arguments": {},
+                    "result": None,
+                    "error": {"message": "MCP tool call requires approval, but approval policy is never"},
+                    "status": "failed",
+                },
+            }
+        ),
+        "codex",
+    )
+    assert m.tool_calls == 1
+    assert m.tool_names == {"echo": 1}
+    assert m.tool_errors == 1
+    assert m.is_error is None
+
+
+def test_take_codex_counts_other_tool_items_so_leaks_are_visible() -> None:
+    m = Metrics()
+    for item_type in ("command_execution", "file_change", "web_search"):
+        take(m, dumps({"type": "item.completed", "item": {"type": item_type}}), "codex")
+    for item_type in ("agent_message", "reasoning", "error"):
+        take(m, dumps({"type": "item.completed", "item": {"type": item_type, "text": "x"}}), "codex")
+    assert m.tool_calls == 3
+    assert m.tool_names == {"!command_execution": 1, "!file_change": 1, "!web_search": 1}
+    assert m.is_error is None
+
+
+def test_take_codex_treats_only_a_failed_turn_as_an_error() -> None:
+    transient = Metrics()
+    take(transient, dumps({"type": "error", "message": "Reconnecting... 1/5"}), "codex")
+    assert transient.is_error is None
+    failed = Metrics()
+    take(failed, dumps({"type": "turn.failed", "error": {"message": "failed"}}), "codex")
+    assert failed.is_error is True
+
+
+def test_take_opencode_adds_step_usage_and_reads_tool_results() -> None:
+    m = Metrics()
+    take(m, dumps({"type": "step_start", "timestamp": 1000, "part": {"type": "step-start"}}), "opencode")
+    take(
+        m,
+        dumps(
+            {
+                "type": "tool_use",
+                "part": {
+                    "type": "tool",
+                    "id": "call-1",
+                    "tool": "beans-picker_observe",
+                    "messageID": "tool-message",
+                    "state": {"status": "completed", "input": {}, "output": '{"jev":{"calls":2,"inputTokens":300}}'},
+                },
+            }
+        ),
+        "opencode",
+    )
+    for _ in range(2):
+        take(
+            m,
+            dumps(
+                {
+                    "type": "step_finish",
+                    "timestamp": 1400,
+                    "part": {
+                        "type": "step-finish",
+                        "reason": "tool-calls",
+                        "cost": 0.02,
+                        "tokens": {"input": 26, "output": 8, "reasoning": 0, "cache": {"read": 4, "write": 0}},
+                    },
+                }
+            ),
+            "opencode",
+        )
+    take(
+        m,
+        dumps(
+            {
+                "type": "text",
+                "timestamp": 1500,
+                "part": {
+                    "type": "text",
+                    "messageID": "final-message",
+                    "text": "RESULT: success",
+                    "time": {"start": 1450, "end": 1500},
+                },
+            }
+        ),
+        "opencode",
+    )
+    assert m.tool_calls == 1
+    assert m.tool_names == {"observe": 1}
+    assert m.result == "RESULT: success"
+    assert m.is_error is False
+    assert m.tokens == {"input": 52, "output": 16, "cacheRead": 8, "cacheWrite": 0}
+    assert m.outcome == {"numTurns": 2, "costUsd": 0.04}
+    assert m.jev == {"calls": 2, "inputTokens": 300}
+
+
+def test_take_opencode_adds_reasoning_tokens_to_the_output() -> None:
+    m = Metrics()
+    take(
+        m,
+        dumps(
+            {
+                "type": "step_finish",
+                "part": {"type": "step-finish", "tokens": {"input": 1, "output": 2, "reasoning": 3}},
+            }
+        ),
+        "opencode",
+    )
+    assert m.tokens["output"] == 5
+
+
+def test_take_opencode_keeps_only_the_last_steps_text() -> None:
+    m = Metrics()
+    for kind, text in [
+        ("step_start", ""),
+        ("text", "RESULT: success"),
+        ("step_finish", ""),
+        ("step_start", ""),
+        ("text", "still working"),
+        ("step_finish", ""),
+    ]:
+        part = {"type": kind, "text": text} if text else {"type": kind}
+        take(m, dumps({"type": kind, "part": part}), "opencode")
+    assert m.result == "still working"
+    assert claimed(m.result) == "none"
+
+
+def test_take_opencode_records_the_observed_provider_limit_error() -> None:
+    m = Metrics()
+    take(
+        m,
+        dumps(
+            {
+                "type": "error",
+                "timestamp": 1792932189328,
+                "sessionID": "session",
+                "error": {"type": "provider.free-limit", "message": "Free usage limit reached.", "status": 429},
+            }
+        ),
+        "opencode",
+    )
+    assert m.is_error is True
+
+
+def test_take_opencode_records_the_observed_failed_tool_call_as_a_tool_error() -> None:
+    m = Metrics()
+    take(
+        m,
+        dumps(
+            {
+                "type": "tool_use",
+                "part": {
+                    "type": "tool",
+                    "id": "call",
+                    "tool": "cua-driver_get_window_state",
+                    "state": {"status": "error", "input": {}, "error": "No tool named tool is currently available."},
+                },
+            }
+        ),
+        "opencode",
+    )
+    take(
+        m,
+        dumps({"type": "text", "part": {"type": "text", "messageID": "final", "text": "RESULT: success"}}),
+        "opencode",
+    )
+    assert m.tool_calls == 1
+    assert m.tool_names == {"get_window_state": 1}
+    assert m.tool_errors == 1
+    assert m.is_error is None
+
+
+@pytest.mark.parametrize("harness", ["codex", "opencode"])
+def test_take_ignores_malformed_or_unrelated_agent_events(harness: str) -> None:
+    m = Metrics()
+    for line in [
+        "not json",
+        "[]",
+        "null",
+        '{"type":"unrelated"}',
+        '{"type":"item.completed","item":null}',
+        '{"type":"tool_use","part":null}',
+    ]:
+        take(m, line, harness)
     assert m == Metrics()
 
 
@@ -266,8 +699,9 @@ def test_line_splitter_joins_chunks_and_split_characters() -> None:
 
 
 FULL_KEYS = [
-    "runId", "rep", "task", "condition", "model", "pass", "claimed", "falseSuccess", "mismatches", "actual",
-    "toolCalls", "toolNames", "numTurns", "wallMs", "durationMs", "costUsd", "tokens", "jev", "focusSteals", "isError",
+    "runId", "rep", "task", "condition", "harness", "model", "pass", "claimed", "falseSuccess", "mismatches", "actual",
+    "toolCalls", "toolNames", "toolErrors", "numTurns", "wallMs", "durationMs", "costUsd", "tokens", "jev",
+    "focusSteals", "isError",
 ]  # fmt: skip
 PASSING: JsonObject = {"task": "calc-chain", "pass": True, "actual": {"display": "8"}, "mismatches": []}
 FAILING: JsonObject = {"task": "calc-chain", "pass": False, "actual": {}, "mismatches": ["display: x"]}
@@ -328,12 +762,51 @@ def test_record_keys_and_claims(
 def test_record_values() -> None:
     rec = _record(PASSING, assistant("mcp__beans-picker__act"), FULL_RESULT)
     assert dumps(rec) == (
-        '{"runId":"r","rep":1,"task":"calc-chain","condition":"b","model":"sonnet","pass":true,'
+        '{"runId":"r","rep":1,"task":"calc-chain","condition":"b","harness":"claude","model":"sonnet","pass":true,'
         '"claimed":"success","falseSuccess":false,"mismatches":[],"actual":{"display":"8"},"toolCalls":1,'
-        '"toolNames":{"act":1},"numTurns":4,"wallMs":1500,"durationMs":1400,"costUsd":0.06,'
+        '"toolNames":{"act":1},"toolErrors":0,"numTurns":4,"wallMs":1500,"durationMs":1400,"costUsd":0.06,'
         '"tokens":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0},"jev":{"calls":0,"inputTokens":0},'
         '"focusSteals":0,"isError":false}'
     )
+
+
+def test_record_leaves_duration_out_for_other_harnesses_and_flags_a_timeout() -> None:
+    m = Metrics(timed_out=True, is_error=True)
+    m.outcome["durationMs"] = 1200
+    rec = build_record(
+        rid="r",
+        rep=1,
+        task=TASKS["calc-chain"],
+        condition="b",
+        harness="opencode",
+        model="provider/model",
+        judge=PASSING,
+        m=m,
+        wall_ms=1300,
+        steals=0,
+    )
+    assert "durationMs" not in rec
+    assert rec["wallMs"] == 1300
+    assert rec["timeout"] is True
+    assert rec["isError"] is True
+
+
+def test_record_preserves_the_selected_harness_before_the_model() -> None:
+    rec = build_record(
+        rid="r",
+        rep=1,
+        task=TASKS["calc-chain"],
+        condition="b",
+        harness="codex",
+        model="gpt-6.1-sol",
+        judge=PASSING,
+        m=Metrics(),
+        wall_ms=0,
+        steals=0,
+    )
+    assert rec["harness"] == "codex"
+    keys = list(rec)
+    assert keys[keys.index("model") - 1] == "harness"
 
 
 @pytest.mark.parametrize(("wall_ms", "seconds"), [(2500, "3s"), (2499, "2s"), (0, "0s"), (135628, "136s")])
@@ -412,11 +885,13 @@ def _bench(tmp_path: Path, runner: Runner, *, claude: str = "claude") -> Bench:
     )
 
 
-async def test_pid_of() -> None:
+async def test_pid_of_reads_quoted_and_unquoted_names() -> None:
     runner = fake_runner(
         {
             ("lsappinfo", "find", "q"): ok('ASN:0x0-0x5a:"Calculator"\n'),
             info("ASN:0x0-0x5a"): ok('"pid" = 1234\n'),
+            ("lsappinfo", "find", "bare"): ok("ASN:0x0-0x5b:"),
+            info("ASN:0x0-0x5b"): ok("pid = 31521 !cgsConnection  wallTime = 1.0 seconds\n"),
             ("lsappinfo", "find", "none"): ok("\n"),
             ("lsappinfo", "find", "nopid"): ok("ASN:0x1 x"),
             info("ASN:0x1"): ok("no pid here"),
@@ -424,6 +899,7 @@ async def test_pid_of() -> None:
     )
     bench = Bench(options=Options(), tasks=[], runner=runner)
     assert await bench.pid_of("q") == 1234
+    assert await bench.pid_of("bare") == 31521
     assert await bench.pid_of("none") is None
     assert await bench.pid_of("nopid") is None
 
@@ -525,7 +1001,97 @@ async def test_run_judge_runs_from_the_root_and_reads_a_failing_verdict(tmp_path
     assert runner.cwds == [ROOT]
 
 
-async def test_run_claude_streams_and_saves_the_events(tmp_path: Path) -> None:
+def test_codex_home_copies_authentication_without_user_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "user-codex"
+    source.mkdir()
+    (source / "auth.json").write_text('{"token":"fixture"}', encoding="utf-8")
+    (source / "config.toml").write_text("unwanted = true", encoding="utf-8")
+    (source / "skills").mkdir()
+    monkeypatch.setenv("CODEX_HOME", str(source))
+    isolated = tmp_path / "isolated"
+    isolated.mkdir()
+    bench = Bench(options=Options(harness="codex"), tasks=[])
+    env = bench.agent_env(isolated, "b")
+    assert env["CODEX_HOME"] == str(isolated)
+    assert (isolated / "auth.json").read_text(encoding="utf-8") == '{"token":"fixture"}'
+    assert (isolated / "auth.json").stat().st_mode & 0o777 == 0o600
+    assert not (isolated / "config.toml").exists()
+    assert not (isolated / "skills").exists()
+
+
+def test_codex_home_allows_absent_authentication(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "absent"))
+    isolated = tmp_path / "isolated"
+    isolated.mkdir()
+    env = Bench(options=Options(harness="codex"), tasks=[]).agent_env(isolated, "a")
+    assert env["CODEX_HOME"] == str(isolated)
+    assert not (isolated / "auth.json").exists()
+
+
+def test_opencode_environment_replaces_user_configuration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENCODE_CONFIG", "/unwanted/config.json")
+    monkeypatch.setenv("OPENCODE_CONFIG_CONTENT", '{"mcp":{"unwanted":{}}}')
+    monkeypatch.setenv("HOME", "/unwanted/home")
+    isolated = tmp_path / "isolated"
+    isolated.mkdir()
+    bench = Bench(options=Options(harness="opencode"), tasks=[])
+    env = bench.agent_env(isolated, "b")
+    assert "OPENCODE_CONFIG_CONTENT" not in env
+    assert env["OPENCODE_CONFIG_PROJECT_DISABLE"] == "1"
+    assert env["OPENCODE_DISABLE_CLAUDE_CODE"] == "1"
+    assert env["OPENCODE_DISABLE_CLAUDE_CODE_SKILLS"] == "1"
+    assert env["HOME"] == str(isolated / "home")
+    for key in ("DATA", "CONFIG", "CACHE", "STATE"):
+        assert Path(env[f"XDG_{key}_HOME"]).is_relative_to(isolated)
+    assert Path(env["OPENCODE_CONFIG_DIR"]).is_relative_to(isolated)
+    config = Path(env["OPENCODE_CONFIG"])
+    assert config.is_relative_to(isolated)
+    assert json.loads(config.read_text(encoding="utf-8")) == opencode_config("b", bench._mcp_env())
+
+
+def test_opencode_keeps_the_real_home_for_its_mcp_server(tmp_path: Path) -> None:
+    isolated = tmp_path / "isolated"
+    isolated.mkdir()
+    env = Bench(options=Options(harness="opencode"), tasks=[]).agent_env(isolated, "b")
+    config = json.loads(Path(env["OPENCODE_CONFIG"]).read_text(encoding="utf-8"))
+    beans = config["mcp"]["servers"]["beans-picker"]
+    assert beans["environment"]["HOME"] == os.environ["HOME"]
+    assert beans["environment"]["PATH"] == os.environ["PATH"]
+    assert env["HOME"] != os.environ["HOME"]
+
+
+def test_clone_credentials_exports_and_imports_only_the_stored_accounts(tmp_path: Path) -> None:
+    log = tmp_path / "auth.log"
+    script = tmp_path / "opencode"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, sys\n"
+        f"log = {str(log)!r}\n"
+        "if sys.argv[1:3] == ['auth', 'export']:\n"
+        "    print(json.dumps([{'id': 'cred', 'value': 'secret'}]))\n"
+        "elif sys.argv[1:3] == ['auth', 'import']:\n"
+        "    with open(log, 'a') as out:\n"
+        "        out.write(sys.stdin.read())\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    bench = Bench(options=Options(harness="opencode"), tasks=[], opencode=str(script))
+    bench.clone_credentials(tmp_path, {"XDG_DATA_HOME": str(tmp_path / "data")})
+    assert json.loads(log.read_text(encoding="utf-8")) == [{"id": "cred", "value": "secret"}]
+
+
+def test_clone_credentials_says_nothing_when_export_fails(tmp_path: Path) -> None:
+    script = tmp_path / "opencode"
+    script.write_text(f"#!{sys.executable}\nraise SystemExit(1)\n", encoding="utf-8")
+    script.chmod(0o755)
+    bench = Bench(options=Options(harness="opencode"), tasks=[], opencode=str(script))
+    bench.clone_credentials(tmp_path, {"XDG_DATA_HOME": str(tmp_path / "data")})
+    assert not (tmp_path / "data").exists()
+
+
+async def test_run_agent_streams_and_saves_the_events(tmp_path: Path) -> None:
     usage: JsonObject = {
         "input_tokens": 5,
         "output_tokens": 6,
@@ -552,7 +1118,7 @@ async def test_run_claude_streams_and_saves_the_events(tmp_path: Path) -> None:
     )
     script.chmod(0o755)
     bench = _bench(tmp_path, fake_runner(), claude=str(script))
-    m = await bench.run_claude("b", "the prompt", "rid")
+    m = await bench.run_agent("b", "the prompt", "rid")
     assert m.tool_calls == 1
     assert m.tool_names == {"act": 1}
     assert m.jev == {"calls": 2, "inputTokens": 300}
@@ -565,6 +1131,120 @@ async def test_run_claude_streams_and_saves_the_events(tmp_path: Path) -> None:
     assert json.loads(config.read_text(encoding="utf-8")) == {"mcpServers": mcp_servers("b")}
     args = json.loads((bench.work / "args.json").read_text(encoding="utf-8"))
     assert args == claude_argv("b", "the prompt", "sonnet", config)
+    assert (bench.work / "rid.stderr.log").exists()
+
+
+@pytest.mark.parametrize("harness", ["codex", "opencode"])
+async def test_run_agent_uses_the_selected_binary_with_closed_stdin_and_isolated_cwd(
+    tmp_path: Path, harness: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cloned: list[dict[str, str]] = []
+    monkeypatch.setattr(Bench, "clone_credentials", lambda self, directory, env: cloned.append(env))
+    capture = tmp_path / "capture.json"
+    script = tmp_path / harness
+    event: JsonObject = (
+        {"type": "item.completed", "item": {"type": "agent_message", "text": "RESULT: success"}}
+        if harness == "codex"
+        else {"type": "text", "part": {"text": "RESULT: success"}}
+    )
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import json, os, sys\n"
+        f"with open({str(capture)!r}, 'w') as output:\n"
+        "    json.dump({'argv': sys.argv[1:], 'stdin': sys.stdin.read(), 'cwd': os.getcwd()}, output)\n"
+        f"print({dumps(event)!r})\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    work = tmp_path / "work"
+    work.mkdir()
+    bench = Bench(
+        options=Options(harness=harness, model="provider/model"),
+        tasks=[],
+        work=work,
+        codex=str(script),
+        opencode=str(script),
+    )
+    metrics = await bench.run_agent("b", "the prompt", "r1")
+    observed = json.loads(capture.read_text(encoding="utf-8"))
+    expected = (
+        codex_argv("b", "the prompt", "provider/model", bench._mcp_env())
+        if harness == "codex"
+        else opencode_argv("the prompt", "provider/model")
+    )
+    assert observed["argv"] == expected
+    assert observed["stdin"] == ""
+    assert bool(cloned) is (harness == "opencode")
+    cwd = Path(observed["cwd"])
+    assert cwd.parent == work
+    assert cwd.name.startswith("bench-")
+    assert not await asyncio.to_thread(cwd.exists)
+    assert metrics.result == "RESULT: success"
+    assert (work / "r1.stream.jsonl").read_text(encoding="utf-8") == dumps(event) + "\n"
+
+
+@pytest.mark.parametrize("harness", ["codex", "opencode"])
+async def test_run_agent_records_an_unsuccessful_exit(
+    tmp_path: Path, harness: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(Bench, "clone_credentials", lambda self, directory, env: None)
+    script = tmp_path / "exit"
+    script.write_text(f"#!{sys.executable}\nraise SystemExit(1)\n", encoding="utf-8")
+    script.chmod(0o755)
+    bench = Bench(options=Options(harness=harness), tasks=[], work=tmp_path, codex=str(script), opencode=str(script))
+    metrics = await bench.run_agent("a", "the prompt", "r1")
+    assert metrics.is_error is True
+
+
+async def test_a_run_past_its_deadline_is_killed_and_marked(tmp_path: Path) -> None:
+    script = tmp_path / "claude"
+    script.write_text(
+        f"#!{sys.executable}\nimport time\nprint('{{}}', flush=True)\ntime.sleep(600)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    bench = _bench(tmp_path, fake_runner(), claude=str(script))
+    bench.options = Options(run_timeout=0.3)
+    m = await asyncio.wait_for(bench.run_agent("b", "the prompt", "rid"), 30)
+    assert m.is_error is True
+    assert m.timed_out is True
+    assert (bench.work / "rid.stderr.log").exists()
+
+
+async def test_a_clean_exit_still_ends_what_the_agent_started(tmp_path: Path) -> None:
+    script = tmp_path / "claude"
+    script.write_text(
+        f"#!{sys.executable}\n"
+        "import subprocess, sys\n"
+        f"helper = subprocess.Popen([{sys.executable!r}, '-c', 'import time; time.sleep(600)'])\n"
+        "open('helper.pid', 'w').write(str(helper.pid))\n"
+        "print('{}', flush=True)\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    bench = _bench(tmp_path, fake_runner(), claude=str(script))
+    await bench.run_agent("b", "the prompt", "rid")
+    helper = int((bench.work / "helper.pid").read_text(encoding="utf-8"))
+    for _ in range(100):
+        try:
+            os.kill(helper, 0)
+        except ProcessLookupError:
+            break
+        await asyncio.sleep(0.05)
+    else:
+        raise AssertionError("the agent's helper is still running")
+
+
+async def test_the_agents_stderr_goes_to_its_own_log(tmp_path: Path) -> None:
+    script = tmp_path / "claude"
+    script.write_text(
+        f"#!{sys.executable}\nimport sys\nsys.stderr.write('a warning\\n')\nprint('{{}}')\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    bench = _bench(tmp_path, fake_runner(), claude=str(script))
+    await bench.run_agent("b", "the prompt", "rid")
+    assert (bench.work / "rid.stderr.log").read_text(encoding="utf-8") == "a warning\n"
 
 
 async def test_a_cancelled_run_ends_the_agent_and_what_it_started(tmp_path: Path) -> None:
@@ -581,7 +1261,7 @@ async def test_a_cancelled_run_ends_the_agent_and_what_it_started(tmp_path: Path
     )
     script.chmod(0o755)
     bench = _bench(tmp_path, fake_runner(), claude=str(script))
-    running = asyncio.ensure_future(bench.run_claude("b", "the prompt", "rid"))
+    running = asyncio.ensure_future(bench.run_agent("b", "the prompt", "rid"))
     pid_file = bench.work / "helper.pid"
     for _ in range(200):
         if pid_file.exists() and pid_file.read_text(encoding="utf-8"):
@@ -613,7 +1293,7 @@ class LoopBench(Bench):
     async def setup(self, task: Task, rid: str) -> Target:
         return Target(pid=7, window_id=8, app_label="Calculator")
 
-    async def run_claude(self, condition: str, prompt: str, rid: str) -> Metrics:
+    async def run_agent(self, condition: str, prompt: str, rid: str) -> Metrics:
         return self.metrics()
 
     async def run_judge(self, task_id: str, target: Target) -> JsonObject:
@@ -719,4 +1399,18 @@ async def test_reps_that_are_not_a_number_run_nothing(tmp_path: Path) -> None:
 @pytest.mark.parametrize("flag", ["-h", "--help"])
 def test_help_prints_usage_without_running(flag: str, capsys: pytest.CaptureFixture[str]) -> None:
     assert main([flag]) == 0
-    assert capsys.readouterr().out.startswith("usage: python -m bench.run")
+    output = capsys.readouterr().out
+    assert output.startswith("usage: python -m bench.run")
+    assert "--harness" in output
+
+
+def test_a_finished_turn_stops_the_wait_for_an_agent_that_lingers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run, "DRAIN", 0.05)
+
+    class Lingering:
+        returncode: int | None = None
+
+    m = Metrics()
+    run.take(m, json.dumps({"type": "turn.completed", "usage": {}}), "codex")
+    assert m.finished
+    asyncio.run(asyncio.wait_for(run._wait_exit(Lingering(), m), 1))  # type: ignore[arg-type]

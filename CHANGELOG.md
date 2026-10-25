@@ -43,6 +43,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Benchmark harness selection for Claude Code, Codex CLI and OpenCode v2, with isolated MCP
+  configuration, per-harness stream metrics and harness/model summary groups. Run records now
+  include `harness` immediately before `model`; summaries treat older records as Claude Code.
+
 - Background-only `browser_navigate` with session-bound targets, bounded HTTP(S)/about:blank URLs,
   fresh page URL verification and invalidated pre-navigation refs.
 - Session-bound `browser_dialog` inspection and exact-id accept/dismiss; accepting requires
