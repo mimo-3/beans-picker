@@ -60,11 +60,20 @@ uv run python -m bench.summarize > bench/results/summary.md
 ```
 
 Codex uses a temporary `CODEX_HOME` with only the current home's `auth.json` copied in, read-only
-sandboxing and no approval prompts. OpenCode runs a private server with temporary config and XDG
-directories. Both receive only the selected MCP server and disable built-in tools where supported.
-Temporary settings and copied credentials are removed when each run ends.
+sandboxing and no approval prompts. OpenCode runs a private server with temporary config, XDG
+directories and `HOME`, so skills, `AGENTS.md` and settings from the real home are not read. Its
+credentials live in a SQLite store, so only those are carried over, through
+`opencode auth export`/`auth import`. Both receive only the selected MCP server, with the caller's
+`HOME` and `PATH` for that server, and disable built-in tools where supported. Temporary settings
+and credentials are removed when each run ends.
 
-Summaries separate harness/model pairs and treat records without `harness` as `claude`.
+Each run is capped at 600 seconds (`--run-timeout`); the agent's process group is killed when the
+cap is reached and the record says `timeout`. Its stderr is kept next to the stream as
+`<runId>.stderr.log`.
+
+Summaries separate harness/model pairs and treat records without `harness` as `claude`. Compare
+harnesses by the wall-clock column only: `durationMs` is Claude Code's own figure and is not
+recorded for Codex or OpenCode.
 
 Replace `bench/results/runs.jsonl` rather than appending to it when you publish new numbers, and
 update the README tables from the new `summary.md`.
