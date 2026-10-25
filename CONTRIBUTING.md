@@ -47,14 +47,24 @@ was asked for. A change to a file changes its cache key, so the next run rebuild
 
 ## Benchmark
 
-`bench/` compares Claude Code with cua-driver alone against Claude Code with beans-picker on eight
-tasks. It needs a Mac with cua-driver, the `claude` CLI and an unlocked screen.
+`bench/` compares cua-driver alone against beans-picker on eight tasks using Claude Code
+(default), Codex CLI or OpenCode v2. It needs a Mac with cua-driver, the selected CLI and an
+unlocked screen. Pass the model name accepted by that CLI:
 
 ```sh
 sh bench/fixture-app/build.sh           # the fixture app, into ~/Library/Caches/beans-picker/fixture
-uv run python -m bench.run --reps 3     # appends to bench/results/runs.jsonl
+uv run python -m bench.run --reps 3     # Claude Code, model sonnet; appends to bench/results/runs.jsonl
+uv run python -m bench.run --harness codex --model gpt-6.1-sol
+uv run python -m bench.run --harness opencode --model opencode/deepseek-v4.1-flash-free
 uv run python -m bench.summarize > bench/results/summary.md
 ```
+
+Codex uses a temporary `CODEX_HOME` with only the current home's `auth.json` copied in, read-only
+sandboxing and no approval prompts. OpenCode runs a private server with temporary config and XDG
+directories. Both receive only the selected MCP server and disable built-in tools where supported.
+Temporary settings and copied credentials are removed when each run ends.
+
+Summaries separate harness/model pairs and treat records without `harness` as `claude`.
 
 Replace `bench/results/runs.jsonl` rather than appending to it when you publish new numbers, and
 update the README tables from the new `summary.md`.
