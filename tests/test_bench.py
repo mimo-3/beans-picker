@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from bench import run
 from bench.judge import Task, load_tasks
 from bench.run import (
     BUILTIN_TOOLS,
@@ -1401,3 +1402,15 @@ def test_help_prints_usage_without_running(flag: str, capsys: pytest.CaptureFixt
     output = capsys.readouterr().out
     assert output.startswith("usage: python -m bench.run")
     assert "--harness" in output
+
+
+def test_a_finished_turn_stops_the_wait_for_an_agent_that_lingers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(run, "DRAIN", 0.05)
+
+    class Lingering:
+        returncode: int | None = None
+
+    m = Metrics()
+    run.take(m, json.dumps({"type": "turn.completed", "usage": {}}), "codex")
+    assert m.finished
+    asyncio.run(asyncio.wait_for(run._wait_exit(Lingering(), m), 1))  # type: ignore[arg-type]
