@@ -107,3 +107,35 @@ def test_per_task_rows_follow_first_seen_order_then_condition() -> None:
     start = lines.index("### Per task")
     assert lines[start + 2].startswith("| task / condition | success |")
     assert [line.split(" | ")[0] for line in lines[start + 4 : -1]] == ["| t2 a", "| t2 b", "| t1 a"]
+
+
+def test_old_runs_and_explicit_claude_runs_share_a_group() -> None:
+    old = _run(model="sonnet")
+    explicit = _run(harness="claude", model="sonnet")
+    assert summarize([old, explicit]) == summarize([old, old])
+    assert "## claude / sonnet" not in summarize([old, explicit])
+
+
+def test_a_single_codex_group_uses_agent_token_labels() -> None:
+    out = summarize([_run(harness="codex", model="gpt-6.1-sol")])
+    assert out.startswith("### Overall\n")
+    assert "Agent tokens (median, incl. cache)" in out
+    assert "Claude tokens" not in out
+
+
+def test_harnesses_and_models_have_separate_tables_in_first_seen_order() -> None:
+    runs = [
+        _run(harness="codex", model="same", toolCalls=2),
+        _run(harness="claude", model="same", toolCalls=10),
+        _run(harness="codex", model="other", toolCalls=20),
+        _run(condition="b", harness="codex", model="same", toolCalls=4),
+    ]
+    out = summarize(runs)
+    sections = ("\n\n" + out).split("\n\n## ")
+    assert sections[0] == ""
+    assert [section.split("\n", 1)[0] for section in sections[1:]] == ["codex / same", "claude / same", "codex / other"]
+    for section, count in zip(sections[1:], ["2.0", "10.0", "20.0"], strict=True):
+        assert f"| (a) cua-driver only | 1/1 | 0/1 | {count} |" in section
+    assert "| (b) beans-picker | 1/1 | 0/1 | 4.0 |" in sections[1]
+    assert "Agent tokens" in sections[1]
+    assert "Claude tokens" in sections[2]
