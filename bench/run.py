@@ -159,6 +159,7 @@ class Metrics:
     _message_id: str | None = field(default=None, repr=False, compare=False)
     is_error: bool | None = None
     timed_out: bool = False
+    finished: bool = False  # the agent reported the end of its turn; codex can linger after that
     outcome: JsonObject = field(default_factory=dict)
     tokens: JsonObject = field(default_factory=lambda: {"input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0})
     jev: dict[str, int] = field(default_factory=lambda: {"calls": 0, "inputTokens": 0})
@@ -426,11 +427,13 @@ def _take_codex(m: Metrics, ev: JsonObject) -> None:
                 },
             )
         _turn(m)
+        m.finished = True
         if m.is_error is None:
             m.is_error = False
     elif kind == "turn.failed":
         # `error` events can be transient reconnects; only a failed turn or a non-zero exit fails the run.
         m.is_error = True
+        m.finished = True
 
 
 def _take_opencode(m: Metrics, ev: JsonObject) -> None:
@@ -614,10 +617,18 @@ async def _end_process_group(child: asyncio.subprocess.Process) -> None:
     await asyncio.shield(child.wait())
 
 
-async def _wait_exit(child: asyncio.subprocess.Process) -> None:
-    """Wait for the agent itself; `wait()` would also wait for pipes a leftover child still holds."""
-    while child.returncode is None:  # noqa: ASYNC110 - wait() would also wait for pipes a leftover child still holds
+async def _wait_exit(child: asyncio.subprocess.Process, m: Metrics | None = None) -> None:
+    """Wait for the agent itself; `wait()` would also wait for pipes a leftover child still holds.
+
+    Once the agent has reported the end of its turn it gets `DRAIN` seconds to exit on its own:
+    codex sometimes stays up afterwards until the run times out.
+    """
+    while child.returncode is None and not (m and m.finished):  # noqa: ASYNC110 - see above
         await asyncio.sleep(EXIT_POLL)
+    with contextlib.suppress(TimeoutError):
+        async with asyncio.timeout(DRAIN):
+            while child.returncode is None:  # noqa: ASYNC110 - see above
+                await asyncio.sleep(EXIT_POLL)
 
 
 def _now_ms() -> int:
@@ -860,7 +871,7 @@ class Bench:
                 reader = asyncio.create_task(pump(child.stdout))
                 try:
                     async with asyncio.timeout(timeout if timeout > 0 else None):
-                        await _wait_exit(child)
+                        await _wait_exit(child, m)
                         # Kill what the agent left behind, or its open pipes keep the reader waiting.
                         await _end_process_group(child)
                         with contextlib.suppress(TimeoutError):
