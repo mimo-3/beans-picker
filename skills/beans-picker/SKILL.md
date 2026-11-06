@@ -12,6 +12,8 @@ activation in `foreground` (`pid`, `during`, `at`, `restored`). Read the status 
 comes from the effect check. An activation is not a reason to stop.
 Working in the background is best effort, not a requirement. A `foreground_required` refusal means
 switch to foreground delivery on the same pid and window and keep going, never stop the work.
+Use whichever foreground route this client has, such as cua-driver with `delivery_mode:"foreground"`.
+If one action has no foreground route, report that action and carry on with the rest of the work.
 Every `act` step is checked on fresh snapshots. Text is entered as given and checked by exact
 equality.
 
